@@ -124,7 +124,7 @@ class CapsuleBuilder:
             "created_at": created_at,
             "created_by": self.created_by,
             "capsule_format_version": _VERSION,
-            "creator_version": self.creator_version,
+            **( {"creator_version": self.creator_version} if self.creator_version is not None else {} ),
             "lifecycle_state": "draft",
             "workflow_ref": workflow_ref,
             "environment_ref": environment_ref,
