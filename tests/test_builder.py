@@ -1,4 +1,5 @@
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -94,3 +95,106 @@ def test_save_generates_checksums():
             digest, name = line.split("  ")
             assert digest.startswith("sha256:")
             assert len(digest) == 71  # "sha256:" + 64 hex chars
+
+
+def test_start_capsule():
+    """Test starting a capsule sets up the correct structure."""
+    builder = CapsuleBuilder(name="test-workflow")
+    builder.start_capsule(
+        parameters={"param1": "value1"},
+        max_budget_usd=100.0,
+    )
+
+    assert builder.capsule_data["name"] == "test-workflow"
+    assert builder.capsule_data["lifecycle_state"] == "draft"
+    assert builder.capsule_data["cost"]["max_budget_usd"] == 100.0
+    assert builder.capsule_data["provenance"]["custom_metadata"] == {"param1": "value1"}
+
+
+def test_add_task_execution():
+    """Test adding classical and quantum task executions."""
+    builder = CapsuleBuilder(name="test-workflow")
+    builder.start_capsule()
+
+    # Add classical task
+    builder.add_task_execution(
+        task_id="prep_data",
+        backend="local",
+        wall_time_seconds=5.2,
+        cost_usd=0.0,
+    )
+
+    assert builder.capsule_data["execution"]["num_tasks"] == 1
+    assert builder.total_cost_usd == 0.0
+
+    # Add quantum task
+    builder.add_task_execution(
+        task_id="vqe_step_1",
+        backend="braket-ionq",
+        wall_time_seconds=45.3,
+        queue_time_seconds=120.0,
+        cost_usd=3.55,
+        shots=1024,
+    )
+
+    assert builder.capsule_data["execution"]["num_tasks"] == 2
+    assert builder.total_cost_usd == 3.55
+    assert builder.total_shots == 1024
+    assert builder.capsule_data["execution"]["total_queue_time_seconds"] == 120.0
+
+
+def test_add_qpu_calibration():
+    """Test adding QPU calibration data."""
+    builder = CapsuleBuilder(name="test-workflow")
+    builder.start_capsule()
+
+    builder.add_qpu_calibration(
+        device_arn="arn:aws:braket:us-east-1::device/qpu/ionq/Aria-1",
+        calibration_timestamp=datetime(2026, 1, 6, 10, 0, 0),
+        num_qubits=25,
+        connectivity="all-to-all",
+        gate_fidelities={
+            "single_qubit_gate_fidelity_mean": 0.9995,
+            "two_qubit_gate_fidelity_mean": 0.9920,
+        },
+    )
+
+    qpu_cal = builder.capsule_data["extensions"]["qpu_calibration"]
+    assert qpu_cal["device_arn"] == "arn:aws:braket:us-east-1::device/qpu/ionq/Aria-1"
+    assert qpu_cal["num_qubits"] == 25
+    assert qpu_cal["connectivity"] == "all-to-all"
+
+
+def test_compute_data_digest():
+    """Test digest computation is deterministic and correctly formatted."""
+    builder = CapsuleBuilder(name="test")
+
+    # Test dict digest
+    data = {"key": "value", "num": 42}
+    digest1 = builder._compute_data_digest(data)
+    digest2 = builder._compute_data_digest(data)
+
+    assert digest1 == digest2  # Deterministic
+    assert digest1.startswith("sha256:")
+    assert len(digest1) == 71  # "sha256:" (7) + 64 hex chars
+
+
+def test_add_result_digest():
+    """Test adding result digests to extensions."""
+    builder = CapsuleBuilder(name="test-workflow")
+    builder.start_capsule()
+
+    result_data = {"energy": -1.1372, "iterations": 24}
+    digest = builder.add_result_digest(
+        result_data,
+        digest_name="final_energy",
+        digest_type="statistical",
+    )
+
+    assert digest.startswith("sha256:")
+    assert "result_digests" in builder.capsule_data["extensions"]
+    assert "final_energy" in builder.capsule_data["extensions"]["result_digests"]
+
+    entry = builder.capsule_data["extensions"]["result_digests"]["final_energy"]
+    assert entry["digest"] == digest
+    assert entry["type"] == "statistical"
