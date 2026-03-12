@@ -29,6 +29,8 @@ except ImportError:
 # Capsule format version — do NOT import from __init__ (circular import).
 _VERSION = "1.0.0"
 
+_VALID_TIERS = {"deterministic", "statistical", "verification-only"}
+
 
 class CapsuleBuilder:
     """
@@ -63,6 +65,7 @@ class CapsuleBuilder:
         git_repo: Optional[str] = None,
         git_sha: Optional[str] = None,
         creator_version: Optional[str] = None,
+        reproducibility_tier: str = "deterministic",
     ):
         """
         Initialize the Capsule builder.
@@ -74,13 +77,20 @@ class CapsuleBuilder:
             git_repo: Git repository URL
             git_sha: Git commit SHA
             creator_version: Version string of the tool creating this capsule
+            reproducibility_tier: Reproducibility guarantee level; one of
+                "deterministic", "statistical", or "verification-only"
         """
+        if reproducibility_tier not in _VALID_TIERS:
+            raise ValueError(
+                f"reproducibility_tier must be one of {_VALID_TIERS}, got {reproducibility_tier!r}"
+            )
         self.name = name
         self.description = description
         self.created_by = created_by or "unknown@example.com"
         self.git_repo = git_repo
         self.git_sha = git_sha
         self.creator_version = creator_version
+        self.reproducibility_tier = reproducibility_tier
 
         self.capsule_data: Dict[str, Any] = {}
         self.task_executions: List[Dict[str, Any]] = []
@@ -126,6 +136,7 @@ class CapsuleBuilder:
             "capsule_format_version": _VERSION,
             **( {"creator_version": self.creator_version} if self.creator_version is not None else {} ),
             "lifecycle_state": "draft",
+            "reproducibility_tier": self.reproducibility_tier,
             "workflow_ref": workflow_ref,
             "environment_ref": environment_ref,
             "backends_ref": backends_ref,
