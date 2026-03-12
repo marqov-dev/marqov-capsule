@@ -35,6 +35,51 @@ class CapsuleValidator:
         # Create validator instance
         self.validator = jsonschema.Draft7Validator(self.schema)
 
+    def _check_schema_version(self, data: dict) -> "dict | None":
+        """Check the capsule schema version before full validation.
+
+        Only major version 1 is supported by this validator. If the version
+        field is missing or unparseable, return None so jsonschema handles it.
+
+        Args:
+            data: Parsed capsule data as a dictionary
+
+        Returns:
+            None if version is acceptable or undecidable (let jsonschema handle),
+            or a result dict {"valid": False, "errors": [...], "warnings": []}
+            when the major version is unsupported.
+        """
+        version = data.get("version")
+        if not isinstance(version, str):
+            return None
+
+        # Parse major version from semver (MAJOR.MINOR.PATCH)
+        parts = version.split(".")
+        try:
+            major = int(parts[0])
+        except (ValueError, IndexError):
+            return {
+                "valid": False,
+                "errors": [
+                    f"Invalid version string '{version}': expected semver format "
+                    f"MAJOR.MINOR.PATCH (e.g. '1.0.0')"
+                ],
+                "warnings": [],
+            }
+
+        if major != 1:
+            return {
+                "valid": False,
+                "errors": [
+                    f"Unsupported schema major version '{version}': this validator "
+                    f"supports major version 1 only. Capsules with major version "
+                    f"{major} require a newer version of marqov-capsule."
+                ],
+                "warnings": [],
+            }
+
+        return None
+
     def validate_data(self, data: dict) -> dict:
         """Validate capsule data dict against schema.
 
@@ -47,6 +92,10 @@ class CapsuleValidator:
                 - errors: list of error messages
                 - warnings: list of warning messages
         """
+        version_result = self._check_schema_version(data)
+        if version_result is not None:
+            return version_result
+
         errors = []
         for error in self.validator.iter_errors(data):
             error_path = ".".join(str(p) for p in error.path)
