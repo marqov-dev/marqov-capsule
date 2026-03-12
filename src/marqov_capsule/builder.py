@@ -7,6 +7,7 @@ digests for deterministic replay of hybrid quantum-classical workflows.
 """
 
 import hashlib
+import importlib.metadata
 import json
 import platform
 import sys
@@ -327,11 +328,39 @@ class CapsuleBuilder:
 
         self.capsule_data["extensions"]["qpu_calibration"] = calibration_data
 
+    def _capture_environment_lock(self) -> dict:
+        """Capture current Python environment as a lock specification."""
+        packages = []
+        for dist in sorted(
+            importlib.metadata.distributions(),
+            key=lambda d: d.metadata["Name"].lower(),
+        ):
+            name = dist.metadata["Name"]
+            version = dist.metadata["Version"]
+            packages.append({"name": name, "version": version})
+
+        # Deduplicate (keep first occurrence per lowercase name)
+        seen: set = set()
+        unique_packages = []
+        for pkg in packages:
+            key = pkg["name"].lower()
+            if key not in seen:
+                seen.add(key)
+                unique_packages.append(pkg)
+
+        return {
+            "packages": unique_packages,
+            "python_version": platform.python_version(),
+            "platform": platform.platform(),
+            "locked_at": datetime.now().isoformat() + "Z",
+        }
+
     def seal_capsule(
         self,
         exit_code: int = 0,
         exit_message: str = "Workflow completed successfully",
         sealed_by: Optional[str] = None,
+        lock_environment: bool = True,
     ) -> Dict[str, Any]:
         """
         Seal the Capsule (transition to immutable state).
@@ -391,6 +420,16 @@ class CapsuleBuilder:
         }
         self.capsule_data["digests"]["provenance"] = self._compute_data_digest(provenance_data)
 
+        # Capture environment lock (D11) — digest excludes timestamp for determinism
+        if lock_environment:
+            lock = self._capture_environment_lock()
+            self.capsule_data["environment_lock"] = lock
+            self.capsule_data["digests"]["environment"] = self._compute_data_digest({
+                "packages": lock["packages"],
+                "python_version": lock["python_version"],
+                "platform": lock["platform"],
+            })
+
         return self.capsule_data
 
     def save_capsule(
@@ -421,6 +460,12 @@ class CapsuleBuilder:
                 sort_keys=False,
                 allow_unicode=True,
             )
+
+        lock_data = self.capsule_data.get("environment_lock")
+        if lock_data:
+            lock_path = filepath.parent / "environment.lock.yaml"
+            with open(lock_path, 'w') as f:
+                yaml.dump(lock_data, f, default_flow_style=False, sort_keys=False)
 
         self._generate_checksums(filepath.parent)
 
