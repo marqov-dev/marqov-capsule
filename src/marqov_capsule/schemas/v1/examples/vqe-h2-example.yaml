@@ -1,0 +1,151 @@
+# Example Capsule: VQE for H2 Molecule
+# Complex hybrid quantum-classical workflow demonstrating multi-backend execution
+
+version: "1.0.0"
+name: "vqe-h2-groundstate"
+description: "VQE for H2 molecule ground state energy using IonQ Aria QPU"
+created_at: "2026-01-06T14:00:00Z"
+created_by: "chemist@pharma.com"
+marqov_version: "0.1.0"
+
+lifecycle_state: "sealed"
+
+workflow_ref: "workflow.yaml"
+environment_ref: "environment.yaml"
+backends_ref: "backends.yaml"
+
+sealed_at: "2026-01-06T15:45:00Z"
+sealed_by: "chemist@pharma.com"
+
+provenance:
+  run_id: "770e8400-e29b-41d4-a716-446655440003"
+  git_sha: "f7e8d9c"
+  git_repo: "https://github.com/pharma/drug-discovery"
+  parent_capsule_id: null
+  related_capsule_ids:
+    - "880e8400-e29b-41d4-a716-446655440004"  # LiH molecule comparison
+    - "990e8400-e29b-41d4-a716-446655440005"  # H2O molecule comparison
+  custom_metadata:
+    grant_number: "NIH-R01-123456"
+    experiment_id: "VQE-H2-001"
+    research_group: "Computational Chemistry"
+    molecule: "H2"
+    bond_distance_angstrom: 0.74
+    basis_set: "sto-3g"
+
+compliance:
+  regulatory_framework: "FDA-21CFR11"
+  retention_years: 10
+  doi: "10.5281/zenodo.789012"
+  embargo_until: "2027-01-01T00:00:00Z"
+  approvals:
+    - signer: "pi@pharma.com"
+      role: "Principal Investigator"
+      timestamp: "2026-01-06T16:00:00Z"
+      signature_hash: "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+
+digests:
+  workflow: "sha256:1a2b3c4d5e6f78901a2b3c4d5e6f78901a2b3c4d5e6f78901a2b3c4d5e6f7890"
+  environment: "sha256:2b3c4d5e6f78901a2b3c4d5e6f78901a2b3c4d5e6f78901a2b3c4d5e6f78901"
+  backends: "sha256:3c4d5e6f78901a2b3c4d5e6f78901a2b3c4d5e6f78901a2b3c4d5e6f78901a2"
+  data: "sha256:4d5e6f78901a2b3c4d5e6f78901a2b3c4d5e6f78901a2b3c4d5e6f78901a2b3"
+  results: "sha256:5e6f78901a2b3c4d5e6f78901a2b3c4d5e6f78901a2b3c4d5e6f78901a2b3c4"
+  provenance: "sha256:6f78901a2b3c4d5e6f78901a2b3c4d5e6f78901a2b3c4d5e6f78901a2b3c4d5"
+
+cost:
+  max_budget_usd: 100.00
+  estimated_cost_usd: 87.50
+  actual_cost_usd: 85.30
+  cost_breakdown:
+    - task_id: "prepare_hamiltonian"
+      backend: "slurm-cluster"
+      cost_usd: 0.05
+      wall_time_seconds: 45.0
+    - task_id: "vqe_iteration_1"
+      backend: "braket-ionq"
+      cost_usd: 3.55
+      shots: 1024
+      wall_time_seconds: 38.2
+    - task_id: "optimize_params_1"
+      backend: "local"
+      cost_usd: 0.00
+      wall_time_seconds: 2.1
+    - task_id: "vqe_iteration_2"
+      backend: "braket-ionq"
+      cost_usd: 3.55
+      shots: 1024
+      wall_time_seconds: 41.3
+    - task_id: "optimize_params_2"
+      backend: "local"
+      cost_usd: 0.00
+      wall_time_seconds: 1.9
+    # ... 20 more iterations (truncated for brevity)
+    - task_id: "vqe_iteration_24"
+      backend: "braket-ionq"
+      cost_usd: 3.55
+      shots: 1024
+      wall_time_seconds: 39.7
+    - task_id: "final_energy_measurement"
+      backend: "braket-ionq"
+      cost_usd: 7.10
+      shots: 4096
+      wall_time_seconds: 62.4
+
+execution:
+  start_time: "2026-01-06T14:05:00Z"
+  end_time: "2026-01-06T15:45:00Z"
+  wall_time_seconds: 6000.0
+  total_queue_time_seconds: 3600.0
+  exit_code: 0
+  exit_message: "VQE converged after 24 iterations"
+  num_tasks: 50  # 1 hamiltonian + 24 VQE + 24 optimize + 1 final
+  total_shots: 28672  # 24 iterations * 1024 shots + 4096 final shots
+  carbon_footprint_kg_co2: 0.45
+
+verifications:
+  - verification_id: "aa0e8400-e29b-41d4-a716-446655440006"
+    timestamp: "2026-01-07T10:00:00Z"
+    verifier: "automated-verifier@marqov.ai"
+    method: "statistical"
+    result: "passed"
+    backend: "braket-sv1"  # Verified on simulator
+    details:
+      digests_matched: false  # Statistical, not exact
+      statistical_tests:
+        - test: "kolmogorov_smirnov"
+          d_statistic: 0.023
+          p_value: 0.87
+          threshold: 0.05
+          passed: true
+        - test: "energy_tolerance"
+          qpu_energy: -1.1372
+          simulator_energy: -1.1368
+          delta: 0.0004
+          tolerance: 0.01
+          passed: true
+      convergence_verified: true
+      ground_state_energy_hartree: -1.1372
+      theoretical_energy_hartree: -1.1373
+      chemical_accuracy_kcal_mol: 0.063
+      within_chemical_accuracy: true
+
+  - verification_id: "bb0e8400-e29b-41d4-a716-446655440007"
+    timestamp: "2026-01-08T14:30:00Z"
+    verifier: "senior-scientist@pharma.com"
+    method: "manual"
+    result: "passed"
+    backend: null
+    details:
+      reviewed_by: "Dr. Jane Smith"
+      review_notes: "Results consistent with published literature. Energy within chemical accuracy. Approved for inclusion in FDA submission."
+      literature_reference: "Peruzzo et al., Nature Chemistry 6, 462 (2014)"
+
+extensions:
+  qpu_calibration:
+    device_arn: "arn:aws:braket:us-east-1::device/qpu/ionq/Aria-1"
+    calibration_timestamp: "2026-01-06T10:00:00Z"
+    num_qubits: 25
+    connectivity: "all-to-all"
+    single_qubit_gate_fidelity_mean: 0.9995
+    two_qubit_gate_fidelity_mean: 0.9920
+    readout_error_mean: 0.0045
