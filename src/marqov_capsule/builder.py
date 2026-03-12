@@ -411,6 +411,19 @@ class CapsuleBuilder:
                 allow_unicode=True,
             )
 
+        self._generate_checksums(filepath.parent)
+
+    def _generate_checksums(self, capsule_dir: Path) -> None:
+        """Generate .checksums manifest for all files in capsule directory."""
+        checksums = []
+        for filepath in sorted(capsule_dir.rglob("*")):
+            if filepath.is_file() and filepath.name != ".checksums":
+                rel_path = filepath.relative_to(capsule_dir)
+                digest = hashlib.sha256(filepath.read_bytes()).hexdigest()
+                checksums.append(f"sha256:{digest}  {rel_path}")
+        checksums_path = capsule_dir / ".checksums"
+        checksums_path.write_text("\n".join(checksums) + "\n")
+
     def _compute_data_digest(self, data: Any) -> str:
         """
         Compute SHA256 digest of arbitrary data.

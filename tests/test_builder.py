@@ -66,3 +66,31 @@ def test_full_lifecycle():
             loaded = yaml.safe_load(f)
         assert loaded["name"] == "lifecycle-test"
         assert loaded["lifecycle_state"] == "sealed"
+
+
+def test_save_generates_checksums():
+    """save_capsule() writes .checksums manifest (D2)."""
+    builder = CapsuleBuilder("checksum-test")
+    builder.start_capsule(parameters={})
+    builder.add_task_execution(task_id="t1", backend="local", outputs={"r": 1})
+    builder.seal_capsule(exit_code=0)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        capsule_dir = Path(tmpdir) / "test.capsule"
+        capsule_dir.mkdir()
+        path = capsule_dir / "capsule.yaml"
+        builder.save_capsule(str(path))
+
+        checksums_path = capsule_dir / ".checksums"
+        assert checksums_path.exists()
+
+        lines = checksums_path.read_text().strip().split("\n")
+        # At least capsule.yaml should be listed
+        filenames = [line.split("  ")[1] for line in lines]
+        assert "capsule.yaml" in filenames
+
+        # Each line: "sha256:<64hex>  <filename>"
+        for line in lines:
+            digest, name = line.split("  ")
+            assert digest.startswith("sha256:")
+            assert len(digest) == 71  # "sha256:" + 64 hex chars
