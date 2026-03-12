@@ -79,7 +79,7 @@ class CapsuleVerifier:
     def verify_capsule(
         self,
         capsule: Dict[str, Any],
-        method: str = "deterministic",
+        method: Optional[str] = None,
         reference_results: Optional[Dict[str, Any]] = None,
         tolerance: float = 0.01,
         significance_level: float = 0.05,
@@ -89,7 +89,8 @@ class CapsuleVerifier:
 
         Args:
             capsule: Capsule data dictionary
-            method: "deterministic" or "statistical"
+            method: "deterministic", "statistical", or "verification-only".
+                    If None, auto-detected from capsule's reproducibility_tier.
             reference_results: Reference results for comparison (if available)
             tolerance: Numerical tolerance for energy/expectation values
             significance_level: P-value threshold for statistical tests
@@ -101,6 +102,10 @@ class CapsuleVerifier:
                 - details: dict with test results
                 - warnings: list of warnings
         """
+        if method is None:
+            tier = capsule.get("reproducibility_tier", "deterministic")
+            method = self._tier_to_method(tier)
+
         if method == "deterministic":
             return self._verify_deterministic(capsule, reference_results)
         elif method == "statistical":
@@ -110,8 +115,20 @@ class CapsuleVerifier:
                 tolerance,
                 significance_level
             )
+        elif method == "verification-only":
+            return self._verify_metadata_only(capsule)
         else:
             raise ValueError(f"Unknown verification method: {method}")
+
+    @staticmethod
+    def _tier_to_method(tier: str) -> str:
+        """Map a reproducibility_tier value to a verification method name."""
+        mapping = {
+            "deterministic": "deterministic",
+            "statistical": "statistical",
+            "verification-only": "verification-only",
+        }
+        return mapping.get(tier, "deterministic")
 
     def verify_checksums(self, capsule_dir) -> dict:
         """Verify all files against .checksums manifest.
@@ -214,6 +231,64 @@ class CapsuleVerifier:
         return {
             "verification_passed": verification_passed,
             "method": "deterministic",
+            "details": details,
+            "warnings": warnings,
+        }
+
+    def _verify_metadata_only(self, capsule: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Verify Capsule integrity by inspecting metadata only, without re-executing.
+
+        Used for the "verification-only" reproducibility tier, where re-execution is
+        not expected (e.g., real QPU runs that cannot be cheaply repeated).
+
+        Checks:
+        - Capsule lifecycle_state is "sealed"
+        - Required top-level sections are present
+        - At least one digest is recorded
+
+        Args:
+            capsule: Capsule data dictionary
+
+        Returns:
+            Verification result dictionary
+        """
+        warnings = []
+        details = {}
+
+        # Check lifecycle state
+        lifecycle_state = capsule.get("lifecycle_state")
+        details["lifecycle_state"] = lifecycle_state
+        if lifecycle_state != "sealed":
+            warnings.append(
+                f"Capsule lifecycle_state is '{lifecycle_state}', expected 'sealed'"
+            )
+
+        # Check required top-level sections are present
+        required_sections = ["name", "digests", "tasks"]
+        missing_sections = [s for s in required_sections if s not in capsule]
+        details["required_sections_present"] = len(missing_sections) == 0
+        if missing_sections:
+            warnings.append(f"Missing required sections: {', '.join(missing_sections)}")
+
+        # Check that at least one digest is recorded
+        digests = capsule.get("digests", {})
+        digests_present = {k: v is not None for k, v in digests.items()}
+        any_digest_recorded = any(digests_present.values()) if digests_present else False
+        details["digests_present"] = digests_present
+        details["any_digest_recorded"] = any_digest_recorded
+        if not any_digest_recorded:
+            warnings.append("No digests recorded in capsule")
+
+        verification_passed = (
+            lifecycle_state == "sealed"
+            and len(missing_sections) == 0
+            and any_digest_recorded
+        )
+
+        return {
+            "verification_passed": verification_passed,
+            "method": "verification-only",
             "details": details,
             "warnings": warnings,
         }

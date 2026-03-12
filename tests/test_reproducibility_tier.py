@@ -48,3 +48,33 @@ class TestReproducibilityTierBuilder:
             verifier = CapsuleVerifier()
             loaded = verifier.load_capsule(str(capsule_dir / "capsule.yaml"))
             assert loaded["reproducibility_tier"] == "statistical"
+
+
+class TestReproducibilityTierVerifier:
+    """Verifier auto-selects method based on reproducibility_tier."""
+
+    def _make_capsule(self, tier="deterministic"):
+        builder = CapsuleBuilder("auto-test", description="Auto method test", reproducibility_tier=tier)
+        builder.start_capsule(parameters={})
+        builder.add_task_execution(task_id="t1", backend="local", outputs={"r": 1})
+        return builder.seal_capsule(exit_code=0)
+
+    def test_auto_selects_deterministic(self):
+        capsule = self._make_capsule("deterministic")
+        verifier = CapsuleVerifier()
+        result = verifier.verify_capsule(capsule)
+        assert result["method"] == "deterministic"
+        assert result["verification_passed"] is True
+
+    def test_auto_selects_verification_only(self):
+        capsule = self._make_capsule("verification-only")
+        verifier = CapsuleVerifier()
+        result = verifier.verify_capsule(capsule)
+        assert result["method"] == "verification-only"
+        assert "verification_passed" in result
+
+    def test_explicit_method_overrides_tier(self):
+        capsule = self._make_capsule("statistical")
+        verifier = CapsuleVerifier()
+        result = verifier.verify_capsule(capsule, method="deterministic")
+        assert result["method"] == "deterministic"
