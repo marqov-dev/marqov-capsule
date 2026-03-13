@@ -171,3 +171,42 @@ class TestContentId:
             assert len(hex_part) == 64
             # Verify it's valid hex
             int(hex_part, 16)
+
+
+class TestErrorPaths:
+    """Tests for error handling across archive functions."""
+
+    def test_pack_nonexistent_directory(self):
+        """pack_capsule raises FileNotFoundError for nonexistent directory."""
+        with pytest.raises(FileNotFoundError):
+            pack_capsule("/nonexistent/path")
+
+    def test_unpack_nonexistent_archive(self):
+        """unpack_capsule raises FileNotFoundError for nonexistent archive."""
+        with pytest.raises(FileNotFoundError):
+            unpack_capsule("/nonexistent/archive.capsule")
+
+    def test_content_id_nonexistent_path(self):
+        """content_id raises FileNotFoundError for nonexistent path."""
+        with pytest.raises(FileNotFoundError):
+            content_id("/nonexistent/path")
+
+    def test_content_id_directory_missing_checksums(self):
+        """content_id raises FileNotFoundError if directory has no .checksums."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            capsule_dir = _make_sealed_capsule_dir(Path(tmpdir))
+            (capsule_dir / ".checksums").unlink()
+            with pytest.raises(FileNotFoundError, match=r"\.checksums"):
+                content_id(capsule_dir)
+
+    def test_content_id_archive_missing_checksums(self):
+        """content_id raises FileNotFoundError if archive has no .checksums."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            bad_archive = tmpdir / "bad.capsule"
+            with tarfile.open(str(bad_archive), "w:gz") as tf:
+                dummy = tmpdir / "dummy.txt"
+                dummy.write_text("hello")
+                tf.add(str(dummy), arcname="cap/dummy.txt")
+            with pytest.raises(FileNotFoundError, match=r"\.checksums"):
+                content_id(bad_archive)
