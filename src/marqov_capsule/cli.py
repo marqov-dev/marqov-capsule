@@ -1,12 +1,15 @@
 """
 Command-line interface for marqov-capsule.
 
-Provides subcommands for scaffolding, sealing, and verifying capsules.
+Provides subcommands for scaffolding, sealing, verifying, packing, and
+unpacking capsules.
 
 Usage:
     capsule init <name>           Scaffold a new capsule directory
     capsule verify <path>         Verify capsule integrity
     capsule seal <path>           Seal a draft capsule
+    capsule pack <directory>      Pack a capsule directory into an archive
+    capsule unpack <archive>      Unpack a capsule archive
 
 All commands support --json for structured output (CI pipelines).
 """
@@ -14,6 +17,7 @@ All commands support --json for structured output (CI pipelines).
 import argparse
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -72,6 +76,34 @@ def main(argv=None):
         help="Output JSON instead of human-readable text"
     )
 
+    # --- pack ---
+    pack_parser = subparsers.add_parser(
+        "pack", help="Pack a capsule directory into an archive"
+    )
+    pack_parser.add_argument("directory", help="Path to capsule directory")
+    pack_parser.add_argument(
+        "--output", default=None,
+        help="Output archive path (default: derived from directory name)"
+    )
+    pack_parser.add_argument(
+        "--json", dest="json_output", action="store_true",
+        help="Output JSON instead of human-readable text"
+    )
+
+    # --- unpack ---
+    unpack_parser = subparsers.add_parser(
+        "unpack", help="Unpack a capsule archive"
+    )
+    unpack_parser.add_argument("archive", help="Path to .capsule archive file")
+    unpack_parser.add_argument(
+        "--output-dir", default=None,
+        help="Directory to extract into (default: current directory)"
+    )
+    unpack_parser.add_argument(
+        "--json", dest="json_output", action="store_true",
+        help="Output JSON instead of human-readable text"
+    )
+
     args = parser.parse_args(argv)
 
     if args.command is None:
@@ -85,6 +117,10 @@ def main(argv=None):
             _cmd_verify(args)
         elif args.command == "seal":
             _cmd_seal(args)
+        elif args.command == "pack":
+            _cmd_pack(args)
+        elif args.command == "unpack":
+            _cmd_unpack(args)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -181,68 +217,112 @@ def _cmd_init(args):
 
 
 def _cmd_verify(args):
-    """Verify capsule integrity."""
+    """Verify capsule integrity.
+
+    Accepts both directories and .capsule archive files. If given an
+    archive file, it is unpacked to a temporary directory, verified,
+    and the temp dir is cleaned up automatically.
+    """
     from marqov_capsule import CapsuleVerifier
+    from marqov_capsule.archive import content_id as compute_content_id
+    from marqov_capsule.archive import unpack_capsule
 
-    capsule_dir = Path(args.path)
-    if not capsule_dir.is_dir():
-        print(f"Error: Not a directory: {capsule_dir}", file=sys.stderr)
-        sys.exit(1)
+    input_path = Path(args.path)
+    is_archive = False
+    cid = None
+    temp_dir_ctx = None
 
-    capsule_yaml = capsule_dir / "capsule.yaml"
-    if not capsule_yaml.exists():
-        print(f"Error: No capsule.yaml in {capsule_dir}", file=sys.stderr)
-        sys.exit(1)
-
-    verifier = CapsuleVerifier()
-
-    # Checksum verification
-    checksum_result = verifier.verify_checksums(capsule_dir)
-
-    # Load and verify capsule data
-    capsule = verifier.load_capsule(str(capsule_yaml))
-    verify_result = verifier.verify_capsule(
-        capsule,
-        method=args.method,
-    )
-
-    overall_pass = checksum_result["passed"] and verify_result["verification_passed"]
-
-    if args.json_output:
-        output = {
-            "path": str(capsule_dir),
-            "passed": overall_pass,
-            "checksums": checksum_result,
-            "verification": verify_result,
-        }
-        print(json.dumps(output, indent=2, default=str))
+    if input_path.is_dir():
+        capsule_dir = input_path
+    elif input_path.is_file():
+        # Treat as archive file
+        is_archive = True
+        try:
+            cid = compute_content_id(input_path)
+        except FileNotFoundError:
+            pass
+        temp_dir_ctx = tempfile.TemporaryDirectory()
+        temp_dir = temp_dir_ctx.__enter__()
+        try:
+            capsule_dir = unpack_capsule(input_path, output_dir=temp_dir)
+        except Exception:
+            temp_dir_ctx.__exit__(None, None, None)
+            raise
     else:
-        status = "PASS" if overall_pass else "FAIL"
-        print(f"Capsule: {capsule.get('name', 'unknown')}")
-        print(f"Path:    {capsule_dir}")
-        print(f"Status:  {status}")
-        print()
+        print(f"Error: Path not found: {input_path}", file=sys.stderr)
+        sys.exit(1)
 
-        # Checksums
-        if checksum_result["passed"]:
-            print("Checksums: PASS")
+    try:
+        capsule_yaml = capsule_dir / "capsule.yaml"
+        if not capsule_yaml.exists():
+            print(f"Error: No capsule.yaml in {capsule_dir}", file=sys.stderr)
+            sys.exit(1)
+
+        # Compute content_id for directories too (if .checksums exists)
+        if cid is None:
+            try:
+                cid = compute_content_id(capsule_dir)
+            except FileNotFoundError:
+                pass
+
+        verifier = CapsuleVerifier()
+
+        # Checksum verification
+        checksum_result = verifier.verify_checksums(capsule_dir)
+
+        # Load and verify capsule data
+        capsule = verifier.load_capsule(str(capsule_yaml))
+        verify_result = verifier.verify_capsule(
+            capsule,
+            method=args.method,
+        )
+
+        overall_pass = checksum_result["passed"] and verify_result["verification_passed"]
+
+        if args.json_output:
+            output = {
+                "path": str(input_path),
+                "passed": overall_pass,
+                "checksums": checksum_result,
+                "verification": verify_result,
+            }
+            if cid is not None:
+                output["content_id"] = cid
+            print(json.dumps(output, indent=2, default=str))
         else:
-            print("Checksums: FAIL")
-            if checksum_result.get("mismatched"):
-                print(f"  Mismatched: {', '.join(checksum_result['mismatched'])}")
-            if checksum_result.get("missing"):
-                print(f"  Missing:    {', '.join(checksum_result['missing'])}")
+            status = "PASS" if overall_pass else "FAIL"
+            print(f"Capsule: {capsule.get('name', 'unknown')}")
+            print(f"Path:    {input_path}")
+            if is_archive:
+                print(f"Source:  archive")
+            print(f"Status:  {status}")
+            if cid is not None:
+                print(f"Content ID: {cid}")
+            print()
 
-        # Verification
-        method = verify_result.get("method", "unknown")
-        v_pass = verify_result["verification_passed"]
-        print(f"Verification ({method}): {'PASS' if v_pass else 'FAIL'}")
+            # Checksums
+            if checksum_result["passed"]:
+                print("Checksums: PASS")
+            else:
+                print("Checksums: FAIL")
+                if checksum_result.get("mismatched"):
+                    print(f"  Mismatched: {', '.join(checksum_result['mismatched'])}")
+                if checksum_result.get("missing"):
+                    print(f"  Missing:    {', '.join(checksum_result['missing'])}")
 
-        if verify_result.get("warnings"):
-            for w in verify_result["warnings"]:
-                print(f"  Warning: {w}")
+            # Verification
+            method = verify_result.get("method", "unknown")
+            v_pass = verify_result["verification_passed"]
+            print(f"Verification ({method}): {'PASS' if v_pass else 'FAIL'}")
 
-    sys.exit(0 if overall_pass else 1)
+            if verify_result.get("warnings"):
+                for w in verify_result["warnings"]:
+                    print(f"  Warning: {w}")
+
+        sys.exit(0 if overall_pass else 1)
+    finally:
+        if temp_dir_ctx is not None:
+            temp_dir_ctx.__exit__(None, None, None)
 
 
 def _cmd_seal(args):
@@ -297,6 +377,54 @@ def _cmd_seal(args):
         print(f"  sealed_at: {sealed.get('sealed_at')}")
         if not args.no_lock:
             print(f"  environment.lock.yaml: generated")
+
+    sys.exit(0)
+
+
+def _cmd_pack(args):
+    """Pack a capsule directory into a deterministic archive."""
+    from marqov_capsule.archive import content_id as compute_content_id
+    from marqov_capsule.archive import pack_capsule
+
+    capsule_dir = Path(args.directory)
+    if not capsule_dir.is_dir():
+        print(f"Error: Not a directory: {capsule_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    output_path = Path(args.output) if args.output else None
+    archive_path = pack_capsule(capsule_dir, output_path=output_path)
+    cid = compute_content_id(archive_path)
+
+    if args.json_output:
+        print(json.dumps({
+            "path": str(archive_path),
+            "content_id": cid,
+        }, indent=2))
+    else:
+        print(f"Packed: {archive_path}")
+        print(f"  Content ID: {cid}")
+
+    sys.exit(0)
+
+
+def _cmd_unpack(args):
+    """Unpack a capsule archive to a directory."""
+    from marqov_capsule.archive import unpack_capsule
+
+    archive_path = Path(args.archive)
+    if not archive_path.is_file():
+        print(f"Error: File not found: {archive_path}", file=sys.stderr)
+        sys.exit(1)
+
+    output_dir = Path(args.output_dir) if args.output_dir else None
+    restored_dir = unpack_capsule(archive_path, output_dir=output_dir)
+
+    if args.json_output:
+        print(json.dumps({
+            "path": str(restored_dir),
+        }, indent=2))
+    else:
+        print(f"Unpacked: {restored_dir}")
 
     sys.exit(0)
 
