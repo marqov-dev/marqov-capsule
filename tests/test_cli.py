@@ -195,9 +195,11 @@ class TestCLIHelp:
         assert "init" in result.stdout
         assert "verify" in result.stdout
         assert "seal" in result.stdout
+        assert "pack" in result.stdout
+        assert "unpack" in result.stdout
 
     def test_subcommand_help(self):
-        for cmd in ["init", "verify", "seal"]:
+        for cmd in ["init", "verify", "seal", "pack", "unpack"]:
             result = _run_capsule(cmd, "--help")
             assert result.returncode == 0
 

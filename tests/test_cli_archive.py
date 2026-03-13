@@ -172,3 +172,26 @@ class TestCLIVerifyArchive:
             verify_output = json.loads(result.stdout)
             assert verify_output["passed"] is True
             assert verify_output["content_id"] == original_content_id
+
+
+class TestCLIArchiveErrors:
+    """Error-path tests for pack/unpack CLI commands."""
+
+    def test_cli_pack_nonexistent_directory(self):
+        """capsule pack on nonexistent path exits non-zero."""
+        result = _run_capsule("pack", "/nonexistent/path", check=False)
+        assert result.returncode != 0
+
+    def test_cli_unpack_nonexistent_archive(self):
+        """capsule unpack on nonexistent archive exits non-zero."""
+        result = _run_capsule("unpack", "/nonexistent/archive.capsule", check=False)
+        assert result.returncode != 0
+
+    def test_cli_pack_no_checksums(self):
+        """capsule pack on directory without .checksums exits non-zero."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            capsule_dir = _make_sealed_capsule_dir(Path(tmpdir))
+            (capsule_dir / ".checksums").unlink()
+            result = _run_capsule("pack", str(capsule_dir), check=False)
+            assert result.returncode != 0
+            assert ".checksums" in result.stderr

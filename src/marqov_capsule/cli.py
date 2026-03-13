@@ -53,7 +53,7 @@ def main(argv=None):
 
     # --- verify ---
     verify_parser = subparsers.add_parser("verify", help="Verify capsule integrity")
-    verify_parser.add_argument("path", help="Path to capsule directory")
+    verify_parser.add_argument("path", help="Path to capsule directory or .capsule archive")
     verify_parser.add_argument(
         "--method", choices=["deterministic", "statistical", "verification-only"],
         default=None,
@@ -242,11 +242,10 @@ def _cmd_verify(args):
         except FileNotFoundError:
             pass
         temp_dir_ctx = tempfile.TemporaryDirectory()
-        temp_dir = temp_dir_ctx.__enter__()
         try:
-            capsule_dir = unpack_capsule(input_path, output_dir=temp_dir)
+            capsule_dir = unpack_capsule(input_path, output_dir=temp_dir_ctx.name)
         except Exception:
-            temp_dir_ctx.__exit__(None, None, None)
+            temp_dir_ctx.cleanup()
             raise
     else:
         print(f"Error: Path not found: {input_path}", file=sys.stderr)
@@ -322,7 +321,7 @@ def _cmd_verify(args):
         sys.exit(0 if overall_pass else 1)
     finally:
         if temp_dir_ctx is not None:
-            temp_dir_ctx.__exit__(None, None, None)
+            temp_dir_ctx.cleanup()
 
 
 def _cmd_seal(args):
