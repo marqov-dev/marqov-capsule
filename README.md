@@ -47,9 +47,21 @@ pip install git+ssh://git@github.com/marqov-dev/marqov-capsule.git
 capsule init my-analysis                  # scaffold a new capsule directory
 capsule seal my-analysis.capsule/         # seal it (locks environment, generates checksums)
 capsule verify my-analysis.capsule/       # verify integrity and checksums
+capsule pack my-analysis.capsule/         # pack into a single-file archive
+capsule unpack my-analysis.capsule        # extract archive to directory
+capsule verify my-analysis.capsule        # verify works on archives too
 ```
 
 All commands support `--json` for structured output in CI pipelines.
+
+### Archives
+
+A `.capsule` file is a deterministic gzipped tarball. Packing the same directory twice always produces byte-identical archives. This enables content addressing: each capsule gets a permanent ID (SHA256 of the `.checksums` file) regardless of filename.
+
+```bash
+capsule pack my-analysis.capsule/ --json
+# {"path": "my-analysis.capsule", "content_id": "sha256:abc123..."}
+```
 
 ## Python API
 
@@ -89,6 +101,13 @@ print(result["verification_passed"])  # True
 # Check for tampering
 checksum_result = verifier.verify_checksums("my-analysis.capsule/")
 print(checksum_result["passed"])  # True
+
+# Pack into a single-file archive
+from marqov_capsule import pack_capsule, unpack_capsule, content_id
+
+archive = pack_capsule("my-analysis.capsule/")  # deterministic gzipped tarball
+cid = content_id(archive)                        # sha256:... permanent ID
+restored = unpack_capsule(archive, output_dir="./restored/")
 ```
 
 ## Schema
