@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://marqov.dev/schemas/capsule/v1/capsule-schema.json",
+  "title": "Marqov Capsule v1",
+  "description": "Schema for capsule.yaml — the manifest of a reproducible, portable quantum experiment.",
+  "type": "object",
+  "required": ["version", "name", "lifecycle_state"],
+  "additionalProperties": true,
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "created_by": {
+      "type": "string"
+    },
+    "lifecycle_state": {
+      "type": "string",
+      "enum": ["draft", "runnable", "sealed", "archived"]
+    },
+    "sealed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sealed_by": {
+      "type": "string"
+    },
+    "checksums_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "derived_from": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "requirements": {
+      "type": "object",
+      "required": ["paradigm", "max_qubit_count"],
+      "additionalProperties": false,
+      "properties": {
+        "paradigm": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["gate-based", "analog", "classical"]
+          },
+          "minItems": 1
+        },
+        "max_qubit_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "gate_set": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "task_executions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["task_id", "status", "backend", "result_type"],
+        "if": {
+          "properties": { "result_type": { "const": "probabilistic" } }
+        },
+        "then": {
+          "required": ["verification_settings"]
+        },
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["success", "failed", "error"]
+          },
+          "result_type": {
+            "type": "string",
+            "enum": ["probabilistic", "deterministic"]
+          },
+          "backend": {
+            "type": "object",
+            "required": ["provider", "name", "shots"],
+            "properties": {
+              "provider": { "type": "string" },
+              "name": { "type": "string" },
+              "shots": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "start_time": { "type": "string", "format": "date-time" },
+          "end_time": { "type": "string", "format": "date-time" },
+          "wall_time_seconds": { "type": "number" },
+          "cost_usd": { "type": "number" },
+          "job_id": { "type": "string" },
+          "verification_settings": {
+            "type": "object",
+            "required": ["epsilon", "min_shots", "tolerance_regime"],
+            "properties": {
+              "epsilon": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "default": 0.02
+              },
+              "epsilon_drift": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0,
+                "default": 0.08
+              },
+              "min_shots": {
+                "type": "integer",
+                "default": 100
+              },
+              "tolerance_regime": {
+                "type": "string",
+                "enum": ["strict", "calibration_drift"]
+              }
+            }
+          },
+          "metrics": {
+            "type": "object",
+            "properties": {
+              "total_variation_distance": { "type": "number" },
+              "tvd_ci_lower": { "type": "number" },
+              "tvd_ci_upper": { "type": "number" },
+              "bootstrap_resamples": { "type": "integer" },
+              "energy_distance": { "type": "number" },
+              "chi_squared_p_value": { "type": "number" }
+            }
+          },
+          "signatures": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "digests": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+          { "type": "null" }
+        ]
+      }
+    },
+    "parameters": {
+      "type": "object"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "run_id": { "type": ["string", "null"] },
+    "workflow_ref": { "type": ["string", "null"] },
+    "environment_ref": { "type": ["string", "null"] },
+    "max_budget_usd": { "type": ["number", "null"] },
+    "num_tasks": { "type": "integer" },
+    "wall_time_seconds": { "type": "number" },
+    "actual_cost_usd": { "type": "number" },
+    "total_shots": { "type": "integer" },
+    "exit_code": { "type": "integer" },
+    "exit_message": { "type": "string" },
+    "extensions": { "type": "object" }
+  },
+  "if": {
+    "properties": { "lifecycle_state": { "const": "sealed" } },
+    "required": ["lifecycle_state"]
+  },
+  "then": {
+    "required": ["requirements", "checksums_digest", "sealed_at", "sealed_by"]
+  }
+}
