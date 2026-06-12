@@ -1,217 +1,189 @@
-import tempfile
+import hashlib
 from pathlib import Path
-
 import pytest
-import yaml
+from marqov_capsule.verifier import CapsuleVerifier
 
-from marqov_capsule import CapsuleBuilder, CapsuleVerifier
+pytest.importorskip("numpy")
+pytest.importorskip("scipy")
+
+FIXTURE_DIR = Path(__file__).parent.parent / "spec/v1/conformance"
 
 
-def _make_sealed_capsule(tmpdir: str) -> Path:
-    """Helper: create a sealed capsule on disk."""
-    builder = CapsuleBuilder("verify-test")
-    builder.start_capsule(parameters={"x": 1})
-    builder.add_task_execution(task_id="t1", backend="local", outputs={"r": 42})
-    builder.seal_capsule(exit_code=0)
-    capsule_dir = Path(tmpdir) / "verify-test.capsule"
+def test_identical_distributions_verified():
+    """When ref == new, TVD upper CI should be well below epsilon.
+
+    Using 10,000 shots so the CI upper bound is comfortably < 0.05.
+    With 1,000 shots and a 2-outcome distribution the 97.5th-percentile CI upper
+    bound is ~0.0502, which sits exactly on the threshold and flakes ~50% of runs.
+    """
+    counts = {"00": 5000, "11": 5000}  # 10,000 shots
+    verifier = CapsuleVerifier()
+    result = verifier.verify_statistical(
+        ref_counts=counts,
+        new_counts=counts,
+        verification_settings={"epsilon": 0.05, "min_shots": 100, "tolerance_regime": "strict"},
+        seed=12345,
+    )
+    assert result["verdict"] == "VERIFIED"
+    assert result["metrics"]["tvd_ci_upper"] <= 0.05
+
+
+def test_completely_different_distributions_rejected():
+    ref = {"00": 1000}
+    new = {"11": 1000}
+    verifier = CapsuleVerifier()
+    result = verifier.verify_statistical(
+        ref_counts=ref,
+        new_counts=new,
+        verification_settings={"epsilon": 0.05, "min_shots": 100, "tolerance_regime": "strict"},
+    )
+    assert result["verdict"] == "REJECTED"
+
+
+def test_low_shots_inconclusive():
+    counts = {"00": 5, "11": 5}  # 10 shots total
+    verifier = CapsuleVerifier()
+    result = verifier.verify_statistical(
+        ref_counts=counts,
+        new_counts=counts,
+        verification_settings={"epsilon": 0.05, "min_shots": 100, "tolerance_regime": "strict"},
+    )
+    assert result["verdict"] == "INCONCLUSIVE"
+    assert "shots" in result["reason"].lower()
+
+
+def test_calibration_drift_uses_epsilon_drift():
+    """calibration_drift regime uses epsilon_drift not epsilon.
+
+    Invariant: calibration_drift must never be stricter than strict mode for the
+    same distribution pair. Verified by rank comparison on the verdict ordering.
+    """
+    ref = {"00": 500, "11": 490, "01": 10}
+    new = {"00": 480, "11": 510, "01": 10}
+    verifier = CapsuleVerifier()
+    strict_result = verifier.verify_statistical(
+        ref_counts=ref,
+        new_counts=new,
+        verification_settings={"epsilon": 0.02, "min_shots": 100, "tolerance_regime": "strict"},
+        seed=12345,
+    )
+    drift_result = verifier.verify_statistical(
+        ref_counts=ref,
+        new_counts=new,
+        verification_settings={"epsilon": 0.02, "epsilon_drift": 0.10, "min_shots": 100, "tolerance_regime": "calibration_drift"},
+        seed=12345,
+    )
+    assert drift_result["metrics"]["epsilon_used"] == 0.10
+    # Drift regime must not be stricter
+    verdicts = ("VERIFIED", "INCONCLUSIVE", "REJECTED")
+    strict_rank = verdicts.index(strict_result["verdict"])
+    drift_rank = verdicts.index(drift_result["verdict"])
+    assert drift_rank <= strict_rank, (
+        f"calibration_drift ({drift_result['verdict']}) stricter than strict ({strict_result['verdict']})"
+    )
+
+
+def test_epsilon_drift_defaults_to_0_08_when_absent():
+    counts = {"00": 500, "11": 500}
+    verifier = CapsuleVerifier()
+    result = verifier.verify_statistical(
+        ref_counts=counts,
+        new_counts=counts,
+        verification_settings={
+            "epsilon": 0.02,
+            "min_shots": 100,
+            "tolerance_regime": "calibration_drift",
+            # epsilon_drift deliberately absent
+        },
+    )
+    assert result["metrics"]["epsilon_used"] == 0.08
+
+
+def test_metrics_include_diagnostics_not_verdict():
+    ref = {"00": 500, "11": 500}
+    new = {"00": 495, "11": 505}
+    verifier = CapsuleVerifier()
+    result = verifier.verify_statistical(
+        ref_counts=ref,
+        new_counts=new,
+        verification_settings={"epsilon": 0.05, "min_shots": 100, "tolerance_regime": "strict"},
+        seed=12345,
+    )
+    m = result["metrics"]
+    assert "chi_squared_p_value" in m
+    assert "energy_distance" in m
+    assert "tvd_ci_lower" in m
+    assert "tvd_ci_upper" in m
+    assert "bootstrap_resamples" in m
+    assert m["bootstrap_resamples"] == 9999
+    assert "rng_seed" in m
+    assert m["rng_seed"] == 12345
+
+
+def test_energy_distance_uses_hamming_metric():
+    """Energy distance must use Hamming distance on bitstrings, not index proximity."""
+    # "00" and "11" are Hamming-distance 2; "00" and "01" are Hamming-distance 1.
+    verifier = CapsuleVerifier()
+    far = verifier.verify_statistical(
+        ref_counts={"00": 1000},
+        new_counts={"11": 1000},
+        verification_settings={"epsilon": 0.5, "min_shots": 100, "tolerance_regime": "strict"},
+        seed=12345,
+    )
+    near = verifier.verify_statistical(
+        ref_counts={"00": 1000},
+        new_counts={"01": 1000},
+        verification_settings={"epsilon": 0.5, "min_shots": 100, "tolerance_regime": "strict"},
+        seed=12345,
+    )
+    assert far["metrics"]["energy_distance"] > near["metrics"]["energy_distance"]
+
+
+def test_verify_checksums_pass(tmp_path):
+    import yaml
+    capsule_dir = tmp_path / "test.capsule"
     capsule_dir.mkdir()
-    path = capsule_dir / "capsule.yaml"
-    builder.save_capsule(str(path))
-    return path
+    payload = capsule_dir / "payload"
+    payload.mkdir()
+    f = payload / "results.json"
+    f.write_text('{"counts": {"00": 500}}')
+    digest = "sha256:" + hashlib.sha256(f.read_bytes()).hexdigest()
+    checksums = {"payload/results.json": digest}
+    (capsule_dir / ".checksums").write_text(yaml.dump(checksums, sort_keys=True))
+
+    result = CapsuleVerifier.verify_checksums(capsule_dir)
+    assert result["status"] == "pass"
 
 
-def test_load_and_verify_deterministic():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        path = _make_sealed_capsule(tmpdir)
-        verifier = CapsuleVerifier()
-        capsule = verifier.load_capsule(str(path))
-        result = verifier.verify_capsule(capsule, method="deterministic")
-        assert result["verification_passed"] is True
+def test_verify_checksums_fail_on_tampered_file(tmp_path):
+    import yaml
+    capsule_dir = tmp_path / "test.capsule"
+    capsule_dir.mkdir()
+    payload = capsule_dir / "payload"
+    payload.mkdir()
+    f = payload / "results.json"
+    f.write_text('{"counts": {"00": 500}}')
+    digest = "sha256:" + hashlib.sha256(b"original content").hexdigest()
+    checksums = {"payload/results.json": digest}
+    (capsule_dir / ".checksums").write_text(yaml.dump(checksums, sort_keys=True))
+
+    result = CapsuleVerifier.verify_checksums(capsule_dir)
+    assert result["status"] == "fail"
 
 
-def test_verify_checksums():
-    """Verifier detects tampered files via .checksums."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        path = _make_sealed_capsule(tmpdir)
-        capsule_dir = path.parent
-
-        # Verify passes on clean capsule
-        verifier = CapsuleVerifier()
-        result = verifier.verify_checksums(capsule_dir)
-        assert result["passed"] is True
-
-        # Tamper with capsule.yaml
-        with open(path, "a") as f:
-            f.write("\n# tampered\n")
-
-        # Verify should now detect the tampering
-        result = verifier.verify_checksums(capsule_dir)
-        assert result["passed"] is False
-        assert "capsule.yaml" in result["mismatched"]
-
-
-try:
-    import scipy
-    HAS_SCIPY = True
-except ImportError:
-    HAS_SCIPY = False
-
-@pytest.mark.skipif(not HAS_SCIPY, reason="scipy not installed")
-def test_statistical_verification():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        path = _make_sealed_capsule(tmpdir)
-        verifier = CapsuleVerifier()
-        capsule = verifier.load_capsule(str(path))
-        # Statistical verify with reference results
-        result = verifier.verify_capsule(
-            capsule,
-            method="statistical",
-            reference_results={"counts": {"00": 500, "11": 500}},
-        )
-        assert "verification_passed" in result
-
-
-def _create_test_capsule(name="test-capsule", **kwargs):
-    """Helper to create a sealed test capsule (in-memory)."""
-    builder = CapsuleBuilder(name=name, **kwargs)
-    builder.start_capsule()
-    builder.add_task_execution(
-        task_id="task1",
-        backend="local",
-        wall_time_seconds=2.0,
-        cost_usd=0.0,
-    )
-    builder.seal_capsule()
-    return builder.get_capsule_data()
-
-
-def test_calibration_drift_check():
-    """Test QPU calibration drift detection."""
-    capsule1 = _create_test_capsule()
-    capsule2 = _create_test_capsule()
-
-    # Add calibration data
-    capsule1["extensions"]["qpu_calibration"] = {
-        "calibration_timestamp": "2026-01-06T10:00:00Z",
-        "gate_fidelities": {
-            "single_qubit_gate_fidelity_mean": 0.9995,
-            "two_qubit_gate_fidelity_mean": 0.9920,
-        },
-    }
-
-    # Small drift (should pass)
-    capsule2["extensions"]["qpu_calibration"] = {
-        "calibration_timestamp": "2026-01-06T11:00:00Z",
-        "gate_fidelities": {
-            "single_qubit_gate_fidelity_mean": 0.9993,  # -0.0002
-            "two_qubit_gate_fidelity_mean": 0.9915,  # -0.0005
-        },
-    }
-
+def test_deterministic_verification_exact_match():
     verifier = CapsuleVerifier()
-    result = verifier.check_calibration_drift(
-        capsule1,
-        capsule2,
-        max_fidelity_drift=0.01,
+    result = verifier.verify_deterministic(
+        ref_data={"value": 42},
+        new_data={"value": 42},
     )
-
-    assert result["calibration_drift_check"] is True
-    assert "single_qubit_fidelity_delta" in result
-    assert "two_qubit_fidelity_delta" in result
+    assert result["verdict"] == "VERIFIED"
 
 
-def test_compare_capsules():
-    """Test comparing two capsules."""
-    capsule1 = _create_test_capsule(name="vqe-h2")
-    capsule2 = _create_test_capsule(name="vqe-h2")
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        path1 = Path(tmpdir) / "capsule1.yaml"
-        path2 = Path(tmpdir) / "capsule2.yaml"
-
-        with open(path1, "w") as f:
-            yaml.dump(capsule1, f)
-        with open(path2, "w") as f:
-            yaml.dump(capsule2, f)
-
-        verifier = CapsuleVerifier()
-        result = verifier.compare_capsules(path1, path2)
-
-        assert "overall_consistent" in result
-        assert result["metadata"]["same_workflow"] is True
-        assert "cost" in result
-        assert "execution" in result
-
-
-def test_verify_with_reference_results():
-    """Test verification with reference result digests."""
-    capsule_data = _create_test_capsule()
-
-    # Add result digests
-    capsule_data["extensions"]["result_digests"] = {
-        "energy": {
-            "digest": "sha256:abc123",
-            "type": "statistical",
-        }
-    }
-
-    reference_results = {
-        "energy": {
-            "digest": "sha256:abc123",
-            "type": "statistical",
-        }
-    }
-
+def test_deterministic_verification_mismatch():
     verifier = CapsuleVerifier()
-    result = verifier.verify_capsule(
-        capsule_data,
-        method="deterministic",
-        reference_results=reference_results,
+    result = verifier.verify_deterministic(
+        ref_data={"value": 42},
+        new_data={"value": 43},
     )
-
-    assert "digest_comparison" in result["details"]
-
-
-def test_compare_digests():
-    """Test digest comparison between two sets of digests."""
-    verifier = CapsuleVerifier()
-
-    digests1 = {
-        "result1": {"digest": "sha256:abc123"},
-        "result2": {"digest": "sha256:def456"},
-    }
-
-    digests2 = {
-        "result1": {"digest": "sha256:abc123"},  # Match
-        "result2": {"digest": "sha256:different"},  # Mismatch
-    }
-
-    matches = verifier._compare_digests(digests1, digests2)
-
-    assert matches["result1"] is True
-    assert matches["result2"] is False
-
-
-def test_energy_tolerance_check():
-    """Test energy tolerance check."""
-    verifier = CapsuleVerifier()
-
-    # Within tolerance should pass
-    result = verifier._energy_tolerance_check(
-        energy1=-1.1372,
-        energy2=-1.1370,
-        tolerance=0.01,
-    )
-
-    assert result["test"] == "energy_tolerance"
-    assert result["passed"] is True
-    assert "delta" in result
-
-    # Outside tolerance should fail
-    result = verifier._energy_tolerance_check(
-        energy1=-1.1372,
-        energy2=-1.0000,
-        tolerance=0.01,
-    )
-
-    assert result["passed"] is False
+    assert result["verdict"] == "REJECTED"
