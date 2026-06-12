@@ -1,15 +1,12 @@
 """Cross-cutting invariant checks — these run in CI on every PR."""
-import hashlib
 import json
 from pathlib import Path
 
 import pytest
-import yaml
 
 from marqov_capsule._canonical import compute_capsule_id, load_manifest_yaml
 from marqov_capsule.redactor import CapsuleRedactor, RedactorError
 from marqov_capsule.validator import CapsuleValidator
-from marqov_capsule.verifier import CapsuleVerifier
 
 FIXTURE_DIR = Path(__file__).parent.parent / "spec/v1/conformance"
 
