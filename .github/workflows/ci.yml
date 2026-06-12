@@ -7,47 +7,119 @@ on:
     branches: [main]
 
 jobs:
-  test-base:
-    name: "Test (pyyaml only)"
+  test:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install -e .
-      - run: pip install pytest
-      - run: pytest -v
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.11", "3.12"]
 
-  test-verify:
-    name: "Test (with numpy/scipy)"
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install -e ".[verify,dev]"
-      - run: pytest -v
 
-  test-validate:
-    name: "Test (with jsonschema)"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - run: pip install -e ".[validate,dev]"
-      - run: pytest -v
+          python-version: ${{ matrix.python-version }}
 
-  test-all:
-    name: "Test (all extras)"
+      - name: Install with dev extras
+        run: pip install -e ".[dev]"
+
+      - name: Validate JSON Schema is valid JSON
+        run: python -c "import json; json.load(open('spec/v1/capsule-schema.json')); print('schema: valid JSON')"
+
+      - name: Run tests
+        run: python -m pytest tests/ -v --tb=short
+
+      - name: Validate conformance fixtures against schema
+        run: |
+          python - <<'EOF'
+          import yaml, json
+          from pathlib import Path
+          import jsonschema
+          schema = json.load(open("spec/v1/capsule-schema.json"))
+          from marqov_capsule._canonical import load_manifest_yaml
+          validator = jsonschema.Draft202012Validator(schema)
+          valid = ["valid_capsule", "multi_task_capsule"]
+          invalid = ["invalid_capsule"]
+          for name in valid:
+              cap = load_manifest_yaml(open(f"spec/v1/conformance/{name}/capsule.yaml").read())
+              errors = list(validator.iter_errors(cap))
+              assert errors == [], f"{name} should be valid but has errors: {errors}"
+              print(f"  {name}: PASS")
+          for name in invalid:
+              cap = load_manifest_yaml(open(f"spec/v1/conformance/{name}/capsule.yaml").read())
+              errors = list(validator.iter_errors(cap))
+              assert errors, f"{name} should be invalid but passed"
+              print(f"  {name}: correctly invalid ({len(errors)} errors)")
+          EOF
+
+      - name: CLI smoke test
+        run: |
+          marqov-capsule --version
+          marqov-capsule validate spec/v1/conformance/valid_capsule/capsule.yaml
+          marqov-capsule inspect spec/v1/conformance/valid_capsule
+          marqov-capsule verify spec/v1/conformance/valid_capsule
+
+  # Verify the built wheel (not editable install) ships the bundled schema
+  # and that the package is importable from a wheel install.
+  wheel-smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - run: pip install -e ".[dev]"
-      - run: pytest -v
+          python-version: "3.11"
+
+      - name: Build wheel
+        run: |
+          pip install build
+          python -m build --wheel
+
+      - name: Install from wheel (not editable)
+        run: pip install dist/*.whl
+
+      - name: Verify bundled schema ships in wheel and is byte-identical to spec/
+        run: |
+          python - <<'EOF'
+          import importlib.resources as pkg
+          import json, pathlib
+          ref = pkg.files("marqov_capsule.schemas").joinpath("capsule-schema.json")
+          wheel_bytes = ref.read_bytes()
+          spec_bytes = pathlib.Path("spec/v1/capsule-schema.json").read_bytes()
+          assert wheel_bytes == spec_bytes, "Bundled schema in wheel differs from spec/v1/capsule-schema.json — update the copy in marqov_capsule/schemas/"
+          print("Bundled schema: byte-identical to spec copy")
+          EOF
+
+      - name: Verify CapsuleValidator works from wheel (no editable install path leakage)
+        run: |
+          python -c "
+          from marqov_capsule import CapsuleValidator
+          r = CapsuleValidator.validate({'version': '1.0.0', 'name': 'test', 'lifecycle_state': 'draft'})
+          assert r['valid'] is True, r
+          print('CapsuleValidator: OK from wheel install')
+          "
+
+  # Verify base install (no [dev] extra) doesn't hard-import numpy/scipy at import time
+  base-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install base only (no [dev] extra)
+        run: pip install -e .
+
+      - name: Verify numpy is NOT importable (confirms lazy import)
+        run: |
+          python -c "
+          import sys
+          import marqov_capsule
+          assert 'numpy' not in sys.modules, 'numpy was imported at package load time — check verifier.py lazy import guard'
+          print('Lazy numpy import: OK')
+          "
