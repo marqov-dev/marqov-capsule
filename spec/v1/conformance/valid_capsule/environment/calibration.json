@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-06-11T00:00:00Z",
+  "backend_name": "ibm_kyiv",
+  "provider": "ibm",
+  "qubits": [
+    {"id": 0, "T1_us": 180.2, "T2_us": 95.4},
+    {"id": 1, "T1_us": 162.7, "T2_us": 88.1}
+  ],
+  "gates": [
+    {"name": "cx", "qubits": [0, 1], "error_rate": 0.0043}
+  ],
+  "vendor": {}
+}

@@ -1,0 +1,32 @@
+version: "1.0.0"
+name: "Multi-Task Capsule"
+description: "Fixture: hybrid gate-based and analog tasks"
+lifecycle_state: "sealed"
+sealed_at: "2026-06-11T00:00:01Z"
+sealed_by: "conformance-fixture"
+checksums_digest: "sha256:4b57a5444b15b7a52aedaf0041eee4ba8835d8f75f07f4e3b7a04c4a6d3d4ec9"
+requirements:
+  paradigm:
+    - "gate-based"
+    - "analog"
+  max_qubit_count: 256
+task_executions:
+  - task_id: "550e8400-e29b-41d4-a716-446655440001"
+    status: "success"
+    result_type: "probabilistic"
+    backend:
+      provider: "ibm"
+      name: "ibm_kyiv"
+      shots: 1000
+    verification_settings:
+      epsilon: 0.05
+      min_shots: 100
+      tolerance_regime: "strict"
+  - task_id: "550e8400-e29b-41d4-a716-446655440002"
+    status: "success"
+    result_type: "deterministic"
+    backend:
+      provider: "aws"
+      name: "Aquila"
+      shots: 100
+tags: []

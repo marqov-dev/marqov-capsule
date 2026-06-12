@@ -1,0 +1,5 @@
+version: "2.0.0"
+lifecycle_state: "unknown_state"
+requirements:
+  paradigm: "gate-based"
+  max_qubit_count: -1

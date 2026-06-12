@@ -1,0 +1,13 @@
+version: 1.0.0
+name: Adapted Run
+description: Child capsule adapted from Original Run
+lifecycle_state: sealed
+sealed_at: '2026-06-11T00:00:02Z'
+sealed_by: conformance-fixture
+checksums_digest: sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356
+derived_from: daa4b97ea6e49911cd8264a2259158e551ede25441295658b727a9045d9ddf2b
+requirements:
+  paradigm:
+  - gate-based
+  max_qubit_count: 2
+task_executions: []

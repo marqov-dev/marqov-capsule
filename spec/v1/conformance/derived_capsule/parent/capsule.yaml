@@ -1,0 +1,12 @@
+version: 1.0.0
+name: Original Run
+description: Parent capsule in a provenance chain
+lifecycle_state: sealed
+sealed_at: '2026-06-11T00:00:01Z'
+sealed_by: conformance-fixture
+checksums_digest: sha256:85ec7cda9090637cb21abd150a471010ff7b2789ea09934ed69e9b370e96c131
+requirements:
+  paradigm:
+  - gate-based
+  max_qubit_count: 2
+task_executions: []

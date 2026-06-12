@@ -1,0 +1,13 @@
+version: "1.0.0"
+name: "Secret Capsule"
+description: "Fixture: contains synthetic credential patterns that must be caught by CapsuleRedactor"
+lifecycle_state: "draft"
+requirements:
+  paradigm:
+    - "gate-based"
+  max_qubit_count: 2
+parameters:
+  IBM_QUANTUM_TOKEN: "ibmq_fake_token_abcdef1234567890abcdef1234567890abcdef"
+  backend_name: "ibm_kyiv"
+task_executions: []
+tags: []
