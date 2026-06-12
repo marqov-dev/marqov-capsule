@@ -1,262 +1,86 @@
-"""
-Marqov Capsule Validator
+"""CapsuleValidator — validates capsule.yaml against spec/v1/capsule-schema.json."""
+from __future__ import annotations
 
-Validates capsule data against the v1.0 JSON Schema.
-"""
-
+import importlib.resources as _pkg_resources
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
+
+import yaml
 
 try:
     import jsonschema
-    import yaml
+    from jsonschema import Draft202012Validator
+    _JSONSCHEMA_AVAILABLE = True
 except ImportError:
-    raise ImportError("Install marqov-capsule[validate] for CapsuleValidator")
+    _JSONSCHEMA_AVAILABLE = False
+
+_schema_cache: dict | None = None
+
+
+def _load_schema() -> dict:
+    """Load the bundled schema via importlib.resources.
+
+    Works for editable installs AND wheel installs. The schema is copied into
+    marqov_capsule/schemas/ at build time (see pyproject.toml artifacts).
+    Do NOT use Path(__file__).parent.parent/spec/... — that path doesn't exist
+    after pip install.
+    """
+    global _schema_cache
+    if _schema_cache is None:
+        ref = _pkg_resources.files("marqov_capsule.schemas").joinpath("capsule-schema.json")
+        _schema_cache = json.loads(ref.read_text(encoding="utf-8"))
+    return _schema_cache
 
 
 class CapsuleValidator:
-    """Validates Capsule manifest files and data against JSON Schema."""
+    """Validates capsule.yaml against spec/v1/capsule-schema.json (JSON Schema 2020-12)."""
 
-    def __init__(self, schema_path: Optional[Path] = None):
-        """Initialize validator with schema file.
-
-        Args:
-            schema_path: Path to capsule.schema.json. Defaults to the bundled
-                         schema at schemas/v1/capsule.schema.json.
-        """
-        if schema_path is None:
-            schema_path = Path(__file__).parent / "schemas" / "v1" / "capsule.schema.json"
-
-        self.schema_path = schema_path
-        with open(schema_path) as f:
-            self.schema = json.load(f)
-
-        # Create validator instance
-        self.validator = jsonschema.Draft7Validator(self.schema)
-
-    def _check_schema_version(self, data: dict) -> "dict | None":
-        """Check the capsule schema version before full validation.
-
-        Only major version 1 is supported by this validator. If the version
-        field is missing or unparseable, return None so jsonschema handles it.
-
-        Args:
-            data: Parsed capsule data as a dictionary
+    @classmethod
+    def validate(cls, capsule: dict[str, Any]) -> dict[str, Any]:
+        """Validate a capsule manifest dict.
 
         Returns:
-            None if version is acceptable or undecidable (let jsonschema handle),
-            or a result dict {"valid": False, "errors": [...], "warnings": []}
-            when the major version is unsupported.
+            {"valid": bool, "errors": [{"path": str, "message": str}]}
         """
-        version = data.get("version")
-        if not isinstance(version, str):
-            return None
+        if not _JSONSCHEMA_AVAILABLE:
+            raise ImportError("jsonschema>=4.0 required: pip install marqov-capsule")
 
-        # Parse major version from semver (MAJOR.MINOR.PATCH)
-        parts = version.split(".")
-        try:
-            major = int(parts[0])
-        except (ValueError, IndexError):
-            return {
-                "valid": False,
-                "errors": [
-                    f"Invalid version string '{version}': expected semver format "
-                    f"MAJOR.MINOR.PATCH (e.g. '1.0.0')"
-                ],
-                "warnings": [],
-            }
-
-        if major != 1:
-            return {
-                "valid": False,
-                "errors": [
-                    f"Unsupported schema major version '{version}': this validator "
-                    f"supports major version 1 only. Capsules with major version "
-                    f"{major} require a newer version of marqov-capsule."
-                ],
-                "warnings": [],
-            }
-
-        return None
-
-    def validate_data(self, data: dict) -> dict:
-        """Validate capsule data dict against schema.
-
-        Args:
-            data: Parsed capsule data as a dictionary
-
-        Returns:
-            Dictionary with validation results:
-                - valid: bool
-                - errors: list of error messages
-                - warnings: list of warning messages
-        """
-        version_result = self._check_schema_version(data)
-        if version_result is not None:
-            return version_result
-
+        schema = _load_schema()
+        validator = Draft202012Validator(schema)
         errors = []
-        for error in self.validator.iter_errors(data):
-            error_path = ".".join(str(p) for p in error.path)
-            errors.append(f"{error_path}: {error.message}")
-        warnings = self._semantic_checks(data)
-        return {"valid": len(errors) == 0, "errors": errors, "warnings": warnings}
+        for err in validator.iter_errors(capsule):
+            parts = [str(p) for p in err.absolute_path]
+            # For "required" errors, append the missing property name so callers
+            # can detect which field is missing by inspecting the path.
+            if err.validator == "required" and err.validator_value:
+                # validator_value is the list of required fields; extract the
+                # missing one from the message "'{name}' is a required property"
+                import re
+                m = re.search(r"'([^']+)'", err.message)
+                if m:
+                    parts.append(m.group(1))
+            path = "/".join(parts) or "/"
+            errors.append({"path": path, "message": err.message})
 
-    def validate_file(self, capsule_path: Path) -> Dict[str, Any]:
+        return {"valid": len(errors) == 0, "errors": errors}
+
+    @classmethod
+    def validate_file(cls, filepath: str | Path) -> dict[str, Any]:
         """Validate a capsule.yaml file.
 
-        Args:
-            capsule_path: Path to capsule.yaml file
-
         Returns:
-            Dictionary with validation results:
-                - valid: bool
-                - errors: list of error messages
-                - warnings: list of warning messages
+            {"valid": bool, "errors": [{"path": str, "message": str}]}
         """
-        # Load YAML file
+        from marqov_capsule._canonical import load_manifest_yaml
         try:
-            with open(capsule_path) as f:
-                capsule_data = yaml.safe_load(f)
-        except yaml.YAMLError as e:
-            return {
-                "valid": False,
-                "errors": [f"YAML parsing error: {e}"],
-                "warnings": [],
-            }
+            capsule = load_manifest_yaml(Path(filepath).read_text(encoding="utf-8"))
         except FileNotFoundError:
-            return {
-                "valid": False,
-                "errors": [f"File not found: {capsule_path}"],
-                "warnings": [],
-            }
+            return {"valid": False, "errors": [{"path": "/", "message": f"File not found: {filepath}"}]}
+        except yaml.YAMLError as e:
+            return {"valid": False, "errors": [{"path": "/", "message": f"YAML parse error: {e}"}]}
 
-        return self.validate_data(capsule_data)
+        if not isinstance(capsule, dict):
+            return {"valid": False, "errors": [{"path": "/", "message": "capsule.yaml must be a YAML mapping"}]}
 
-    def _semantic_checks(self, data: Dict[str, Any]) -> List[str]:
-        """Perform semantic checks beyond schema validation.
-
-        Args:
-            data: Parsed capsule data
-
-        Returns:
-            List of warning messages
-        """
-        warnings = []
-
-        # Check lifecycle state consistency
-        lifecycle_state = data.get("lifecycle_state")
-        sealed_at = data.get("sealed_at")
-        sealed_by = data.get("sealed_by")
-
-        if lifecycle_state in ["sealed", "archived"]:
-            if not sealed_at:
-                warnings.append(
-                    f"Lifecycle state is '{lifecycle_state}' but sealed_at is null"
-                )
-            if not sealed_by:
-                warnings.append(
-                    f"Lifecycle state is '{lifecycle_state}' but sealed_by is null"
-                )
-
-        # Check execution section populated for sealed capsules
-        if lifecycle_state in ["sealed", "archived"]:
-            execution = data.get("execution", {})
-            if not execution.get("start_time"):
-                warnings.append("Sealed capsule missing execution.start_time")
-            if not execution.get("end_time"):
-                warnings.append("Sealed capsule missing execution.end_time")
-            if execution.get("exit_code") is None:
-                warnings.append("Sealed capsule missing execution.exit_code")
-
-        # Check digests populated for sealed capsules
-        if lifecycle_state in ["sealed", "archived"]:
-            digests = data.get("digests", {})
-            for key in ["workflow", "environment", "backends", "results"]:
-                if not digests.get(key):
-                    warnings.append(f"Sealed capsule missing digest: {key}")
-
-        # Check cost tracking
-        cost = data.get("cost", {})
-        estimated = cost.get("estimated_cost_usd")
-        actual = cost.get("actual_cost_usd")
-        max_budget = cost.get("max_budget_usd")
-
-        if max_budget and estimated and estimated > max_budget:
-            warnings.append(
-                f"Estimated cost (${estimated}) exceeds max budget (${max_budget})"
-            )
-
-        if max_budget and actual and actual > max_budget:
-            warnings.append(
-                f"Actual cost (${actual}) exceeds max budget (${max_budget})"
-            )
-
-        # Check verification results
-        verifications = data.get("verifications", [])
-        if lifecycle_state in ["sealed", "archived"] and not verifications:
-            warnings.append(
-                "Sealed capsule has no verification reports - consider running verification"
-            )
-
-        return warnings
-
-    def validate_directory(self, capsule_dir: Path) -> Dict[str, Any]:
-        """Validate a complete capsule directory.
-
-        Args:
-            capsule_dir: Path to capsule directory
-
-        Returns:
-            Dictionary with validation results
-        """
-        results = {
-            "valid": True,
-            "errors": [],
-            "warnings": [],
-            "files": {},
-        }
-
-        # Check capsule.yaml exists
-        capsule_yaml = capsule_dir / "capsule.yaml"
-        if not capsule_yaml.exists():
-            results["valid"] = False
-            results["errors"].append("Missing capsule.yaml")
-            return results
-
-        # Validate capsule.yaml
-        capsule_result = self.validate_file(capsule_yaml)
-        results["files"]["capsule.yaml"] = capsule_result
-        results["valid"] = results["valid"] and capsule_result["valid"]
-        results["errors"].extend(capsule_result["errors"])
-        results["warnings"].extend(capsule_result["warnings"])
-
-        # Load capsule data to check file references
-        with open(capsule_yaml) as f:
-            capsule_data = yaml.safe_load(f)
-
-        # Check referenced files exist
-        for ref_field, ref_file in [
-            ("workflow_ref", capsule_data.get("workflow_ref")),
-            ("environment_ref", capsule_data.get("environment_ref")),
-            ("backends_ref", capsule_data.get("backends_ref")),
-        ]:
-            if ref_file:
-                ref_path = capsule_dir / ref_file
-                if not ref_path.exists():
-                    results["warnings"].append(
-                        f"Referenced file not found: {ref_file}"
-                    )
-
-        # Check expected directories
-        lifecycle_state = capsule_data.get("lifecycle_state")
-        if lifecycle_state in ["sealed", "archived"]:
-            for dir_name in ["artifacts", "provenance"]:
-                dir_path = capsule_dir / dir_name
-                if not dir_path.exists():
-                    results["warnings"].append(
-                        f"Sealed capsule missing {dir_name}/ directory"
-                    )
-
-        return results
+        return cls.validate(capsule)
