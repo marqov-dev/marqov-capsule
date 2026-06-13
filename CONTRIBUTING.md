@@ -1,5 +1,35 @@
 # Contributing
 
+## Development setup
+
+```bash
+git clone https://github.com/marqov-dev/marqov-capsule
+cd marqov-capsule
+pip install -e ".[dev]"
+pytest tests/
+```
+
+The `[dev]` extra includes numpy and scipy (needed for statistical verification tests) plus pytest.
+
+## Running tests
+
+```bash
+pytest tests/ -v
+```
+
+All tests must pass before submitting a PR. If you are adding a new spec feature, add a conformance fixture under `spec/v1/conformance/` alongside the code change.
+
+## License agreement
+
+This repository contains two separately licensed components:
+
+- Contributions to `spec/v1/` are licensed under **CC-BY-4.0**.
+- Contributions to the Python package (`src/`) are licensed under **Apache 2.0**.
+
+By submitting a pull request you agree that your contribution may be distributed under these terms.
+
+---
+
 ## RFC Evolution Process
 
 Breaking changes to `spec/v1/` follow a public RFC process:
