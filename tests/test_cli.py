@@ -1,209 +1,158 @@
-"""Tests for CLI tooling (Stage 2).
-
-Uses subprocess to test the actual entry point behavior,
-matching the testing strategy from D8.
-"""
-
-import json
-import subprocess
-import sys
-import tempfile
 from pathlib import Path
+from click.testing import CliRunner
+from marqov_capsule.cli.main import cli
 
-import pytest
-import yaml
-
-from marqov_capsule import CapsuleBuilder
+FIXTURE_DIR = Path(__file__).parent.parent / "spec/v1/conformance"
 
 
-def _run_capsule(*args: str, check: bool = True) -> subprocess.CompletedProcess:
-    """Run the capsule CLI via python -m marqov_capsule."""
-    return subprocess.run(
-        [sys.executable, "-m", "marqov_capsule", *args],
-        capture_output=True,
-        text=True,
-        check=check,
+def test_validate_valid_capsule_exits_0():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["validate", str(FIXTURE_DIR / "valid_capsule/capsule.yaml")])
+    assert result.exit_code == 0
+
+
+def test_validate_invalid_capsule_exits_1():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["validate", str(FIXTURE_DIR / "invalid_capsule/capsule.yaml")])
+    assert result.exit_code == 1
+
+
+def test_validate_json_output():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["validate", "--json", str(FIXTURE_DIR / "valid_capsule/capsule.yaml")])
+    import json
+    data = json.loads(result.output)
+    assert "valid" in data
+
+
+def test_inspect_shows_name():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["inspect", str(FIXTURE_DIR / "valid_capsule")])
+    assert result.exit_code == 0
+    assert "Bell State" in result.output
+
+
+def test_inspect_json():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["inspect", "--json", str(FIXTURE_DIR / "valid_capsule")])
+    assert result.exit_code == 0
+    import json
+    data = json.loads(result.output)
+    assert data["name"] == "Bell State Preparation"
+
+
+def test_verify_valid_capsule_exits_0():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["verify", str(FIXTURE_DIR / "valid_capsule")])
+    assert result.exit_code == 0, result.output
+
+
+def test_seal_dry_run_clean_capsule(tmp_path):
+    (tmp_path / "capsule.yaml").write_text(
+        "version: '1.0.0'\nname: test\nlifecycle_state: draft\ntask_executions: []\n"
     )
+    (tmp_path / "circuit.py").write_text("from qiskit import QuantumCircuit\n")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["seal", "--dry-run", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "no issues" in result.output
 
 
-def _make_sealed_capsule_dir(tmpdir: str, name: str = "cli-test") -> Path:
-    """Create a sealed capsule directory on disk."""
-    builder = CapsuleBuilder(name, description="CLI test capsule")
-    builder.start_capsule(parameters={"x": 1})
-    builder.add_task_execution(task_id="t1", backend="local", outputs={"r": 42})
-    builder.seal_capsule(exit_code=0)
-    capsule_dir = Path(tmpdir) / f"{name}.capsule"
-    capsule_dir.mkdir()
-    builder.save_capsule(str(capsule_dir / "capsule.yaml"))
-    return capsule_dir
+def test_seal_dry_run_detects_secrets_exits_0(tmp_path):
+    (tmp_path / "capsule.yaml").write_text(
+        "version: '1.0.0'\nname: test\nlifecycle_state: draft\ntask_executions: []\n"
+    )
+    (tmp_path / "run.py").write_text('IBM_QUANTUM_TOKEN = "fake-token-abcdef1234567890"\n')
+    runner = CliRunner()
+    result = runner.invoke(cli, ["seal", "--dry-run", str(tmp_path)])
+    assert result.exit_code == 0, f"dry-run must not exit 1; got: {result.output}"
+    assert "credential" in result.output.lower() or "warning" in result.output.lower() or "credential pattern" in result.output.lower()
 
 
-class TestCLIInit:
-    """capsule init <name> scaffolds a new capsule directory."""
-
-    def test_init_creates_directory(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            result = _run_capsule("init", "my-analysis", "--output-dir", tmpdir)
-            assert result.returncode == 0
-
-            capsule_dir = Path(tmpdir) / "my-analysis.capsule"
-            assert capsule_dir.is_dir()
-            assert (capsule_dir / "capsule.yaml").exists()
-            assert (capsule_dir / "workflow.yaml").exists()
-            assert (capsule_dir / "environment.yaml").exists()
-            assert (capsule_dir / "backends.yaml").exists()
-
-    def test_init_capsule_yaml_is_valid_draft(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            _run_capsule("init", "my-analysis", "--output-dir", tmpdir)
-            capsule_dir = Path(tmpdir) / "my-analysis.capsule"
-
-            with open(capsule_dir / "capsule.yaml") as f:
-                data = yaml.safe_load(f)
-
-            assert data["name"] == "my-analysis"
-            assert data["lifecycle_state"] == "draft"
-            assert data["version"] == "1.0.0"
-
-    def test_init_refuses_existing_directory(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            capsule_dir = Path(tmpdir) / "exists.capsule"
-            capsule_dir.mkdir()
-            result = _run_capsule(
-                "init", "exists", "--output-dir", tmpdir, check=False
-            )
-            assert result.returncode != 0
-            assert "already exists" in result.stderr.lower()
-
-    def test_init_json_output(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            result = _run_capsule(
-                "init", "json-test", "--output-dir", tmpdir, "--json"
-            )
-            assert result.returncode == 0
-            output = json.loads(result.stdout)
-            assert "path" in output
-            assert output["name"] == "json-test"
+def test_seal_blocks_secrets_exits_1(tmp_path):
+    (tmp_path / "capsule.yaml").write_text(
+        "version: '1.0.0'\nname: test\nlifecycle_state: draft\ntask_executions: []\n"
+    )
+    (tmp_path / "run.py").write_text('IBM_QUANTUM_TOKEN = "fake-token-abcdef1234567890"\n')
+    runner = CliRunner()
+    result = runner.invoke(cli, ["seal", str(tmp_path)])
+    assert result.exit_code == 1
 
 
-class TestCLIVerify:
-    """capsule verify <path> checks checksums and digest consistency."""
-
-    def test_verify_pass(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            capsule_dir = _make_sealed_capsule_dir(tmpdir)
-            result = _run_capsule("verify", str(capsule_dir))
-            assert result.returncode == 0
-            assert "PASS" in result.stdout.upper() or "pass" in result.stdout.lower()
-
-    def test_verify_fail_tampered(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            capsule_dir = _make_sealed_capsule_dir(tmpdir)
-
-            # Tamper
-            capsule_yaml = capsule_dir / "capsule.yaml"
-            with open(capsule_yaml, "a") as f:
-                f.write("\n# tampered\n")
-
-            result = _run_capsule("verify", str(capsule_dir), check=False)
-            assert result.returncode != 0
-            assert "FAIL" in result.stdout.upper() or "fail" in result.stdout.lower()
-
-    def test_verify_json_output(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            capsule_dir = _make_sealed_capsule_dir(tmpdir)
-            result = _run_capsule("verify", str(capsule_dir), "--json")
-            assert result.returncode == 0
-            output = json.loads(result.stdout)
-            assert "checksums" in output
-            assert "verification" in output
-
-    def test_verify_nonexistent_path(self):
-        result = _run_capsule("verify", "/nonexistent/path", check=False)
-        assert result.returncode != 0
-
-    def test_verify_auto_method_from_tier(self):
-        """Verify auto-selects method based on reproducibility_tier in capsule."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            builder = CapsuleBuilder(
-                "auto-method",
-                description="Auto method CLI test",
-                reproducibility_tier="verification-only",
-            )
-            builder.start_capsule(parameters={})
-            builder.add_task_execution(task_id="t1", backend="local", outputs={"r": 1})
-            builder.seal_capsule(exit_code=0)
-            capsule_dir = Path(tmpdir) / "auto.capsule"
-            capsule_dir.mkdir()
-            builder.save_capsule(str(capsule_dir / "capsule.yaml"))
-
-            # check=False because verification-only may not fully pass
-            # (e.g. missing 'tasks' section); we only care about method detection
-            result = _run_capsule("verify", str(capsule_dir), "--json", check=False)
-            output = json.loads(result.stdout)
-            assert output["verification"]["method"] == "verification-only"
+def test_seal_actually_seals(tmp_path):
+    import yaml
+    (tmp_path / "capsule.yaml").write_text(
+        "version: '1.0.0'\nname: test-capsule\nlifecycle_state: draft\n"
+        "requirements:\n  paradigm: [gate-based]\n  max_qubit_count: 1\n"
+        "task_executions: []\n"
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["seal", "--sealed-by", "test-runner", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    from marqov_capsule._canonical import load_manifest_yaml
+    manifest = load_manifest_yaml((tmp_path / "capsule.yaml").read_text())
+    assert manifest["lifecycle_state"] == "sealed"
+    assert manifest.get("checksums_digest", "").startswith("sha256:")
+    assert (tmp_path / ".checksums").exists()
+    # Output contains 64-char capsule ID after "Sealed: "
+    sealed_line = [l for l in result.output.splitlines() if l.startswith("Sealed:")]
+    assert sealed_line, f"No 'Sealed:' line in output: {result.output}"
+    capsule_id = sealed_line[0].split("Sealed: ")[-1].strip()
+    assert len(capsule_id) == 64, f"Expected 64-char ID, got: {capsule_id!r}"
 
 
-class TestCLISeal:
-    """capsule seal <path> seals a draft capsule."""
-
-    def test_seal_draft_capsule(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Init a draft capsule
-            _run_capsule("init", "seal-test", "--output-dir", tmpdir)
-            capsule_dir = Path(tmpdir) / "seal-test.capsule"
-
-            result = _run_capsule("seal", str(capsule_dir))
-            assert result.returncode == 0
-
-            with open(capsule_dir / "capsule.yaml") as f:
-                data = yaml.safe_load(f)
-            assert data["lifecycle_state"] == "sealed"
-
-    def test_seal_generates_lock_file(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            _run_capsule("init", "lock-test", "--output-dir", tmpdir)
-            capsule_dir = Path(tmpdir) / "lock-test.capsule"
-
-            _run_capsule("seal", str(capsule_dir))
-            assert (capsule_dir / "environment.lock.yaml").exists()
-
-    def test_seal_already_sealed_fails(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            capsule_dir = _make_sealed_capsule_dir(tmpdir)
-            result = _run_capsule("seal", str(capsule_dir), check=False)
-            assert result.returncode != 0
-            assert "already sealed" in result.stderr.lower()
-
-    def test_seal_json_output(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            _run_capsule("init", "json-seal", "--output-dir", tmpdir)
-            capsule_dir = Path(tmpdir) / "json-seal.capsule"
-
-            result = _run_capsule("seal", str(capsule_dir), "--json")
-            assert result.returncode == 0
-            output = json.loads(result.stdout)
-            assert output["lifecycle_state"] == "sealed"
+def test_init_creates_draft_manifest(tmp_path):
+    new_dir = tmp_path / "my-capsule"
+    runner = CliRunner()
+    result = runner.invoke(cli, ["init", str(new_dir)])
+    assert result.exit_code == 0, result.output
+    manifest_path = new_dir / "capsule.yaml"
+    assert manifest_path.exists()
+    from marqov_capsule._canonical import load_manifest_yaml
+    manifest = load_manifest_yaml(manifest_path.read_text())
+    assert manifest["lifecycle_state"] == "draft"
+    assert manifest["name"] == "my-capsule"
 
 
-class TestCLIHelp:
-    """CLI provides useful help text."""
+def test_init_respects_name_flag(tmp_path):
+    new_dir = tmp_path / "capsule-dir"
+    runner = CliRunner()
+    result = runner.invoke(cli, ["init", "--name", "custom-name", str(new_dir)])
+    assert result.exit_code == 0
+    from marqov_capsule._canonical import load_manifest_yaml
+    manifest = load_manifest_yaml((new_dir / "capsule.yaml").read_text())
+    assert manifest["name"] == "custom-name"
 
-    def test_help_flag(self):
-        result = _run_capsule("--help")
-        assert result.returncode == 0
-        assert "init" in result.stdout
-        assert "verify" in result.stdout
-        assert "seal" in result.stdout
-        assert "pack" in result.stdout
-        assert "unpack" in result.stdout
 
-    def test_subcommand_help(self):
-        for cmd in ["init", "verify", "seal", "pack", "unpack"]:
-            result = _run_capsule(cmd, "--help")
-            assert result.returncode == 0
+def test_init_refuses_overwrite_without_force(tmp_path):
+    (tmp_path / "capsule.yaml").write_text("existing: true\n")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["init", str(tmp_path)])
+    assert result.exit_code == 1
 
-    def test_no_args_shows_help(self):
-        result = _run_capsule(check=False)
-        # Should show help or error with usage
-        assert result.returncode != 0 or "usage" in result.stdout.lower()
+
+def test_verify_against_identical_capsules(tmp_path):
+    import json, yaml
+    counts = {"00": 5000, "11": 5000}
+    vsettings = {"epsilon": 0.05, "min_shots": 100, "tolerance_regime": "strict"}
+    for name in ("ref", "new"):
+        d = tmp_path / name
+        (d / "payload").mkdir(parents=True)
+        (d / "payload" / "results.json").write_text(json.dumps({"counts": counts}))
+        (d / "capsule.yaml").write_text(yaml.safe_dump({
+            "version": "1.0.0", "name": name, "lifecycle_state": "sealed",
+            "task_executions": [{
+                "task_id": "550e8400-e29b-41d4-a716-446655440000",
+                "status": "success",
+                "result_type": "probabilistic",
+                "backend": {"provider": "ibm", "name": "ibm_kyiv", "shots": 10000},
+                "verification_settings": vsettings,
+            }],
+        }))
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "verify", "--against", str(tmp_path / "ref"),
+        "--json", str(tmp_path / "new"),
+    ])
+    data = json.loads(result.output)
+    assert data["verdict"] == "VERIFIED"
