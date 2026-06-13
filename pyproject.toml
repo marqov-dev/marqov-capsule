@@ -9,6 +9,22 @@ description = "Open standard and tooling for reproducible, portable quantum expe
 readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.9"
+authors = [
+    {name = "Marqov", email = "hello@marqov.ai"},
+]
+keywords = ["quantum", "reproducibility", "capsule", "qpu", "workflow", "quantum-computing"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Intended Audience :: Science/Research",
+    "Development Status :: 4 - Beta",
+    "Operating System :: OS Independent",
+]
 dependencies = [
     "pyyaml>=6.0",
     "jsonschema>=4.0",
@@ -33,6 +49,7 @@ marqov-capsule = "marqov_capsule.cli.main:cli"
 [project.urls]
 Homepage = "https://github.com/marqov-dev/marqov-capsule"
 Repository = "https://github.com/marqov-dev/marqov-capsule"
+Issues = "https://github.com/marqov-dev/marqov-capsule/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/marqov_capsule"]
