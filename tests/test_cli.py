@@ -131,6 +131,32 @@ def test_init_refuses_overwrite_without_force(tmp_path):
     assert result.exit_code == 1
 
 
+def test_init_paradigm_and_qubits_flags(tmp_path):
+    new_dir = tmp_path / "cap"
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "init", "--name", "bell", "--paradigm", "gate-based", "--qubits", "2", str(new_dir)
+    ])
+    assert result.exit_code == 0, result.output
+    from marqov_capsule._canonical import load_manifest_yaml
+    manifest = load_manifest_yaml((new_dir / "capsule.yaml").read_text())
+    assert manifest["requirements"]["paradigm"] == ["gate-based"]
+    assert manifest["requirements"]["max_qubit_count"] == 2
+
+
+def test_init_multiple_paradigms(tmp_path):
+    new_dir = tmp_path / "cap"
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "init", "--paradigm", "gate-based", "--paradigm", "analog", str(new_dir)
+    ])
+    assert result.exit_code == 0, result.output
+    from marqov_capsule._canonical import load_manifest_yaml
+    manifest = load_manifest_yaml((new_dir / "capsule.yaml").read_text())
+    assert "gate-based" in manifest["requirements"]["paradigm"]
+    assert "analog" in manifest["requirements"]["paradigm"]
+
+
 def test_verify_against_identical_capsules(tmp_path):
     import json, yaml
     counts = {"00": 5000, "11": 5000}

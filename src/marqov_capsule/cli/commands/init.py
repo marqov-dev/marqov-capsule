@@ -19,8 +19,11 @@ _DRAFT_MANIFEST = {
 @click.command()
 @click.argument("directory", type=click.Path(file_okay=False))
 @click.option("--name", default=None, help="Capsule name (defaults to directory name)")
+@click.option("--paradigm", "paradigms", multiple=True,
+              help="Paradigm (gate-based, analog, annealing). Repeatable.")
+@click.option("--qubits", default=None, type=int, help="Maximum qubit count")
 @click.option("--force", is_flag=True, help="Overwrite existing capsule.yaml")
-def init(directory, name, force):
+def init(directory, name, paradigms, qubits, force):
     """Create a draft capsule.yaml in DIRECTORY."""
     capsule_dir = Path(directory)
     capsule_dir.mkdir(parents=True, exist_ok=True)
@@ -30,8 +33,13 @@ def init(directory, name, force):
         click.echo(f"Error: {manifest_path} already exists. Use --force to overwrite.", err=True)
         sys.exit(1)
 
-    manifest = dict(_DRAFT_MANIFEST)
+    import copy
+    manifest = copy.deepcopy(_DRAFT_MANIFEST)
     manifest["name"] = name or capsule_dir.name
+    if paradigms:
+        manifest["requirements"]["paradigm"] = list(paradigms)
+    if qubits is not None:
+        manifest["requirements"]["max_qubit_count"] = qubits
 
     manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True))
     click.echo(f"Initialised: {manifest_path}")
