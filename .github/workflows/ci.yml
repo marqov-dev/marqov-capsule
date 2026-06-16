@@ -27,7 +27,8 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Validate JSON Schema is valid JSON
-        run: python -c "import json; json.load(open('spec/v1/capsule-schema.json')); print('schema: valid JSON')"
+        run: |
+          python -c "import json; json.load(open('spec/v1/capsule-schema.json')); print('schema OK')"
 
       - name: Run tests
         run: python -m pytest tests/ -v --tb=short

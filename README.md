@@ -55,14 +55,14 @@ The `marqov-capsule` command provides six subcommands:
 | `marqov-capsule seal` | Seal a draft capsule — scans for credentials, writes checksums, transitions state |
 | `marqov-capsule verify` | Verify integrity of a sealed capsule (checksum validation + optional statistical equivalence) |
 | `marqov-capsule inspect` | Print a human-readable summary of capsule metadata |
-| `marqov-capsule open` | Transition a sealed capsule to `archived` state |
+| `marqov-capsule open` | Verify checksums and extract a capsule to a destination directory |
 | `marqov-capsule validate` | Validate `capsule.yaml` against the JSON Schema without sealing |
 
 ```bash
 marqov-capsule init --name bell-state-v1 --paradigm gate-based --qubits 2
 marqov-capsule seal .
 marqov-capsule inspect .
-marqov-capsule verify . --ref /path/to/reference-capsule
+marqov-capsule verify . --against /path/to/reference-capsule
 ```
 
 ## Lifecycle
@@ -90,7 +90,7 @@ Statistical verification requires the `[verify]` extra:
 
 ```bash
 pip install "marqov-capsule[verify]"
-marqov-capsule verify . --ref /path/to/reference-capsule
+marqov-capsule verify . --against /path/to/reference-capsule
 ```
 
 ## Spec
