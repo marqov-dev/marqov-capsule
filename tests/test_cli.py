@@ -25,6 +25,24 @@ def test_validate_json_output():
     assert "valid" in data
 
 
+def test_validate_accepts_directory():
+    # Consistent with inspect/verify/seal: passing the capsule directory
+    # should resolve capsule.yaml inside it.
+    runner = CliRunner()
+    result = runner.invoke(cli, ["validate", str(FIXTURE_DIR / "valid_capsule")])
+    assert result.exit_code == 0, result.output
+
+
+def test_validate_directory_without_manifest_errors_cleanly(tmp_path):
+    # An existing directory with no capsule.yaml must produce a clean error
+    # and exit 1 — never an unhandled IsADirectoryError traceback.
+    runner = CliRunner()
+    result = runner.invoke(cli, ["validate", str(tmp_path)])
+    assert result.exit_code == 1
+    assert not isinstance(result.exception, IsADirectoryError), result.output
+    assert "capsule.yaml" in result.output
+
+
 def test_inspect_shows_name():
     runner = CliRunner()
     result = runner.invoke(cli, ["inspect", str(FIXTURE_DIR / "valid_capsule")])

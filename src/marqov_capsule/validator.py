@@ -77,6 +77,8 @@ class CapsuleValidator:
             capsule = load_manifest_yaml(Path(filepath).read_text(encoding="utf-8"))
         except FileNotFoundError:
             return {"valid": False, "errors": [{"path": "/", "message": f"File not found: {filepath}"}]}
+        except IsADirectoryError:
+            return {"valid": False, "errors": [{"path": "/", "message": f"Expected a capsule.yaml file, got a directory: {filepath}"}]}
         except yaml.YAMLError as e:
             return {"valid": False, "errors": [{"path": "/", "message": f"YAML parse error: {e}"}]}
 

@@ -56,11 +56,12 @@ The `marqov-capsule` command provides six subcommands:
 | `marqov-capsule verify` | Verify integrity of a sealed capsule (checksum validation + optional statistical equivalence) |
 | `marqov-capsule inspect` | Print a human-readable summary of capsule metadata |
 | `marqov-capsule open` | Verify checksums and extract a capsule to a destination directory |
-| `marqov-capsule validate` | Validate `capsule.yaml` against the JSON Schema without sealing |
+| `marqov-capsule validate` | Validate a capsule against the JSON Schema without sealing — accepts a capsule directory or a `capsule.yaml` path |
 
 ```bash
 marqov-capsule init --name bell-state-v1 --paradigm gate-based --qubits 2
 marqov-capsule seal .
+marqov-capsule validate .
 marqov-capsule inspect .
 marqov-capsule verify . --against /path/to/reference-capsule
 ```
