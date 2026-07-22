@@ -7,7 +7,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [0.1.0] — 2026-07-21
+## [0.1.0] — 2026-07-22
 
 Initial release.
 
