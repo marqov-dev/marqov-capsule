@@ -127,6 +127,9 @@ jobs:
           print('Lazy numpy import: OK')
           "
 
+      - name: DELIBERATE FAILURE (throwaway — proves CI Success goes red)
+        run: exit 1
+
   # Single required status check. Once the ruleset requires only "CI Success",
   # the required context stays stable when the matrix changes — no need to pin
   # each `test (3.x)` individually.
