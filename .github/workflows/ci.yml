@@ -8,6 +8,13 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel superseded in-progress runs on a PR branch when new commits land,
+# but NEVER on main — a post-merge run on the default branch should always
+# finish (that's what the github.ref exclusion guards).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   test:
     runs-on: ubuntu-latest
