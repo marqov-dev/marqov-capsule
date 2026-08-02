@@ -142,3 +142,32 @@ jobs:
           assert 'numpy' not in sys.modules, 'numpy was imported at package load time — check verifier.py lazy import guard'
           print('Lazy numpy import: OK')
           "
+
+  # Single required status check. Once the ruleset requires only "CI Success",
+  # the required context stays stable when the matrix changes — no need to pin
+  # each `test (3.x)` individually.
+  #
+  # INVARIANT: every job in this workflow must appear in `needs:` below. A job
+  # that's missing here can fail while CI Success stays green and the ruleset
+  # stays satisfied — its failures become invisible. Add new jobs to `needs:` in
+  # the same PR that introduces them. Nothing enforces this automatically.
+  #
+  # `if: always()` runs this even when an upstream job fails; the step then fails
+  # unless EVERY needed result is 'success'. A naive `success()` gate would go
+  # GREEN when an upstream job was skipped — reintroducing the hole this closes.
+  ci-success:
+    name: CI Success
+    if: always()
+    needs: [test, wheel-smoke, base-install]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # 'skipped' counts as failure here because every job above always runs. If
+      # a conditional job is added later (e.g. a path-filter that skips docs-only
+      # PRs), this guard would fail every PR where that job legitimately skips —
+      # revisit the 'skipped' clause then.
+      - name: Fail unless every required job succeeded
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: |
+          echo "::error::A required job did not succeed — results: ${{ join(needs.*.result, ', ') }}"
+          exit 1
