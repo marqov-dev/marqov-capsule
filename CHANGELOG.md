@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **Minimum Python is now 3.10** (`requires-python = ">=3.10"`). Dropped Python 3.9, end-of-life since October 2025. CI tests 3.10–3.12.
+
 ## [0.1.0] — 2026-07-22
 
 Initial release.
