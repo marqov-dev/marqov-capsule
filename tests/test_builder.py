@@ -82,6 +82,27 @@ def test_checksums_digest_is_sha256_of_checksums_file(tmp_path):
     assert manifest["checksums_digest"] == expected
 
 
+def test_save_checksums_skips_symlinks(tmp_path):
+    """Symlinks must not be hashed/enrolled — otherwise re-sealing a received capsule
+    would bake an outside file's content into the derived capsule (#32)."""
+    secret = tmp_path / "id_rsa"
+    secret.write_text("PRIVATE KEY CONTENT")
+
+    capsule_dir = tmp_path / "test.capsule"
+    capsule_dir.mkdir()
+    payload = capsule_dir / "payload"
+    payload.mkdir()
+    (payload / "results.json").write_text('{"counts": {"00": 1}}')
+    (payload / "link.txt").symlink_to(secret)
+
+    b = CapsuleBuilder()
+    checksums_path = b.save_checksums(capsule_dir)
+    checksums = yaml.safe_load(checksums_path.read_text())
+
+    assert "payload/link.txt" not in checksums
+    assert "payload/results.json" in checksums
+
+
 def test_save_checksums_after_seal_raises(tmp_path):
     b = _make_builder()
     capsule_dir = tmp_path / "test.capsule"

@@ -25,7 +25,11 @@ def open_cmd(capsule, dest, as_json):
     if dest:
         dest_path = Path(dest)
         dest_path.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(str(capsule_path), str(dest_path / capsule_path.name), dirs_exist_ok=True)
+        # symlinks=True copies links as links rather than materialising their target
+        # content into the destination (defence-in-depth; verify_checksums already
+        # rejects capsules containing symlinks).
+        shutil.copytree(str(capsule_path), str(dest_path / capsule_path.name),
+                        dirs_exist_ok=True, symlinks=True)
         if as_json:
             click.echo(json.dumps({"status": "opened", "dest": str(dest_path / capsule_path.name)}, indent=2))
         else:

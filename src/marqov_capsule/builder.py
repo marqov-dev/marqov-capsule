@@ -214,6 +214,10 @@ class CapsuleBuilder:
         capsule_path = Path(capsule_dir)
         checksums: dict[str, str] = {}
         for file_path in sorted(capsule_path.rglob("*")):
+            # Never follow symlinks — hashing a link would enroll an outside file's
+            # content into this capsule (exfiltration when re-sealing a received capsule).
+            if file_path.is_symlink():
+                continue
             if file_path.is_file() and file_path.name not in {".checksums", "capsule.yaml"}:
                 rel = str(file_path.relative_to(capsule_path))
                 digest = hashlib.sha256(file_path.read_bytes()).hexdigest()

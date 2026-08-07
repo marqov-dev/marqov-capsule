@@ -97,6 +97,26 @@ def test_valid_capsule_fixture_clean():
     assert result["has_secrets"] is False
 
 
+def test_redactor_does_not_follow_symlinks(tmp_path):
+    """Redactor must not follow symlinks out of the capsule tree (#32).
+
+    A symlink whose target lives outside the capsule must not be read; otherwise
+    the scanner reaches arbitrary files on the sealer's machine.
+    """
+    outside = tmp_path / "outside_secret.py"
+    outside.write_text('IBM_QUANTUM_TOKEN = "fake-token-abcdef1234567890"\n')
+
+    capsule_dir = tmp_path / "test.capsule"
+    capsule_dir.mkdir()
+    src = capsule_dir / "source"
+    src.mkdir()
+    (src / "link.py").symlink_to(outside)
+
+    redactor = CapsuleRedactor(capsule_dir)
+    result = redactor.scan()
+    assert result["has_secrets"] is False
+
+
 def test_capsule_allow_suppresses_name_pattern(tmp_path):
     # capsule:allow must suppress name-pattern matches, not just entropy heuristic
     src = tmp_path / "source"

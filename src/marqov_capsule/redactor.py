@@ -161,6 +161,9 @@ class CapsuleRedactor:
         all_findings: list[dict] = []
 
         for file_path in sorted(self.capsule_dir.rglob("*")):
+            # Do not follow symlinks — their target may live outside the capsule tree.
+            if file_path.is_symlink():
+                continue
             if not file_path.is_file():
                 continue
             rel = str(file_path.relative_to(self.capsule_dir))
