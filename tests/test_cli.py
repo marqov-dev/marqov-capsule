@@ -175,6 +175,30 @@ def test_init_multiple_paradigms(tmp_path):
     assert "analog" in manifest["requirements"]["paradigm"]
 
 
+def test_open_rejects_capsule_with_symlink(tmp_path):
+    """`open` must refuse a capsule containing a symlink and must not materialize
+    the symlink target's content into the destination (#32)."""
+    import hashlib, yaml
+    secret = tmp_path / "id_rsa"
+    secret.write_text("PRIVATE KEY CONTENT")
+
+    capsule_dir = tmp_path / "evil.capsule"
+    (capsule_dir / "payload").mkdir(parents=True)
+    real = capsule_dir / "payload" / "results.json"
+    real.write_text('{"counts": {"00": 1}}')
+    digest = "sha256:" + hashlib.sha256(real.read_bytes()).hexdigest()
+    (capsule_dir / "payload" / "link.txt").symlink_to(secret)
+    (capsule_dir / ".checksums").write_text(yaml.dump({"payload/results.json": digest}, sort_keys=True))
+
+    dest = tmp_path / "out"
+    runner = CliRunner()
+    result = runner.invoke(cli, ["open", str(capsule_dir), "--dest", str(dest)])
+    assert result.exit_code == 1, result.output
+    copied = dest / "evil.capsule" / "payload" / "link.txt"
+    if copied.exists() and not copied.is_symlink():
+        assert copied.read_text() != "PRIVATE KEY CONTENT"
+
+
 def test_verify_against_identical_capsules(tmp_path):
     import json, yaml
     counts = {"00": 5000, "11": 5000}

@@ -3,10 +3,25 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import yaml
+
+
+def _is_within_root(rel_path: str, root: Path) -> bool:
+    """True if ``root / rel_path`` stays inside ``root``.
+
+    Rejects absolute paths and ``..`` escapes. Uses lexical normalisation
+    (not ``resolve()``) so the check is independent of symlinks, which are
+    handled separately by the caller.
+    """
+    if os.path.isabs(rel_path):
+        return False
+    root_str = os.path.normpath(str(root))
+    full = os.path.normpath(os.path.join(root_str, rel_path))
+    return full == root_str or full.startswith(root_str + os.sep)
 
 
 def _require_numpy():
@@ -274,10 +289,27 @@ class CapsuleVerifier:
         files: dict[str, dict] = {}
         mismatched: list[str] = []
         missing: list[str] = []
+        invalid: list[str] = []
+        symlinks: list[str] = []
         all_match = True
 
         for rel_path, expected_digest in expected.items():
+            # Reject keys that escape the capsule root (absolute or ``..``) before
+            # touching the filesystem — a crafted .checksums must not read outside.
+            if not _is_within_root(rel_path, capsule_path):
+                files[rel_path] = {"expected": expected_digest, "actual": None,
+                                   "match": False, "error": "path escapes capsule root"}
+                invalid.append(rel_path)
+                all_match = False
+                continue
             file_path = capsule_path / rel_path
+            # Never dereference symlinks — the target may live outside the capsule.
+            if file_path.is_symlink():
+                files[rel_path] = {"expected": expected_digest, "actual": None,
+                                   "match": False, "error": "symlink not permitted"}
+                symlinks.append(rel_path)
+                all_match = False
+                continue
             if not file_path.exists():
                 files[rel_path] = {"expected": expected_digest, "actual": None, "match": False}
                 missing.append(rel_path)
@@ -290,11 +322,18 @@ class CapsuleVerifier:
                 mismatched.append(rel_path)
                 all_match = False
 
-        # Extra files (present on disk but not in manifest)
+        # Walk the tree once: collect regular files (for "extra") and flag any
+        # symlink anywhere in the capsule — symlinks are an exfiltration vector.
         actual_files = set()
         for fp in capsule_path.rglob("*"):
+            rel = str(fp.relative_to(capsule_path))
+            if fp.is_symlink():
+                if rel not in symlinks:
+                    symlinks.append(rel)
+                    all_match = False
+                continue
             if fp.is_file() and fp.name != ".checksums":
-                actual_files.add(str(fp.relative_to(capsule_path)))
+                actual_files.add(rel)
         extra = sorted(actual_files - set(expected.keys()))
 
         return {
@@ -303,6 +342,8 @@ class CapsuleVerifier:
             "files": files,
             "mismatched": mismatched,
             "missing": missing,
+            "invalid": invalid,
+            "symlinks": symlinks,
             "extra": extra,
         }
 

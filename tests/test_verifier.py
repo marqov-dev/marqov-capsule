@@ -187,3 +187,77 @@ def test_deterministic_verification_mismatch():
         new_data={"value": 43},
     )
     assert result["verdict"] == "REJECTED"
+
+
+# --- Path-traversal hardening (#31) ---
+
+def test_verify_checksums_rejects_parent_traversal_key(tmp_path):
+    """A .checksums key that escapes the capsule root must fail without reading the outside file."""
+    import yaml
+    secret = tmp_path / "secret.txt"
+    secret.write_text("outside-the-capsule")
+    secret_digest = "sha256:" + hashlib.sha256(secret.read_bytes()).hexdigest()
+
+    capsule_dir = tmp_path / "test.capsule"
+    capsule_dir.mkdir()
+    # Key escapes the root; digest is the *real* hash of the outside file, so a
+    # naive implementation would report match=True and status=pass.
+    (capsule_dir / ".checksums").write_text(yaml.dump({"../secret.txt": secret_digest}, sort_keys=True))
+
+    result = CapsuleVerifier.verify_checksums(capsule_dir)
+    assert result["status"] == "fail"
+    assert "../secret.txt" in result.get("invalid", [])
+
+
+def test_verify_checksums_rejects_absolute_path_key(tmp_path):
+    """A .checksums key with an absolute path must fail (path traversal)."""
+    import yaml
+    capsule_dir = tmp_path / "test.capsule"
+    capsule_dir.mkdir()
+    (capsule_dir / ".checksums").write_text(yaml.dump({"/etc/hosts": "sha256:" + "0" * 64}, sort_keys=True))
+
+    result = CapsuleVerifier.verify_checksums(capsule_dir)
+    assert result["status"] == "fail"
+    assert "/etc/hosts" in result.get("invalid", [])
+
+
+# --- Symlink hardening (#32) ---
+
+def test_verify_checksums_does_not_follow_symlink_entry(tmp_path):
+    """A .checksums entry that is a symlink must not be dereferenced."""
+    import yaml
+    secret = tmp_path / "id_rsa"
+    secret.write_text("PRIVATE KEY CONTENT")
+    secret_digest = "sha256:" + hashlib.sha256(secret.read_bytes()).hexdigest()
+
+    capsule_dir = tmp_path / "test.capsule"
+    capsule_dir.mkdir()
+    payload = capsule_dir / "payload"
+    payload.mkdir()
+    (payload / "link.txt").symlink_to(secret)
+    (capsule_dir / ".checksums").write_text(yaml.dump({"payload/link.txt": secret_digest}, sort_keys=True))
+
+    result = CapsuleVerifier.verify_checksums(capsule_dir)
+    assert result["status"] == "fail"
+    assert "payload/link.txt" in result.get("symlinks", [])
+
+
+def test_verify_checksums_flags_unlisted_symlink(tmp_path):
+    """A symlink present in the tree but absent from .checksums must still fail verification."""
+    import yaml
+    secret = tmp_path / "id_rsa"
+    secret.write_text("PRIVATE KEY CONTENT")
+
+    capsule_dir = tmp_path / "test.capsule"
+    capsule_dir.mkdir()
+    payload = capsule_dir / "payload"
+    payload.mkdir()
+    real = payload / "results.json"
+    real.write_text('{"counts": {"00": 1}}')
+    digest = "sha256:" + hashlib.sha256(real.read_bytes()).hexdigest()
+    (payload / "link.txt").symlink_to(secret)  # not listed in .checksums
+    (capsule_dir / ".checksums").write_text(yaml.dump({"payload/results.json": digest}, sort_keys=True))
+
+    result = CapsuleVerifier.verify_checksums(capsule_dir)
+    assert result["status"] == "fail"
+    assert "payload/link.txt" in result.get("symlinks", [])
