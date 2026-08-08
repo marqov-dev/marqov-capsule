@@ -1,4 +1,5 @@
 from pathlib import Path
+import pytest
 from click.testing import CliRunner
 from marqov_capsule.cli.main import cli
 
@@ -200,6 +201,10 @@ def test_open_rejects_capsule_with_symlink(tmp_path):
 
 
 def test_verify_against_identical_capsules(tmp_path):
+    # `verify --against` runs the statistical path, which needs the [verify] extra.
+    # Skip (don't fail) on a base install — the rest of this module must still run.
+    pytest.importorskip("numpy")
+    pytest.importorskip("scipy")
     import json, yaml
     counts = {"00": 5000, "11": 5000}
     vsettings = {"epsilon": 0.05, "min_shots": 100, "tolerance_regime": "strict"}

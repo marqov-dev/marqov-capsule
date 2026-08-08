@@ -143,6 +143,43 @@ jobs:
           print('Lazy numpy import: OK')
           "
 
+      # Run the suite on a base install too. Tests needing the [verify] extra must
+      # SKIP here, not fail — without this, a test that hard-requires numpy passes
+      # CI (where [dev] is installed) while breaking every `pip install marqov-capsule`
+      # user who runs it. pytest is installed on its own; it does not pull numpy.
+      - name: Run tests on base install (numpy-dependent tests must skip)
+        run: |
+          pip install pytest
+          python -m pytest tests/ -q
+
+  # Prove the lower bounds declared in pyproject.toml are real. Every other job
+  # resolves to the NEWEST compatible release, so a floor like `jsonschema>=4.0`
+  # is an untested assertion — nothing installs that version until a user with
+  # older pins does, and then the break is theirs, not ours. Oldest supported
+  # Python + oldest declared deps is the combination we actually promise.
+  minimum-versions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python (oldest supported)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install at the lowest declared direct versions
+        run: uv pip install --system --resolution lowest-direct -e ".[dev]"
+
+      - name: Show resolved versions
+        run: uv pip list --system
+
+      - name: Run tests at dependency floors
+        run: python -m pytest tests/ -q
+
   # Single required status check. Once the ruleset requires only "CI Success",
   # the required context stays stable when the matrix changes — no need to pin
   # each `test (3.x)` individually.
@@ -158,7 +195,7 @@ jobs:
   ci-success:
     name: CI Success
     if: always()
-    needs: [test, wheel-smoke, base-install]
+    needs: [test, wheel-smoke, base-install, minimum-versions]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
