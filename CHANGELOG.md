@@ -9,8 +9,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- **Tamper-evidence: `verify` and `open` now check all three digest-chain layers** (#14). Only layer 1 (payload files vs `.checksums`) was implemented; `checksums_digest` was written at seal time and never recomputed, and the capsule ID was computed only to be printed. Editing a payload file and re-running `save_checksums` therefore passed verification with exit 0. `CapsuleVerifier.verify_integrity()` implements spec §6 in full and is what the CLI now calls.
+- **`verify` no longer passes on injected files** (#17). `.checksums` pins a closed set, but `verify_checksums` computed the `extra` list and then ignored it, so a sealed capsule could carry arbitrary undeclared files. Injection also leaves `checksums_digest` and the capsule ID intact, so no other layer could catch it.
+- **`capsule.yaml` and `.checksums` are excluded from checksumming by path, not basename.** Both the builder and verifier matched on filename anywhere in the tree, so `payload/capsule.yaml` was skipped at seal time *and* ignored by the extra-file scan — an injection vector invisible to every layer. Only the root-level files are excluded now.
+
+### Added
+- **`CapsuleVerifier.verify_integrity(capsule_dir, expected_id=None)`** — full spec §6 integrity check. Reports per-layer results (`checksums_digest_match`, `capsule_id`, `capsule_id_match`, `manifest_authenticated`) and a list of human-readable errors.
+- **`verify --id` and `open --id`** — verify the manifest against a trusted capsule ID (layer 3). `capsule.yaml` is outside `.checksums` by design, so without a trusted ID the manifest is unauthenticated; `verify` now states this rather than reporting a bare pass. Combining `--id` with `--against` is rejected, since the statistical path checks no integrity layer.
+
 ### Changed
 - **Minimum Python is now 3.10** (`requires-python = ">=3.10"`). Dropped Python 3.9, end-of-life since October 2025. CI tests 3.10–3.12.
+- `verify` output header is now `Integrity verification:` (was `Checksum verification:`) and lists the recomputed capsule ID, injected files, and per-layer failures.
 
 ## [0.1.0] — 2026-07-22
 

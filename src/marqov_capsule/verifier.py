@@ -9,6 +9,9 @@ from typing import Any, Dict, List, Optional, Union
 
 import yaml
 
+from marqov_capsule._canonical import compute_capsule_id, load_manifest_yaml
+from marqov_capsule.builder import UNCHECKSUMMED_ROOT_FILES
+
 
 def _is_within_root(rel_path: str, root: Path) -> bool:
     """True if ``root / rel_path`` stays inside ``root``.
@@ -332,9 +335,14 @@ class CapsuleVerifier:
                     symlinks.append(rel)
                     all_match = False
                 continue
-            if fp.is_file() and fp.name != ".checksums":
+            if fp.is_file() and rel not in UNCHECKSUMMED_ROOT_FILES:
                 actual_files.add(rel)
+        # .checksums pins a *closed* set: anything on disk but not listed is an
+        # injected file. It leaves checksums_digest and the capsule ID intact,
+        # so no other layer can catch it (#17).
         extra = sorted(actual_files - set(expected.keys()))
+        if extra:
+            all_match = False
 
         return {
             "status": "pass" if all_match else "fail",
@@ -345,6 +353,92 @@ class CapsuleVerifier:
             "invalid": invalid,
             "symlinks": symlinks,
             "extra": extra,
+        }
+
+    @staticmethod
+    def verify_integrity(
+        capsule_dir: Union[str, Path],
+        expected_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Full spec §6 integrity check — all three layers.
+
+        1. payload files vs ``.checksums`` (delegated to :meth:`verify_checksums`)
+        2. ``SHA-256(.checksums bytes)`` vs ``checksums_digest`` in the manifest
+        3. recomputed capsule ID vs ``expected_id``, when the caller supplies one
+
+        Layer 1 alone is not tamper-evidence: anyone who edits a payload file can
+        re-run ``save_checksums`` and pass. Layer 2 catches that, because the
+        manifest pins the original ``.checksums`` bytes. Layer 3 catches edits to
+        the manifest itself, which is deliberately outside ``.checksums``.
+
+        Without ``expected_id`` the manifest is *unauthenticated* — nothing on
+        disk can attest to it, since a tamperer who rewrites the whole chain
+        produces a self-consistent capsule with a different ID. Callers should
+        record ``capsule_id`` at seal time and pass it back here.
+        """
+        capsule_path = Path(capsule_dir)
+        errors: list[str] = []
+
+        checksums = CapsuleVerifier.verify_checksums(capsule_path)
+        if checksums["status"] != "pass":
+            errors.append("payload does not match .checksums")
+
+        checksums_digest_match: Optional[bool] = None
+        capsule_id: Optional[str] = None
+        capsule_id_match: Optional[bool] = None
+
+        manifest_path = capsule_path / "capsule.yaml"
+        manifest: Optional[dict] = None
+        if not manifest_path.exists():
+            errors.append("capsule.yaml not found — no manifest to anchor .checksums to")
+        else:
+            # The manifest is untrusted input: a corrupt or hostile one must fail
+            # verification, never raise out of the verifier.
+            try:
+                parsed = load_manifest_yaml(manifest_path.read_text())
+            except (yaml.YAMLError, UnicodeDecodeError) as exc:
+                errors.append(f"capsule.yaml could not be parsed: {exc.__class__.__name__}")
+            else:
+                if isinstance(parsed, dict):
+                    manifest = parsed
+                else:
+                    errors.append("capsule.yaml is not a YAML mapping")
+
+        if manifest is not None:
+            # Layer 2 — manifest → .checksums binding
+            declared = manifest.get("checksums_digest")
+            checksums_file = capsule_path / ".checksums"
+            if declared is None:
+                errors.append("manifest has no checksums_digest — capsule is not sealed")
+            elif not checksums_file.exists():
+                checksums_digest_match = False
+                errors.append(".checksums not found but manifest declares checksums_digest")
+            else:
+                actual = "sha256:" + hashlib.sha256(checksums_file.read_bytes()).hexdigest()
+                checksums_digest_match = actual == declared
+                if not checksums_digest_match:
+                    errors.append(
+                        f"checksums_digest mismatch: manifest declares {declared}, "
+                        f".checksums hashes to {actual}"
+                    )
+
+            # Layer 3 — manifest identity
+            capsule_id = compute_capsule_id(manifest)
+            if expected_id is not None:
+                capsule_id_match = capsule_id == expected_id
+                if not capsule_id_match:
+                    errors.append(
+                        f"capsule ID mismatch: expected {expected_id}, recomputed {capsule_id}"
+                    )
+
+        return {
+            "status": "fail" if errors else "pass",
+            "checksums": checksums,
+            "checksums_digest_match": checksums_digest_match,
+            "capsule_id": capsule_id,
+            "capsule_id_match": capsule_id_match,
+            "manifest_authenticated": capsule_id_match is True,
+            "errors": errors,
         }
 
     # -------------------------------------------------------------------------

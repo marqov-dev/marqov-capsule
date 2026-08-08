@@ -37,22 +37,39 @@ def _load_counts_and_vsettings(cap_dir: Path) -> tuple:
 @click.argument("capsule", type=click.Path(exists=True, file_okay=False))
 @click.option("--against", default=None, type=click.Path(exists=True, file_okay=False),
               help="Reference capsule for statistical equivalence test")
+@click.option("--id", "expected_id", default=None,
+              help="Trusted capsule ID to verify the manifest against (spec §6 layer 3)")
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
-def verify(capsule, against, as_json):
-    """Verify capsule checksum integrity, or statistical equivalence against a reference."""
+def verify(capsule, against, expected_id, as_json):
+    """Verify capsule integrity, or statistical equivalence against a reference."""
     verifier = CapsuleVerifier()
 
+    # --against runs the statistical path and checks no integrity layer, so
+    # accepting --id there would imply a guarantee that was never checked.
+    if against is not None and expected_id is not None:
+        click.echo("Error: --id cannot be combined with --against; --against does not "
+                   "verify integrity. Run 'verify --id' separately.", err=True)
+        sys.exit(2)
+
     if against is None:
-        result = verifier.verify_checksums(capsule)
+        result = verifier.verify_integrity(capsule, expected_id=expected_id)
         if as_json:
             click.echo(json.dumps(result, indent=2))
         else:
-            status = result["status"].upper()
-            click.echo(f"Checksum verification: {status}")
-            if result["status"] == "fail":
-                for path, info in result.get("files", {}).items():
-                    if not info.get("match", True):
-                        click.echo(f"  FAIL: {path}")
+            click.echo(f"Integrity verification: {result['status'].upper()}")
+            if result.get("capsule_id"):
+                click.echo(f"  Capsule ID: {result['capsule_id']}")
+            checksums = result.get("checksums", {})
+            for path, info in checksums.get("files", {}).items():
+                if not info.get("match", True):
+                    click.echo(f"  FAIL: {path}")
+            for path in checksums.get("extra", []):
+                click.echo(f"  EXTRA (not listed in .checksums): {path}")
+            for err in result.get("errors", []):
+                click.echo(f"  {err}")
+            if result["status"] == "pass" and not result["manifest_authenticated"]:
+                click.echo("  Note: manifest is not authenticated — nothing on disk can "
+                           "attest to it. Pass --id <trusted-id> to check layer 3.")
         sys.exit(0 if result["status"] == "pass" else 1)
 
     ref_counts, vsettings = _load_counts_and_vsettings(Path(against))
