@@ -9,17 +9,21 @@ from marqov_capsule.verifier import CapsuleVerifier
 @click.command()
 @click.argument("capsule", type=click.Path(exists=True, file_okay=False))
 @click.option("--dest", "-d", default=None, help="Destination directory")
+@click.option("--id", "expected_id", default=None,
+              help="Trusted capsule ID to verify the manifest against (spec §6 layer 3)")
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
-def open_cmd(capsule, dest, as_json):
-    """Extract a capsule and verify checksums."""
+def open_cmd(capsule, dest, expected_id, as_json):
+    """Extract a capsule after full integrity verification."""
     capsule_path = Path(capsule)
 
-    check = CapsuleVerifier.verify_checksums(capsule_path)
+    check = CapsuleVerifier.verify_integrity(capsule_path, expected_id=expected_id)
     if check["status"] != "pass":
         if as_json:
-            click.echo(json.dumps({"status": "error", "message": "Checksum verification failed", "detail": check}, indent=2))
+            click.echo(json.dumps({"status": "error", "message": "Integrity verification failed", "detail": check}, indent=2))
         else:
-            click.echo("Error: checksum verification failed — capsule may be corrupt or tampered", err=True)
+            click.echo("Error: integrity verification failed — capsule may be corrupt or tampered", err=True)
+            for err in check.get("errors", []):
+                click.echo(f"  {err}", err=True)
         sys.exit(1)
 
     if dest:

@@ -11,6 +11,14 @@ import yaml
 from marqov_capsule._canonical import compute_capsule_id
 from marqov_capsule.redactor import CapsuleRedactor
 
+# Root-level files deliberately left out of .checksums: .checksums cannot hash
+# itself, and capsule.yaml embeds the digest of .checksums (it is covered by the
+# capsule ID instead). Matched against the path relative to the capsule root, not
+# the basename — payload/capsule.yaml is ordinary payload and must be hashed.
+# CapsuleVerifier imports this so the seal and verify sides cannot drift: a file
+# one side skips and the other flags is either a false failure or a blind spot.
+UNCHECKSUMMED_ROOT_FILES = frozenset({".checksums", "capsule.yaml"})
+
 
 class CapsuleBuilder:
     """Build reproducible capsule YAML manifests following the Marqov Capsule v1 standard."""
@@ -218,8 +226,10 @@ class CapsuleBuilder:
             # content into this capsule (exfiltration when re-sealing a received capsule).
             if file_path.is_symlink():
                 continue
-            if file_path.is_file() and file_path.name not in {".checksums", "capsule.yaml"}:
+            if file_path.is_file():
                 rel = str(file_path.relative_to(capsule_path))
+                if rel in UNCHECKSUMMED_ROOT_FILES:
+                    continue
                 digest = hashlib.sha256(file_path.read_bytes()).hexdigest()
                 checksums[rel] = f"sha256:{digest}"
         checksums_path = capsule_path / ".checksums"

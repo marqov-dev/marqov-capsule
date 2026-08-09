@@ -53,9 +53,9 @@ The `marqov-capsule` command provides six subcommands:
 |---|---|
 | `marqov-capsule init` | Scaffold a new draft `capsule.yaml` in the current directory |
 | `marqov-capsule seal` | Seal a draft capsule — scans for credentials, writes checksums, transitions state |
-| `marqov-capsule verify` | Verify integrity of a sealed capsule (checksum validation + optional statistical equivalence) |
+| `marqov-capsule verify` | Verify integrity of a sealed capsule (all three digest-chain layers, `--id` for the trusted capsule ID) + optional statistical equivalence |
 | `marqov-capsule inspect` | Print a human-readable summary of capsule metadata |
-| `marqov-capsule open` | Verify checksums and extract a capsule to a destination directory |
+| `marqov-capsule open` | Verify integrity and extract a capsule to a destination directory |
 | `marqov-capsule validate` | Validate a capsule against the JSON Schema without sealing — accepts a capsule directory or a `capsule.yaml` path |
 
 ```bash
@@ -78,6 +78,23 @@ A capsule moves through four states:
 | `archived` | Long-term storage; no further modification |
 
 Once sealed, the capsule ID is stable. Any modification to payload files or manifest fields invalidates the digest chain.
+
+## Integrity verification
+
+`verify` and `open` check all three layers of the digest chain (spec §6):
+
+1. Each payload file is hashed and compared against `.checksums`, which pins a **closed set** — a file present on disk but absent from `.checksums` is an injected file and fails verification.
+2. `.checksums` is hashed and compared against `checksums_digest` in the manifest. This is what makes the capsule tamper-*evident*: editing a payload and re-running `save_checksums` satisfies layer 1, but the manifest still pins the original `.checksums` bytes.
+3. The capsule ID is recomputed from the canonical JSON of the manifest and compared against a trusted ID you supply.
+
+```bash
+marqov-capsule seal .                 # prints: Sealed: <capsule-id>
+marqov-capsule verify . --id <capsule-id>
+```
+
+Record the capsule ID at seal time and distribute it out of band. Without `--id` the first two layers still run, but the manifest itself is **unauthenticated** — `capsule.yaml` is deliberately outside `.checksums` (it contains the digest of `.checksums`), so only the capsule ID pins it. `verify` says so explicitly rather than reporting a bare pass.
+
+Note the limit: the digest chain detects modification, not forgery. Anyone who rewrites the payload, `.checksums`, and the manifest together produces a self-consistent capsule with a *different* ID — which is why the trusted ID has to come from somewhere other than the capsule. Capsules carry no signatures, so a capsule ID is only as trustworthy as the channel you received it over.
 
 ## Reproducibility and statistical verification
 
