@@ -125,3 +125,85 @@ def test_capsule_allow_suppresses_name_pattern(tmp_path):
     redactor = CapsuleRedactor(tmp_path)
     result = redactor.scan()
     assert result["has_secrets"] is False
+
+
+# --- Notebook coverage (#33) ------------------------------------------------
+# _scan_notebook walked only `outputs`. A researcher pastes a live token into a
+# *source* cell, which is where it actually happens, and seal gates on this scan.
+
+def _notebook(cells):
+    import json
+    return json.dumps({"cells": cells, "metadata": {}, "nbformat": 4, "nbformat_minor": 5})
+
+
+def test_detects_secret_in_code_cell_source(tmp_path):
+    (tmp_path / "run.ipynb").write_text(_notebook([{
+        "cell_type": "code", "source": ["IBM_QUANTUM_TOKEN = \"abc123\"\n"],
+        "outputs": [], "execution_count": 1, "metadata": {},
+    }]))
+    result = CapsuleRedactor(tmp_path).scan()
+    assert result["has_secrets"], result
+
+
+def test_detects_secret_in_markdown_cell_source(tmp_path):
+    (tmp_path / "notes.ipynb").write_text(_notebook([{
+        "cell_type": "markdown", "source": ["Use `IBM_QUANTUM_TOKEN = \"abc\"` to run.\n"],
+        "metadata": {},
+    }]))
+    result = CapsuleRedactor(tmp_path).scan()
+    assert result["has_secrets"], result
+
+
+def test_detects_secret_in_error_traceback(tmp_path):
+    """Tracebacks routinely echo the offending line, tokens included."""
+    (tmp_path / "boom.ipynb").write_text(_notebook([{
+        "cell_type": "code", "source": ["connect()\n"], "execution_count": 1, "metadata": {},
+        "outputs": [{
+            "output_type": "error", "ename": "ValueError", "evalue": "bad token",
+            "traceback": ["Traceback...", "  IBM_QUANTUM_TOKEN = \"abc123\""],
+        }],
+    }]))
+    result = CapsuleRedactor(tmp_path).scan()
+    assert result["has_secrets"], result
+
+
+def test_notebook_source_as_plain_string(tmp_path):
+    """nbformat allows `source` to be a string rather than a list of lines."""
+    (tmp_path / "s.ipynb").write_text(_notebook([{
+        "cell_type": "code", "source": "IBM_QUANTUM_TOKEN = \"abc123\"\n",
+        "outputs": [], "execution_count": 1, "metadata": {},
+    }]))
+    assert CapsuleRedactor(tmp_path).scan()["has_secrets"]
+
+
+def test_notebook_stream_output_still_scanned(tmp_path):
+    """Regression: output scanning must survive the source-cell fix."""
+    (tmp_path / "o.ipynb").write_text(_notebook([{
+        "cell_type": "code", "source": ["print(tok)\n"], "execution_count": 1, "metadata": {},
+        "outputs": [{"output_type": "stream", "name": "stdout",
+                     "text": ["IBM_QUANTUM_TOKEN = \"abc123\"\n"]}],
+    }]))
+    assert CapsuleRedactor(tmp_path).scan()["has_secrets"]
+
+
+def test_clean_notebook_not_flagged(tmp_path):
+    (tmp_path / "clean.ipynb").write_text(_notebook([{
+        "cell_type": "code", "source": ["from qiskit import QuantumCircuit\n"],
+        "outputs": [], "execution_count": 1, "metadata": {},
+    }]))
+    assert not CapsuleRedactor(tmp_path).scan()["has_secrets"]
+
+
+def test_malformed_notebook_does_not_crash(tmp_path):
+    (tmp_path / "bad.ipynb").write_text("{not valid json")
+    (tmp_path / "odd.ipynb").write_text('{"cells": [{"cell_type": "code", "source": null}]}')
+    assert not CapsuleRedactor(tmp_path).scan()["has_secrets"]
+
+
+def test_notebook_reports_the_notebook_path(tmp_path):
+    (tmp_path / "run.ipynb").write_text(_notebook([{
+        "cell_type": "code", "source": ["IBM_QUANTUM_TOKEN = \"abc\"\n"],
+        "outputs": [], "execution_count": 1, "metadata": {},
+    }]))
+    findings = CapsuleRedactor(tmp_path).scan()["findings"]
+    assert findings and findings[0]["file"] == "run.ipynb"
