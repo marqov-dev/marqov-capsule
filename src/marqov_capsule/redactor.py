@@ -25,11 +25,19 @@ _DIGEST_LINE_RE = re.compile(
     r"(?:checksums_digest|derived_from|\w+_digest)\s*:\s*(?:sha256:)?[0-9a-f]{64}"
 )
 
-# Default excluded paths (applied when no .capsuleignore present)
-_DEFAULT_IGNORES = {
-    ".git", "__pycache__", "*.pyc", "venv", ".venv",
-    "node_modules", ".env", "*.pem", "*.key",
+# Build noise. Never worth scanning, and a .capsuleignore may add to this set
+# but never remove from it — otherwise a capsule could un-skip nothing useful
+# while narrowing scope elsewhere.
+_SCAN_SKIP_DEFAULTS = {
+    ".git", "__pycache__", "*.pyc", "venv", ".venv", "node_modules",
 }
+
+# Credential-shaped filenames. These were previously in the ignore set, which
+# had it exactly backwards: the file was excluded from *scanning* while
+# save_checksums still packaged it, so a directory holding .env and deploy.key
+# scanned clean and sealed with both inside (#34). Presence is the finding —
+# not scanning a secret does not make it absent from the capsule.
+_CREDENTIAL_FILE_PATTERNS = {".env", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa", "id_ed25519"}
 
 _HIGH_ENTROPY_THRESHOLD = 4.5  # bits/char — applied to strings > 20 chars
 _MIN_ENTROPY_LENGTH = 20
@@ -54,15 +62,24 @@ def _looks_like_digest_line(line: str) -> bool:
 
 
 def _load_capsuleignore(capsule_dir: Path) -> set[str]:
+    """Read .capsuleignore patterns. Returns only what the file declared.
+
+    Callers must union this with _SCAN_SKIP_DEFAULTS rather than substituting
+    it. Replacing the defaults was the old behaviour and is a trust bug: the
+    file lives *inside* the capsule, so a capsule received from someone else
+    and re-sealed carries its author's scan scope, not yours (#34).
+    """
     ignore_file = capsule_dir / ".capsuleignore"
     if not ignore_file.exists():
-        return set(_DEFAULT_IGNORES)
-    patterns = set()
-    for line in ignore_file.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#"):
-            patterns.add(line)
-    return patterns
+        return set()
+    try:
+        lines = ignore_file.read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception:
+        return set()
+    return {
+        line.strip() for line in lines
+        if line.strip() and not line.strip().startswith("#")
+    }
 
 
 def _is_ignored(rel_path: str, ignores: set[str]) -> bool:
@@ -177,15 +194,27 @@ class CapsuleRedactor:
         if mode not in ("block", "warn_only"):
             raise ValueError(f"mode must be 'block' or 'warn_only', got {mode!r}")
         self.mode = mode
-        self._ignores = _load_capsuleignore(self.capsule_dir)
+        self._capsuleignore = _load_capsuleignore(self.capsule_dir)
+        # Union, never substitution: a capsule may widen what is skipped as
+        # noise, but the defaults always apply.
+        self._ignores = set(_SCAN_SKIP_DEFAULTS) | self._capsuleignore
+        #: Patterns this capsule's own .capsuleignore asked for. Public so a
+        #: caller can report narrowed scope without paying for a full scan.
+        self.capsuleignore_patterns = sorted(self._capsuleignore)
 
     def scan(self) -> dict[str, Any]:
         """Scan all files in capsule_dir for credentials.
 
         Returns:
-            {"has_secrets": bool, "findings": [{"file", "line", "match", "reason"}]}
+            ``has_secrets``, ``findings``, plus ``skipped`` (paths not scanned)
+            and ``capsuleignore_patterns`` (what the capsule's own ignore file
+            asked for). The last two exist so that narrowing the scan scope is
+            visible rather than silent — a .capsuleignore containing ``source``
+            would otherwise disable scanning for that whole subtree with no
+            indication in the result (#34).
         """
         all_findings: list[dict] = []
+        skipped: list[str] = []
 
         for file_path in sorted(self.capsule_dir.rglob("*")):
             # Do not follow symlinks — their target may live outside the capsule tree.
@@ -194,7 +223,21 @@ class CapsuleRedactor:
             if not file_path.is_file():
                 continue
             rel = str(file_path.relative_to(self.capsule_dir))
+
+            # Credential-shaped filenames are a packaging problem, not a scanning
+            # one: the file is going into the capsule whether or not it is read.
+            # Checked before the ignore test so .capsuleignore cannot suppress it.
+            if _is_ignored(rel, _CREDENTIAL_FILE_PATTERNS):
+                all_findings.append({
+                    "file": rel,
+                    "line": 0,
+                    "match": rel,
+                    "reason": "credential_file",
+                })
+                continue
+
             if _is_ignored(rel, self._ignores):
+                skipped.append(rel)
                 continue
 
             try:
@@ -207,7 +250,12 @@ class CapsuleRedactor:
             else:
                 all_findings.extend(_scan_text(content, rel))
 
-        return {"has_secrets": len(all_findings) > 0, "findings": all_findings}
+        return {
+            "has_secrets": len(all_findings) > 0,
+            "findings": all_findings,
+            "skipped": skipped,
+            "capsuleignore_patterns": sorted(self._capsuleignore),
+        }
 
     def scan_and_raise(self) -> dict[str, Any]:
         """Scan and raise RedactorError if secrets found (block mode)."""
@@ -217,8 +265,22 @@ class CapsuleRedactor:
                 f"{f['file']}:{f['line']} ({f['reason']})"
                 for f in result["findings"][:5]
             )
+            # Remediation has to match the finding. `# capsule:allow` is a
+            # line annotation and cannot suppress a whole-file finding, so
+            # offering it for a .env would send the user down a dead end.
+            credential_files = [
+                f["file"] for f in result["findings"] if f["reason"] == "credential_file"
+            ]
+            if credential_files:
+                advice = (
+                    f"Credential-bearing file(s) in the capsule: "
+                    f"{', '.join(sorted(set(credential_files)))}. "
+                    f"Move them outside the capsule directory — they would otherwise be "
+                    f"packaged and sealed inside it."
+                )
+            else:
+                advice = "Remove secrets or annotate with # capsule:allow to suppress."
             raise RedactorError(
-                f"Credential patterns found — seal blocked. Findings: {summary}. "
-                f"Remove secrets or annotate with # capsule:allow to suppress."
+                f"Credential patterns found — seal blocked. Findings: {summary}. {advice}"
             )
         return result
