@@ -113,26 +113,53 @@ def _scan_text(text: str, filepath: str) -> list[dict]:
     return findings
 
 
+def _joined(value: Any) -> str:
+    """nbformat allows multiline fields as either a string or a list of lines."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "".join(v for v in value if isinstance(v, str))
+    return ""
+
+
 def _scan_notebook(nb_path: str, content: str) -> list[dict]:
-    """Scan Jupyter notebook outputs; skip binary MIME types."""
+    """Scan Jupyter notebook source cells and text outputs; skip binary MIME types.
+
+    Source cells matter most: a pasted token lives in the code a researcher wrote,
+    not in what it printed. Scanning only `outputs` meant a live token in a code
+    cell passed the seal gate that the same line in a .py file would have blocked
+    (#33). Error tracebacks are scanned too — they echo the offending line.
+
+    Every field is defensively typed. A notebook is untrusted input and may be
+    hand-edited or truncated; a malformed one must scan to nothing, not raise.
+    """
     import json as _json
     try:
         nb = _json.loads(content)
     except Exception:
         return []
+    if not isinstance(nb, dict):
+        return []
 
     findings = []
-    for cell in nb.get("cells", []):
-        for output in cell.get("outputs", []):
+    for cell in nb.get("cells") or []:
+        if not isinstance(cell, dict):
+            continue
+        findings.extend(_scan_text(_joined(cell.get("source")), nb_path))
+
+        for output in cell.get("outputs") or []:
+            if not isinstance(output, dict):
+                continue
             output_type = output.get("output_type", "")
             if output_type == "stream":
-                text = "".join(output.get("text", []))
-                findings.extend(_scan_text(text, nb_path))
+                findings.extend(_scan_text(_joined(output.get("text")), nb_path))
             elif output_type in ("display_data", "execute_result"):
-                data = output.get("data", {})
-                if "text/plain" in data:
-                    text = "".join(data["text/plain"]) if isinstance(data["text/plain"], list) else data["text/plain"]
-                    findings.extend(_scan_text(text, nb_path))
+                data = output.get("data")
+                if isinstance(data, dict) and "text/plain" in data:
+                    findings.extend(_scan_text(_joined(data["text/plain"]), nb_path))
+            elif output_type == "error":
+                findings.extend(_scan_text(_joined(output.get("traceback")), nb_path))
+                findings.extend(_scan_text(_joined(output.get("evalue")), nb_path))
     return findings
 
 
