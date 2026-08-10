@@ -6,3 +6,12 @@ build/
 .pytest_cache/
 .venv/
 *.capsule/
+
+# Coverage artifacts (pytest-cov / coverage.py)
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# macOS
+.DS_Store
