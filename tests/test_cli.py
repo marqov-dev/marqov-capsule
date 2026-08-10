@@ -205,15 +205,20 @@ def test_verify_against_identical_capsules(tmp_path):
     # Skip (don't fail) on a base install — the rest of this module must still run.
     pytest.importorskip("numpy")
     pytest.importorskip("scipy")
-    import json, yaml
+    import json
+    from marqov_capsule.builder import CapsuleBuilder
     counts = {"00": 5000, "11": 5000}
     vsettings = {"epsilon": 0.05, "min_shots": 100, "tolerance_regime": "strict"}
+    # Sealed, not hand-written: `verify --against` verifies integrity before
+    # comparing, since counts that don't match their own seal are not the counts
+    # that were sealed (#30).
     for name in ("ref", "new"):
         d = tmp_path / name
         (d / "payload").mkdir(parents=True)
         (d / "payload" / "results.json").write_text(json.dumps({"counts": counts}))
-        (d / "capsule.yaml").write_text(yaml.safe_dump({
-            "version": "1.0.0", "name": name, "lifecycle_state": "sealed",
+        CapsuleBuilder.from_manifest({
+            "version": "1.0.0", "name": name, "lifecycle_state": "draft",
+            "requirements": {"paradigm": ["gate-based"], "max_qubit_count": 2},
             "task_executions": [{
                 "task_id": "550e8400-e29b-41d4-a716-446655440000",
                 "status": "success",
@@ -221,7 +226,7 @@ def test_verify_against_identical_capsules(tmp_path):
                 "backend": {"provider": "ibm", "name": "ibm_kyiv", "shots": 10000},
                 "verification_settings": vsettings,
             }],
-        }))
+        }).seal(capsule_dir=d, sealed_by="test")
     runner = CliRunner()
     result = runner.invoke(cli, [
         "verify", "--against", str(tmp_path / "ref"),

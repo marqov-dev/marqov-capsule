@@ -111,6 +111,21 @@ pip install "marqov-capsule[verify]"
 marqov-capsule verify . --against /path/to/reference-capsule
 ```
 
+### Who chooses the threshold
+
+The acceptance threshold belongs to whoever is doing the verifying, not to the artifact being verified. A capsule you downloaded is untrusted input, and if it supplied its own ε it could declare `epsilon: 1.0` and certify any comparison made against it.
+
+So ε comes from **verifier policy** — the default, or `--epsilon`. A capsule's declared `verification_settings` is advisory: it may make verification **stricter** but never looser, and when a declaration is overridden `verify` says so rather than silently substituting its own number.
+
+```bash
+marqov-capsule verify . --against ref/ --epsilon 0.01     # stricter than the 0.02 default
+marqov-capsule verify . --against ref/ --honor-calibration-drift
+```
+
+`min_shots` is never read from a capsule at all — a large declared value would force `INCONCLUSIVE` on every comparison, which is its own kind of unfalsifiability. `tolerance_regime: calibration_drift` widens the threshold, so it is honoured only when you opt in, and still bounded by the policy drift ceiling.
+
+`--against` verifies the integrity of **both** capsules before comparing anything. Counts that don't match their own seal are not the counts that were sealed.
+
 ## Spec
 
 The normative capsule format specification lives in `spec/v1/`:

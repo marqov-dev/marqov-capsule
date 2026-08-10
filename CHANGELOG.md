@@ -9,6 +9,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- **Acceptance thresholds are no longer read from the capsule under test** (#30). `verify --against` took `verification_settings` from the *reference* capsule and handed them straight to the equivalence test, so a published capsule declaring `epsilon: 1.0` forced **every** comparison made against it to `VERIFIED` — TVD is bounded by 1. `tolerance_regime: calibration_drift` was a second lever on the same hole, swapping in a ~4× looser threshold. A third, `min_shots: 10^9`, forced `INCONCLUSIVE` on every comparison, letting a publisher call a result unfalsified because nothing could ever reject it.
+
+  Thresholds now come from a `VerificationPolicy` owned by the verifier. A capsule's declaration is advisory: it may make verification **stricter** but never looser, and the effective value is reported alongside the verdict. New flags `--epsilon`, `--min-shots`, `--honor-calibration-drift`.
+- **`verify --against` verifies integrity before comparing.** The statistical path ran no integrity check at all, so shot counts from a tampered capsule were compared as though they had been sealed. Both capsules must now pass `verify_integrity` first. This is a behaviour change: previously it would compare unsealed or draft capsules.
+
 ### Fixed
 - **Tamper-evidence: `verify` and `open` now check all three digest-chain layers** (#14). Only layer 1 (payload files vs `.checksums`) was implemented; `checksums_digest` was written at seal time and never recomputed, and the capsule ID was computed only to be printed. Editing a payload file and re-running `save_checksums` therefore passed verification with exit 0. `CapsuleVerifier.verify_integrity()` implements spec §6 in full and is what the CLI now calls.
 - **`verify` no longer passes on injected files** (#17). `.checksums` pins a closed set, but `verify_checksums` computed the `extra` list and then ignored it, so a sealed capsule could carry arbitrary undeclared files. Injection also leaves `checksums_digest` and the capsule ID intact, so no other layer could catch it.
