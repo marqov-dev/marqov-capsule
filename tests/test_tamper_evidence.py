@@ -338,20 +338,6 @@ def test_injected_nested_checksums_file_fails_verification(tmp_path):
 # --- --id must not be silently ignored on the statistical path -------------
 
 
-def test_cli_verify_id_with_against_is_rejected(tmp_path):
-    """--against skips checksum verification entirely, so --id would be a lie."""
-    from click.testing import CliRunner
-    from marqov_capsule.cli.main import cli
-
-    ref = tmp_path / "ref.capsule"
-    new = tmp_path / "new.capsule"
-    _seal(ref)
-    _seal(new)
-
-    result = CliRunner().invoke(cli, ["verify", "--against", str(ref), "--id", "0" * 64, str(new)])
-    assert result.exit_code != 0
-    assert "--id" in result.output
-
 
 # --- Malformed manifests must fail cleanly, not raise ----------------------
 

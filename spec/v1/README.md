@@ -191,6 +191,22 @@ Any mismatch must be reported as a verification failure.
 
 ### Statistical equivalence (probabilistic results)
 
+> **⚠ Under revision — do not implement.** The procedure below is miscalibrated
+> and is being replaced. The plug-in TVD estimator carries a noise floor of
+> `√((K−1)/πn)`, and the percentile bootstrap prescribed here is displaced upward
+> by it rather than corrected downward, so a distribution compared **against
+> itself** is rejected from roughly four qubits upward. The bootstrap is also
+> provably inconsistent for this functional: total variation distance is not
+> Hadamard-differentiable at `p = q`, which is exactly the null being tested.
+>
+> The reference implementation does **not** ship this in v0.1.0. Independent
+> implementers should not build against it until it is revised. Analysis,
+> measurements, and four evaluated replacements:
+> [`docs/research/2026-08-10-tvd-equivalence-testing.md`](../../docs/research/2026-08-10-tvd-equivalence-testing.md).
+> Tracked in [#15](https://github.com/marqov-dev/marqov-capsule/issues/15).
+>
+> Retained here only as a record of what v1 originally specified.
+
 QPU results are shot distributions. Two capsules are statistically equivalent if their distributions are close within a confidence interval. The normative procedure:
 
 1. **Metric**: Total variation distance (TVD) between the two shot distributions.

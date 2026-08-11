@@ -9,6 +9,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+- **Statistical equivalence testing is cut from 0.1.0** (#15). `verify --against` and its `--epsilon` / `--min-shots` / `--honor-calibration-drift` options are gone. The estimator is miscalibrated: a distribution compared *against itself* is REJECTED from roughly four qubits upward, because the plug-in TVD carries a noise floor of `√((K−1)/πn)` and the bootstrap interval is displaced upward by it rather than corrected downward. The bootstrap cannot be repaired for this functional — TVD is not Hadamard-differentiable at `p = q`, which is the null under test.
+
+  Shipping it caveated would still have shipped a verdict carrying no information at realistic problem sizes, so it is cut until it is right. `CapsuleVerifier.verify_statistical` remains importable, and now emits a `FutureWarning`, so work on #15 does not have to begin by resurrecting deleted code. `VerificationPolicy` (#30) also stays, so the trust boundary is already correct when the feature returns. Spec §6's statistical procedure is marked under-revision, do-not-implement. Analysis: `docs/research/2026-08-10-tvd-equivalence-testing.md`.
+
 ### Security
 - **The redactor now scans Jupyter notebook source cells** (#33). `_scan_notebook` walked only `cell["outputs"]`, so a live token pasted into a code cell — where it actually happens — passed the seal gate that the identical line in a `.py` file would have blocked. Markdown cells and `error` output tracebacks are scanned too; tracebacks routinely echo the offending line. Notebook fields are now defensively typed, since a hand-edited or truncated `.ipynb` must scan to nothing rather than raise.
 - **Credential-bearing files are a finding, not a scan exclusion** (#34). `.env`, `*.pem` and `*.key` sat in the redactor's default *ignore* list while `save_checksums` packaged them regardless — so a directory holding `.env` and `deploy.key` scanned clean and sealed with both inside. Presence is now the finding: not scanning a secret does not make it absent from the capsule. `.p12`, `.pfx`, `id_rsa` and `id_ed25519` are covered too, no ignore rule can suppress them, and the remediation message says to move the file rather than offering `# capsule:allow`, which is line-based and cannot suppress a whole-file finding.
