@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **The archive layer is restored** (#48). `marqov-capsule pack` produces a deterministic `.capsule` archive — byte-identical across runs via sorted members, zeroed entry and gzip timestamps, and fixed permissions — and `unpack` restores it. `verify` now accepts a directory or an archive interchangeably, unpacking to a temporary directory to check the contents.
+
+  `src/marqov_capsule/archive.py` and 26 of its tests were deleted by `98f963d`, a `chore:`-labelled commit that removed 1,768 lines as "legacy first-pass files". The module was never broken: it depends only on stdlib and passed unmodified against current code. Its tests failed for a single reason — a builder constructor that had changed the day before — and were deleted rather than migrated. See #48 for the full audit of what else that commit removed.
+
+- **`archive.payload_digest`** — SHA-256 of the `.checksums` bytes. Restored as `content_id`, then renamed, because the name overclaimed: `.checksums` excludes `capsule.yaml`, so two capsules with identical payloads but different manifests produce the same value. It is also, by construction, the number the manifest already stores as `checksums_digest`. `pack` and `verify` now report the **capsule ID** as identity and label the payload digest as what it is. Naming a capsule by the payload digest would have reintroduced the layer-1-only identity that #14 was about.
+
 ### Removed
 - **Statistical equivalence testing is cut from 0.1.0** (#15). `verify --against` and its `--epsilon` / `--min-shots` / `--honor-calibration-drift` options are gone. The estimator is miscalibrated: a distribution compared *against itself* is REJECTED from roughly four qubits upward, because the plug-in TVD carries a noise floor of `√((K−1)/πn)` and the bootstrap interval is displaced upward by it rather than corrected downward. The bootstrap cannot be repaired for this functional — TVD is not Hadamard-differentiable at `p = q`, which is the null under test.
 
