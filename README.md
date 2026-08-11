@@ -14,7 +14,7 @@ The format is an open standard (`spec/v1/`, CC-BY-4.0). The Python tooling is Ap
 pip install marqov-capsule
 ```
 
-Requires Python 3.9+.
+Requires Python 3.10+.
 
 ## Quick start
 
@@ -39,7 +39,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     capsule_id = builder.seal(capsule_dir, sealed_by="alice@example.com")
     print(f"Capsule ID: {capsule_id}")
-    # → Capsule ID: e3b0c44298fc1c149af... (64 hex chars)
+    # → Capsule ID: <64 hex chars>, derived from the manifest contents
 ```
 
 `seal()` runs the full sealing sequence: credential scan, `.checksums` generation, lifecycle transition to `sealed`, and `capsule.yaml` write. It returns the 64-character hex capsule ID.
@@ -50,7 +50,7 @@ The `marqov-capsule` command provides six subcommands:
 
 | Command | Description |
 |---|---|
-| `marqov-capsule init` | Scaffold a new draft `capsule.yaml` in the current directory |
+| `marqov-capsule init` | Scaffold a new draft `capsule.yaml` in `DIRECTORY` |
 | `marqov-capsule seal` | Seal a draft capsule — scans for credentials, writes checksums, transitions state |
 | `marqov-capsule verify` | Verify integrity of a sealed capsule — all three digest-chain layers, `--id` for the trusted capsule ID |
 | `marqov-capsule inspect` | Print a human-readable summary of capsule metadata |
@@ -58,12 +58,18 @@ The `marqov-capsule` command provides six subcommands:
 | `marqov-capsule validate` | Validate a capsule against the JSON Schema without sealing — accepts a capsule directory or a `capsule.yaml` path |
 
 ```bash
-marqov-capsule init --name bell-state-v1 --paradigm gate-based --qubits 2
-marqov-capsule seal .
-marqov-capsule validate .
-marqov-capsule inspect .
-marqov-capsule verify .
+marqov-capsule init ./bell-state --name bell-state-v1 --paradigm gate-based --qubits 2
+# add your payload files to ./bell-state, then:
+marqov-capsule seal ./bell-state
+marqov-capsule validate ./bell-state
+marqov-capsule inspect ./bell-state
+marqov-capsule verify ./bell-state
 ```
+
+Payload files can be laid out however you like — the spec treats any file that
+isn't `capsule.yaml` or `.checksums` as payload. The conformance fixtures use
+`payload/`, `source/` and `environment/` subdirectories as a convention, but
+nothing enforces it.
 
 ## Lifecycle
 
@@ -101,12 +107,12 @@ Note the limit: the digest chain detects modification, not forgery. Anyone who r
 
 Rather than ship it caveated, it is cut until it is right. The investigation is written up in full, including the four candidate replacements that were measured and rejected and why:
 
-- [`docs/research/2026-08-10-tvd-equivalence-testing.md`](docs/research/2026-08-10-tvd-equivalence-testing.md) — why the plug-in estimator fails, why the bootstrap cannot be repaired for this functional, and the one-sided bound that does work
+- [`docs/research/2026-08-10-tvd-equivalence-testing.md`](https://github.com/marqov-dev/marqov-capsule/blob/main/docs/research/2026-08-10-tvd-equivalence-testing.md) — why the plug-in estimator fails, why the bootstrap cannot be repaired for this functional, and the one-sided bound that does work
 - Tracked in [#15](https://github.com/marqov-dev/marqov-capsule/issues/15)
 
 Also on the roadmap, with the research already done:
 
-- [#18](https://github.com/marqov-dev/marqov-capsule/issues/18) — credential scanner precision and recall, written up in [`docs/research/2026-08-11-credential-detection.md`](docs/research/2026-08-11-credential-detection.md)
+- [#18](https://github.com/marqov-dev/marqov-capsule/issues/18) — credential scanner precision and recall, written up in [`docs/research/2026-08-11-credential-detection.md`](https://github.com/marqov-dev/marqov-capsule/blob/main/docs/research/2026-08-11-credential-detection.md)
 - [#16](https://github.com/marqov-dev/marqov-capsule/issues/16) — capsules carry no signatures, so the digest chain detects modification but not forgery
 
 Contributions welcome on any of these. The research documents are meant to be a starting point rather than a specification — if you disagree with the analysis, the reproduction scripts are in the appendices.
@@ -127,9 +133,9 @@ This repository contains two separately licensed components:
 
 | Component | License | Reason |
 |---|---|---|
-| `spec/v1/` | [CC-BY-4.0](LICENSE-SPEC) | The spec is a citable artifact — CC-BY allows citation in academic work and independent implementations without copyleft restrictions |
-| Python package (`src/`) | [Apache 2.0](LICENSE-CODE) | Permissive license suitable for use in commercial and research software without viral conditions |
+| `spec/v1/` | [CC-BY-4.0](https://github.com/marqov-dev/marqov-capsule/blob/main/LICENSE-SPEC) | The spec is a citable artifact — CC-BY allows citation in academic work and independent implementations without copyleft restrictions |
+| Python package (`src/`) | [Apache 2.0](https://github.com/marqov-dev/marqov-capsule/blob/main/LICENSE-CODE) | Permissive license suitable for use in commercial and research software without viral conditions |
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, the RFC evolution process for spec changes, and license terms.
+See [CONTRIBUTING.md](https://github.com/marqov-dev/marqov-capsule/blob/main/CONTRIBUTING.md) for dev setup, the RFC evolution process for spec changes, and license terms.
