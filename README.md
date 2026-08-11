@@ -46,15 +46,17 @@ with tempfile.TemporaryDirectory() as tmp:
 
 ## CLI
 
-The `marqov-capsule` command provides six subcommands:
+The `marqov-capsule` command provides these subcommands:
 
 | Command | Description |
 |---|---|
 | `marqov-capsule init` | Scaffold a new draft `capsule.yaml` in `DIRECTORY` |
 | `marqov-capsule seal` | Seal a draft capsule — scans for credentials, writes checksums, transitions state |
-| `marqov-capsule verify` | Verify integrity of a sealed capsule — all three digest-chain layers, `--id` for the trusted capsule ID |
+| `marqov-capsule verify` | Verify integrity of a sealed capsule directory **or archive** — all three digest-chain layers, `--id` for the trusted capsule ID |
 | `marqov-capsule inspect` | Print a human-readable summary of capsule metadata |
 | `marqov-capsule open` | Verify integrity and extract a capsule to a destination directory |
+| `marqov-capsule pack` | Pack a sealed capsule directory into a deterministic `.capsule` archive |
+| `marqov-capsule unpack` | Restore a capsule directory from an archive |
 | `marqov-capsule validate` | Validate a capsule against the JSON Schema without sealing — accepts a capsule directory or a `capsule.yaml` path |
 
 ```bash
@@ -70,6 +72,27 @@ Payload files can be laid out however you like — the spec treats any file that
 isn't `capsule.yaml` or `.checksums` as payload. The conformance fixtures use
 `payload/`, `source/` and `environment/` subdirectories as a convention, but
 nothing enforces it.
+
+## Archive format
+
+A sealed capsule packs into a single `.capsule` file — a **deterministic** gzipped tarball. Packing the same capsule twice produces byte-identical output, achieved by sorting members, zeroing entry and gzip timestamps, and fixing permissions.
+
+```bash
+marqov-capsule pack ./bell-state -o bell-state.capsule
+marqov-capsule verify bell-state.capsule        # verifies without unpacking first
+marqov-capsule unpack bell-state.capsule -o ./restored
+```
+
+`verify` accepts a directory or an archive interchangeably.
+
+Two different digests are reported, and the distinction matters:
+
+| | Covers | Use it for |
+|---|---|---|
+| **Capsule ID** | the manifest, which pins `checksums_digest`, which pins every payload byte | **identity** — this is the content address |
+| **Payload digest** | only the files listed in `.checksums` | checking the payload set |
+
+`.checksums` deliberately excludes `capsule.yaml`, so two capsules with identical payloads but different manifests — different name, different `sealed_by`, different backend claims — share a payload digest. Only the capsule ID distinguishes them. Name capsules by their capsule ID.
 
 ## Lifecycle
 

@@ -6,6 +6,7 @@ from marqov_capsule.cli.commands.verify import verify
 from marqov_capsule.cli.commands.inspect import inspect_cmd
 from marqov_capsule.cli.commands.open import open_cmd
 from marqov_capsule.cli.commands.validate import validate
+from marqov_capsule.cli.commands.pack import pack, unpack
 
 
 @click.group()
@@ -20,3 +21,5 @@ cli.add_command(verify)
 cli.add_command(inspect_cmd, name="inspect")
 cli.add_command(open_cmd, name="open")
 cli.add_command(validate)
+cli.add_command(pack)
+cli.add_command(unpack)
