@@ -8,49 +8,13 @@ The danger is one-directional: a declared value that makes verification
 *stricter* is harmless, one that loosens it is an attack. Not every parameter
 tightens in the same direction, so the rule is per-parameter — see
 VerificationPolicy.resolve.
+
+The CLI surface this policy served (`verify --against`) is cut from 0.1.0
+along with statistical equivalence (#15). The policy and these tests stay so
+the trust boundary is already correct when that feature returns — it is much
+easier to keep than to remember.
 """
-import json
-
-import pytest
-import yaml
-from click.testing import CliRunner
-
-from marqov_capsule.cli.main import cli
 from marqov_capsule.policy import VerificationPolicy
-
-
-def _capsule(path, counts, vsettings=None):
-    """Write and seal a minimal capsule declaring `vsettings`.
-
-    Sealed, because `verify --against` now refuses to compare capsules whose
-    payload does not match their own seal.
-    """
-    from marqov_capsule.builder import CapsuleBuilder
-
-    (path / "payload").mkdir(parents=True, exist_ok=True)
-    (path / "payload" / "results.json").write_text(json.dumps({"counts": counts}))
-    task = {
-        "task_id": "550e8400-e29b-41d4-a716-446655440000",
-        "status": "success",
-        "result_type": "probabilistic",
-        "backend": {"provider": "ibm", "name": "ibm_kyiv", "shots": sum(counts.values())},
-    }
-    if vsettings is not None:
-        task["verification_settings"] = vsettings
-    builder = CapsuleBuilder.from_manifest({
-        "version": "1.0.0", "name": path.name, "lifecycle_state": "draft",
-        "requirements": {"paradigm": ["gate-based"], "max_qubit_count": 4},
-        "task_executions": [task],
-    })
-    builder.seal(capsule_dir=path, sealed_by="test")
-    return path
-
-
-DISJOINT_REF = {"0000": 1000}
-DISJOINT_NEW = {"1111": 1000}
-
-
-# --- Policy resolution (no numpy needed) -----------------------------------
 
 
 def test_declared_epsilon_may_tighten():
@@ -114,86 +78,12 @@ def test_resolution_reports_what_was_clamped():
 # --- The #30 attack, end to end -------------------------------------------
 
 
-def test_malicious_epsilon_cannot_force_verified(tmp_path):
-    pytest.importorskip("numpy"); pytest.importorskip("scipy")
-    _capsule(tmp_path / "ref", DISJOINT_REF, {"epsilon": 1.0, "min_shots": 100,
-                                              "tolerance_regime": "strict"})
-    _capsule(tmp_path / "new", DISJOINT_NEW)
-
-    r = CliRunner().invoke(cli, ["verify", "--against", str(tmp_path / "ref"),
-                                 "--json", str(tmp_path / "new")])
-    assert json.loads(r.output)["verdict"] == "REJECTED", r.output
 
 
-def test_malicious_drift_regime_cannot_force_verified(tmp_path):
-    pytest.importorskip("numpy"); pytest.importorskip("scipy")
-    _capsule(tmp_path / "ref", DISJOINT_REF, {"epsilon": 0.02, "epsilon_drift": 1.0,
-                                              "min_shots": 100,
-                                              "tolerance_regime": "calibration_drift"})
-    _capsule(tmp_path / "new", DISJOINT_NEW)
 
-    r = CliRunner().invoke(cli, ["verify", "--against", str(tmp_path / "ref"),
-                                 "--json", str(tmp_path / "new")])
-    assert json.loads(r.output)["verdict"] == "REJECTED", r.output
-
-
-def test_malicious_min_shots_cannot_force_inconclusive(tmp_path):
-    pytest.importorskip("numpy"); pytest.importorskip("scipy")
-    _capsule(tmp_path / "ref", DISJOINT_REF, {"epsilon": 0.02, "min_shots": 10**9,
-                                              "tolerance_regime": "strict"})
-    _capsule(tmp_path / "new", DISJOINT_NEW)
-
-    r = CliRunner().invoke(cli, ["verify", "--against", str(tmp_path / "ref"),
-                                 "--json", str(tmp_path / "new")])
-    assert json.loads(r.output)["verdict"] == "REJECTED", r.output
-
-
-def test_epsilon_flag_sets_the_policy(tmp_path):
-    pytest.importorskip("numpy"); pytest.importorskip("scipy")
-    counts = {"00": 5000, "11": 5000}
-    _capsule(tmp_path / "ref", counts)
-    _capsule(tmp_path / "new", dict(counts))
-
-    tight = CliRunner().invoke(cli, ["verify", "--against", str(tmp_path / "ref"),
-                                     "--epsilon", "0.001", "--json", str(tmp_path / "new")])
-    assert json.loads(tight.output)["verdict"] != "VERIFIED", tight.output
-
-    loose = CliRunner().invoke(cli, ["verify", "--against", str(tmp_path / "ref"),
-                                     "--epsilon", "0.05", "--json", str(tmp_path / "new")])
-    assert json.loads(loose.output)["verdict"] == "VERIFIED", loose.output
-
-
-def test_effective_epsilon_is_reported(tmp_path):
-    """A user must be able to see which threshold actually decided the verdict."""
-    pytest.importorskip("numpy"); pytest.importorskip("scipy")
-    _capsule(tmp_path / "ref", DISJOINT_REF, {"epsilon": 1.0, "min_shots": 100,
-                                              "tolerance_regime": "strict"})
-    _capsule(tmp_path / "new", DISJOINT_NEW)
-
-    r = CliRunner().invoke(cli, ["verify", "--against", str(tmp_path / "ref"),
-                                 "--json", str(tmp_path / "new")])
-    data = json.loads(r.output)
-    assert data["metrics"]["epsilon_used"] == 0.02
-    assert data["policy"]["epsilon_declared"] == 1.0
-    assert data["policy"]["epsilon_clamped"] is True
 
 
 # --- --against must not skip integrity ------------------------------------
 
 
-def test_against_verifies_integrity_of_both_capsules(tmp_path):
-    """The statistical path currently runs no integrity check at all, so counts
-    from a tampered capsule are compared as though they were sealed."""
-    pytest.importorskip("numpy"); pytest.importorskip("scipy")
-    counts = {"00": 5000, "11": 5000}
-    for name in ("ref", "new"):
-        _capsule(tmp_path / name, dict(counts))
 
-    # Tamper the reference payload after sealing; .checksums is now stale.
-    (tmp_path / "ref" / "payload" / "results.json").write_text(
-        json.dumps({"counts": {"00": 10000}}))
-
-    r = CliRunner().invoke(cli, ["verify", "--against", str(tmp_path / "ref"),
-                                 str(tmp_path / "new")])
-    assert r.exit_code != 0, r.output
-    assert "integrity" in r.output.lower()

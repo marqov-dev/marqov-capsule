@@ -200,37 +200,20 @@ def test_open_rejects_capsule_with_symlink(tmp_path):
         assert copied.read_text() != "PRIVATE KEY CONTENT"
 
 
-def test_verify_against_identical_capsules(tmp_path):
-    # `verify --against` runs the statistical path, which needs the [verify] extra.
-    # Skip (don't fail) on a base install — the rest of this module must still run.
-    pytest.importorskip("numpy")
-    pytest.importorskip("scipy")
-    import json
-    from marqov_capsule.builder import CapsuleBuilder
-    counts = {"00": 5000, "11": 5000}
-    vsettings = {"epsilon": 0.05, "min_shots": 100, "tolerance_regime": "strict"}
-    # Sealed, not hand-written: `verify --against` verifies integrity before
-    # comparing, since counts that don't match their own seal are not the counts
-    # that were sealed (#30).
-    for name in ("ref", "new"):
-        d = tmp_path / name
-        (d / "payload").mkdir(parents=True)
-        (d / "payload" / "results.json").write_text(json.dumps({"counts": counts}))
-        CapsuleBuilder.from_manifest({
-            "version": "1.0.0", "name": name, "lifecycle_state": "draft",
-            "requirements": {"paradigm": ["gate-based"], "max_qubit_count": 2},
-            "task_executions": [{
-                "task_id": "550e8400-e29b-41d4-a716-446655440000",
-                "status": "success",
-                "result_type": "probabilistic",
-                "backend": {"provider": "ibm", "name": "ibm_kyiv", "shots": 10000},
-                "verification_settings": vsettings,
-            }],
-        }).seal(capsule_dir=d, sealed_by="test")
+
+# --- Statistical equivalence is not in 0.1.0 (#15) --------------------------
+
+def test_verify_has_no_against_option():
+    """`--against` is cut from 0.1.0: the estimator is miscalibrated and returns
+    REJECTED on identical distributions above ~2 qubits. Tracked in #15."""
     runner = CliRunner()
-    result = runner.invoke(cli, [
-        "verify", "--against", str(tmp_path / "ref"),
-        "--json", str(tmp_path / "new"),
-    ])
-    data = json.loads(result.output)
-    assert data["verdict"] == "VERIFIED"
+    result = runner.invoke(cli, ["verify", "--against", ".", "."])
+    assert result.exit_code != 0
+    assert "no such option" in result.output.lower(), result.output
+
+
+def test_verify_help_does_not_advertise_statistical_equivalence():
+    result = CliRunner().invoke(cli, ["verify", "--help"])
+    out = result.output.lower()
+    assert "statistical" not in out, result.output
+    assert "epsilon" not in out, result.output

@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -161,14 +162,35 @@ class CapsuleVerifier:
         verification_settings: dict,
         seed: int = _NORMATIVE_SEED,
     ) -> dict[str, Any]:
-        """Bootstrap CI equivalence test on TVD.
+        """Bootstrap CI equivalence test on TVD. **Not supported in 0.1.0 — see #15.**
 
-        Decision matrix (spec §7):
+        This estimator is miscalibrated and its verdicts are not trustworthy. A
+        distribution compared against itself is REJECTED from roughly four qubits
+        upward: the plug-in TVD carries a noise floor of ``√((K−1)/πn)`` and the
+        bootstrap interval is displaced upward by it rather than corrected
+        downward. The interval also under-covers at the null by construction,
+        because TVD is not Hadamard-differentiable at ``p = q``.
+
+        The CLI surface for this (``verify --against``) is cut from 0.1.0. The
+        code is kept importable so work on #15 does not have to start by
+        resurrecting it. Do not build on the verdicts.
+
+        Full analysis and the measured behaviour of four candidate replacements:
+        ``docs/research/2026-08-10-tvd-equivalence-testing.md``
+
+        Decision matrix as implemented:
           - shots < min_shots           → INCONCLUSIVE
           - tvd_ci_upper <= epsilon      → VERIFIED
           - tvd_ci_lower > epsilon       → REJECTED
           - else                         → INCONCLUSIVE
         """
+        warnings.warn(
+            "verify_statistical is miscalibrated and unsupported in 0.1.0 (#15): "
+            "identical distributions are REJECTED above ~4 qubits. Verdicts are "
+            "not trustworthy. See docs/research/2026-08-10-tvd-equivalence-testing.md",
+            FutureWarning,
+            stacklevel=2,
+        )
         min_shots = verification_settings.get("min_shots", 100)
         tolerance_regime = verification_settings.get("tolerance_regime", "strict")
         epsilon = verification_settings.get("epsilon", 0.02)

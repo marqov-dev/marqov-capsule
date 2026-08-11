@@ -11,8 +11,7 @@ The format is an open standard (`spec/v1/`, CC-BY-4.0). The Python tooling is Ap
 ## Install
 
 ```bash
-pip install marqov-capsule                  # build, seal, validate, inspect
-pip install "marqov-capsule[verify]"        # adds numpy + scipy for statistical verification
+pip install marqov-capsule
 ```
 
 Requires Python 3.9+.
@@ -53,7 +52,7 @@ The `marqov-capsule` command provides six subcommands:
 |---|---|
 | `marqov-capsule init` | Scaffold a new draft `capsule.yaml` in the current directory |
 | `marqov-capsule seal` | Seal a draft capsule — scans for credentials, writes checksums, transitions state |
-| `marqov-capsule verify` | Verify integrity of a sealed capsule (all three digest-chain layers, `--id` for the trusted capsule ID) + optional statistical equivalence |
+| `marqov-capsule verify` | Verify integrity of a sealed capsule — all three digest-chain layers, `--id` for the trusted capsule ID |
 | `marqov-capsule inspect` | Print a human-readable summary of capsule metadata |
 | `marqov-capsule open` | Verify integrity and extract a capsule to a destination directory |
 | `marqov-capsule validate` | Validate a capsule against the JSON Schema without sealing — accepts a capsule directory or a `capsule.yaml` path |
@@ -63,7 +62,7 @@ marqov-capsule init --name bell-state-v1 --paradigm gate-based --qubits 2
 marqov-capsule seal .
 marqov-capsule validate .
 marqov-capsule inspect .
-marqov-capsule verify . --against /path/to/reference-capsule
+marqov-capsule verify .
 ```
 
 ## Lifecycle
@@ -96,35 +95,21 @@ Record the capsule ID at seal time and distribute it out of band. Without `--id`
 
 Note the limit: the digest chain detects modification, not forgery. Anyone who rewrites the payload, `.checksums`, and the manifest together produces a self-consistent capsule with a *different* ID — which is why the trusted ID has to come from somewhere other than the capsule. Capsules carry no signatures, so a capsule ID is only as trustworthy as the channel you received it over.
 
-## Reproducibility and statistical verification
+## Roadmap
 
-QPU results are inherently probabilistic — running the same circuit twice produces different shot distributions. The package handles this using bootstrap confidence intervals on total variation distance (TVD):
+**Statistical equivalence testing is not in this release.** Comparing two runs and getting a VERIFIED / REJECTED verdict is the natural companion to sealing, and it is the next thing being built — but the estimator we had was miscalibrated badly enough that a distribution compared *against itself* was rejected from roughly four qubits upward. Shipping it would have meant shipping a verdict that carries no information at realistic problem sizes.
 
-- **TVD** measures how far apart two probability distributions are (0 = identical, 1 = disjoint).
-- A bootstrap CI is computed with 9999 resamples at 95% confidence, using a fixed normative seed (12345) so the same capsule pair always yields the same verdict.
-- **Verdict**: `VERIFIED` (CI upper bound below threshold), `REJECTED` (CI lower bound above threshold), or `INCONCLUSIVE`.
+Rather than ship it caveated, it is cut until it is right. The investigation is written up in full, including the four candidate replacements that were measured and rejected and why:
 
-Statistical verification requires the `[verify]` extra:
+- [`docs/research/2026-08-10-tvd-equivalence-testing.md`](docs/research/2026-08-10-tvd-equivalence-testing.md) — why the plug-in estimator fails, why the bootstrap cannot be repaired for this functional, and the one-sided bound that does work
+- Tracked in [#15](https://github.com/marqov-dev/marqov-capsule/issues/15)
 
-```bash
-pip install "marqov-capsule[verify]"
-marqov-capsule verify . --against /path/to/reference-capsule
-```
+Also on the roadmap, with the research already done:
 
-### Who chooses the threshold
+- [#18](https://github.com/marqov-dev/marqov-capsule/issues/18) — credential scanner precision and recall, written up in [`docs/research/2026-08-11-credential-detection.md`](docs/research/2026-08-11-credential-detection.md)
+- [#16](https://github.com/marqov-dev/marqov-capsule/issues/16) — capsules carry no signatures, so the digest chain detects modification but not forgery
 
-The acceptance threshold belongs to whoever is doing the verifying, not to the artifact being verified. A capsule you downloaded is untrusted input, and if it supplied its own ε it could declare `epsilon: 1.0` and certify any comparison made against it.
-
-So ε comes from **verifier policy** — the default, or `--epsilon`. A capsule's declared `verification_settings` is advisory: it may make verification **stricter** but never looser, and when a declaration is overridden `verify` says so rather than silently substituting its own number.
-
-```bash
-marqov-capsule verify . --against ref/ --epsilon 0.01     # stricter than the 0.02 default
-marqov-capsule verify . --against ref/ --honor-calibration-drift
-```
-
-`min_shots` is never read from a capsule at all — a large declared value would force `INCONCLUSIVE` on every comparison, which is its own kind of unfalsifiability. `tolerance_regime: calibration_drift` widens the threshold, so it is honoured only when you opt in, and still bounded by the policy drift ceiling.
-
-`--against` verifies the integrity of **both** capsules before comparing anything. Counts that don't match their own seal are not the counts that were sealed.
+Contributions welcome on any of these. The research documents are meant to be a starting point rather than a specification — if you disagree with the analysis, the reproduction scripts are in the appendices.
 
 ## Spec
 
