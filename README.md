@@ -4,7 +4,7 @@ Open standard and tooling for reproducible quantum experiments.
 
 ## What is a capsule?
 
-A capsule is a sealed, tamper-evident record of a quantum computation. It contains a `capsule.yaml` manifest, a `.checksums` file listing SHA-256 digests of every payload file, and the payload files themselves (results, circuits, environment specs, etc.). Once sealed, the manifest embeds a `checksums_digest` and a capsule ID (SHA-256 of canonical JSON of the manifest), making the record immutable and cryptographically verifiable.
+A capsule is a sealed, tamper-evident record of a quantum computation. It contains a `capsule.yaml` manifest, a `.checksums` file listing SHA-256 digests of every payload file, and the payload files themselves (results, circuits, environment specs, etc.). Once sealed, the manifest embeds a `checksums_digest` and a capsule ID (SHA-256 of canonical JSON of the manifest). The capsule ID is derived from the content, so it names those exact bytes and nothing else — altering a capsule does not change it, it produces a different capsule. Capsules carry no signatures, so this makes them **tamper-evident**, not authenticated: the digest chain detects modification, not forgery.
 
 The format is an open standard (`spec/v1/`, CC-BY-4.0). The Python tooling is Apache 2.0. Both can be used independently.
 
