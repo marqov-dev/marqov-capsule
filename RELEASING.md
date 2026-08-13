@@ -52,8 +52,6 @@ step (PyPI never lets a version be reused), so validate hard and tag last.
       Nothing fetches a prose URL, so no unit test catches a dead one. Fails only
       on non-resolving hosts; a 4xx from an auth-gated API or a transient timeout
       is a WARN — eyeball each so an outage on release day doesn't block the tag.
-      *Known WARN:* the schema `$id` host `marqov.dev` resolves but refuses
-      connections. See "Open question" below.
 - [ ] Packaging invariants: `pytest tests/test_packaging.py` — exactly one schema
       ships, it is byte-identical to `spec/v1/`, and no extra advertises an
       unsupported feature.
@@ -120,22 +118,24 @@ with more care than code changes.
 path (#50). Publishing is what unblocks replacing them — a release here is a
 security delivery mechanism, not only a milestone.
 
-### Open question — the schema `$id` does not resolve
+### The schema `$id` host
 
 `spec/v1/capsule-schema.json` declares:
 
 ```json
-"$id": "https://marqov.dev/schemas/capsule/v1/capsule-schema.json"
+"$id": "https://marqov.ai/schemas/capsule/v1/capsule-schema.json"
 ```
 
-`marqov.dev` resolves to a parking IP and refuses connections on 443. A JSON
-Schema `$id` is an identifier and need not dereference, so this is legal — but
-for a spec whose purpose is independent implementation, someone following the
-canonical URL gets `Connection refused`.
+This previously read `marqov.dev`, which is not a domain in use — the product
+is `marqov.ai` (marketing) and `app.marqov.ai` (application). It originated in
+agent-written design docs and propagated into the schema, the spec README and a
+test. Corrected before the first tag, because `$id` is the schema's canonical
+identity and changing it after publication breaks anyone who pinned it.
 
-Changing `$id` after publication breaks anyone who pinned it, so **decide before
-the first tag**. Options: serve the schema at that URL; point `$id` at a URL that
-resolves; or keep it and document that it is a bare identifier.
+`marqov.ai/schemas/…` returns 404 today. A JSON Schema `$id` is an identifier
+and need not dereference, so this does not block anything — but serving the
+file there is a genuine nice-to-have for a CC-BY spec meant to be implemented
+independently. Not on the release critical path.
 
 ## Not adopted from the SDK
 

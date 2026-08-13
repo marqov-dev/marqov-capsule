@@ -237,7 +237,7 @@ The JSON Schema for `capsule.yaml` is in `capsule-schema.json` in this directory
 
 The schema is also bundled into the `marqov-capsule` Python package and used for runtime validation. Third-party implementations should validate against the schema before accepting a capsule as conformant.
 
-Schema `$id`: `https://marqov.dev/schemas/capsule/v1/capsule-schema.json`
+Schema `$id`: `https://marqov.ai/schemas/capsule/v1/capsule-schema.json`
 
 ---
 
