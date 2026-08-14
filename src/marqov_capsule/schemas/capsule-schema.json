@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://marqov.dev/schemas/capsule/v1/capsule-schema.json",
+  "$id": "https://marqov.ai/schemas/capsule/v1/capsule-schema.json",
   "title": "Marqov Capsule v1",
   "description": "Schema for capsule.yaml — the manifest of a reproducible, portable quantum experiment.",
   "type": "object",

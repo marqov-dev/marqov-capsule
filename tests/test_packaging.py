@@ -25,7 +25,7 @@ def test_bundled_schema_is_byte_identical_to_the_spec():
 
 
 def test_schema_id_points_at_one_canonical_host():
-    assert json.loads(BUNDLED.read_text())["$id"].startswith("https://marqov.dev/")
+    assert json.loads(BUNDLED.read_text())["$id"].startswith("https://marqov.ai/")
 
 
 def test_no_extras_advertise_unsupported_features():
@@ -43,3 +43,31 @@ def test_readme_does_not_claim_cryptographic_verifiability():
     readme = (ROOT / "README.md").read_text().lower()
     assert "cryptographically verifiable" not in readme
     assert "immutable" in readme  # content-addressed immutability IS true
+
+
+def test_no_dead_domain_references():
+    """The product domain is marqov.ai (marketing) and app.marqov.ai (app).
+
+    A sibling `.dev` domain is not in use. It originated in agent-written design
+    docs, propagated into the schema `$id`, the spec README and a test, and then
+    read as authoritative to everyone who found it afterwards. Pinned so it
+    cannot come back silently.
+
+    The needle is assembled at runtime so this guard does not trip on itself.
+    """
+    needle = "marqov" + "." + "dev"
+    import subprocess
+    tracked = subprocess.run(["git", "ls-files"], capture_output=True, text=True,
+                             cwd=ROOT).stdout.split()
+    hits = []
+    for rel in tracked:
+        if rel == "RELEASING.md":       # documents the correction itself
+            continue
+        try:
+            text = (ROOT / rel).read_text(encoding="utf-8", errors="replace")
+        except (OSError, IsADirectoryError):
+            continue
+        for i, line in enumerate(text.splitlines(), 1):
+            if needle in line:
+                hits.append(f"{rel}:{i}")
+    assert not hits, f"{needle} is not a domain in use: {hits}"
