@@ -4,7 +4,7 @@ description: "Fixture: hybrid gate-based and analog tasks"
 lifecycle_state: "sealed"
 sealed_at: "2026-06-11T00:00:01Z"
 sealed_by: "conformance-fixture"
-checksums_digest: "sha256:4b57a5444b15b7a52aedaf0041eee4ba8835d8f75f07f4e3b7a04c4a6d3d4ec9"
+checksums_digest: "sha256:6044d1cc6c3e5b737d670b5381e6691199dbc928c0a872d26db6f6d24b459687"
 requirements:
   paradigm:
     - "gate-based"

@@ -4,8 +4,8 @@ description: Child capsule adapted from Original Run
 lifecycle_state: sealed
 sealed_at: '2026-06-11T00:00:02Z'
 sealed_by: conformance-fixture
-checksums_digest: sha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356
-derived_from: daa4b97ea6e49911cd8264a2259158e551ede25441295658b727a9045d9ddf2b
+checksums_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+derived_from: 4fc52a8a5b7fed766e065d09dcca47b83e210aabb37da11f0e2f55047dc95740
 requirements:
   paradigm:
   - gate-based

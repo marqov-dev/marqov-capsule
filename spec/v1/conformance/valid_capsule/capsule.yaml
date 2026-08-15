@@ -6,7 +6,7 @@ created_by: "conformance-fixture"
 lifecycle_state: "sealed"
 sealed_at: "2026-06-11T00:00:01Z"
 sealed_by: "conformance-fixture"
-checksums_digest: "sha256:7d61a069c269a8c2398644069b9fc4ecac48958136be4125aa9c44fdf61dfeb9"
+checksums_digest: "sha256:60a512e68a2ded62db8c516e4faec51044829eb40235f4ee2c94742e952e15df"
 requirements:
   paradigm:
     - "gate-based"
