@@ -18,13 +18,16 @@ def _is_within_root(rel_path: str, root: Path) -> bool:
     """True if ``root / rel_path`` stays inside ``root``.
 
     Rejects absolute paths and ``..`` escapes. Uses lexical normalisation
-    (not ``resolve()``) so the check is independent of symlinks, which are
-    handled separately by the caller.
+    anchored at an *absolute* root (not bare ``normpath``) so the check is
+    independent of symlinks — those are handled separately by the caller — and
+    so a capsule addressed as ``.`` does not false-alarm (#60): bare
+    ``normpath('.')`` stays ``'.'`` while ``normpath('./rel')`` becomes ``rel``,
+    which never shares the ``'.'`` prefix.
     """
     if os.path.isabs(rel_path):
         return False
-    root_str = os.path.normpath(str(root))
-    full = os.path.normpath(os.path.join(root_str, rel_path))
+    root_str = os.path.abspath(str(root))
+    full = os.path.abspath(os.path.join(root_str, rel_path))
     return full == root_str or full.startswith(root_str + os.sep)
 
 
@@ -297,19 +300,49 @@ class CapsuleVerifier:
                 "extra": [],
             }
 
-        raw = checksums_file.read_text()
+        # .checksums is untrusted input: malformed bytes must produce a FAIL
+        # verdict, never an uncaught traceback out of the verifier (#61).
+        try:
+            raw = checksums_file.read_text()
+        except (UnicodeDecodeError, OSError):
+            return {
+                "status": "fail",
+                "passed": False,
+                "error": ".checksums could not be read as text",
+                "files": {},
+                "mismatched": [],
+                "missing": [],
+                "extra": [],
+            }
         # Support both YAML dict format AND legacy "digest  path" lines
         try:
             expected = yaml.safe_load(raw) or {}
             if not isinstance(expected, dict):
                 raise ValueError("not a mapping")
         except Exception:
-            expected = {}
-            for line in raw.strip().split("\n"):
-                if not line.strip():
-                    continue
-                digest, name = line.split("  ", 1)
-                expected[name] = digest
+            # Legacy parser: a line without the "  " separator would raise on
+            # unpacking, so any malformed line fails the whole capsule (#61).
+            try:
+                expected = {}
+                for line in raw.strip().split("\n"):
+                    if not line.strip():
+                        continue
+                    digest, name = line.split("  ", 1)
+                    expected[name] = digest
+            except ValueError:
+                return {
+                    "status": "fail",
+                    "passed": False,
+                    "error": ".checksums is malformed and could not be parsed",
+                    "files": {},
+                    "mismatched": [],
+                    "missing": [],
+                    "extra": [],
+                }
+
+        # Resolve the capsule root once, up front. Every checksummed file must
+        # resolve to a real path *inside* this, or it is rejected before any read.
+        resolved_root = capsule_path.resolve()
 
         files: dict[str, dict] = {}
         mismatched: list[str] = []
@@ -319,6 +352,14 @@ class CapsuleVerifier:
         all_match = True
 
         for rel_path, expected_digest in expected.items():
+            # Keys must be strings; a non-string mapping key (e.g. YAML null or a
+            # nested list) must fail, never raise from a path operation (#61).
+            if not isinstance(rel_path, str):
+                files[str(rel_path)] = {"expected": expected_digest, "actual": None,
+                                        "match": False, "error": "non-string .checksums key"}
+                invalid.append(str(rel_path))
+                all_match = False
+                continue
             # Reject keys that escape the capsule root (absolute or ``..``) before
             # touching the filesystem — a crafted .checksums must not read outside.
             if not _is_within_root(rel_path, capsule_path):
@@ -335,6 +376,20 @@ class CapsuleVerifier:
                 symlinks.append(rel_path)
                 all_match = False
                 continue
+            # The lexical check above is symlink-blind: a *parent* directory that
+            # is itself a symlink pointing outside the capsule would let a crafted
+            # key read an arbitrary file (#54). Resolve real paths and confirm
+            # containment against the resolved root BEFORE any read.
+            try:
+                resolved = file_path.resolve()
+            except (OSError, RuntimeError):
+                resolved = None
+            if resolved is None or not resolved.is_relative_to(resolved_root):
+                files[rel_path] = {"expected": expected_digest, "actual": None,
+                                   "match": False, "error": "path escapes capsule root"}
+                invalid.append(rel_path)
+                all_match = False
+                continue
             if not file_path.exists():
                 files[rel_path] = {"expected": expected_digest, "actual": None, "match": False}
                 missing.append(rel_path)
@@ -347,8 +402,11 @@ class CapsuleVerifier:
                 mismatched.append(rel_path)
                 all_match = False
 
-        # Walk the tree once: collect regular files (for "extra") and flag any
-        # symlink anywhere in the capsule — symlinks are an exfiltration vector.
+        # Walk the tree once: collect every on-disk entry (for "extra") and flag
+        # any symlink anywhere in the capsule — symlinks are an exfiltration
+        # vector. The closed set is enforced over ALL entry types, not just
+        # regular files: a FIFO/socket/device node injected into a sealed capsule
+        # must not slip past the check by failing ``is_file()`` (#56).
         actual_files = set()
         for fp in capsule_path.rglob("*"):
             rel = str(fp.relative_to(capsule_path))
@@ -357,7 +415,9 @@ class CapsuleVerifier:
                     symlinks.append(rel)
                     all_match = False
                 continue
-            if fp.is_file() and rel not in UNCHECKSUMMED_ROOT_FILES:
+            if fp.is_dir():
+                continue
+            if rel not in UNCHECKSUMMED_ROOT_FILES:
                 actual_files.add(rel)
         # .checksums pins a *closed* set: anything on disk but not listed is an
         # injected file. It leaves checksums_digest and the capsule ID intact,
@@ -444,14 +504,34 @@ class CapsuleVerifier:
                         f".checksums hashes to {actual}"
                     )
 
-            # Layer 3 — manifest identity
-            capsule_id = compute_capsule_id(manifest)
-            if expected_id is not None:
-                capsule_id_match = capsule_id == expected_id
-                if not capsule_id_match:
-                    errors.append(
-                        f"capsule ID mismatch: expected {expected_id}, recomputed {capsule_id}"
-                    )
+            # Layer 3 — manifest identity. The manifest is untrusted: a value
+            # that cannot be RFC 8785 canonicalised (NaN, non-string keys, …)
+            # must fail verification, never raise out of the verifier (#61).
+            try:
+                capsule_id = compute_capsule_id(manifest)
+            except Exception as exc:
+                errors.append(
+                    f"capsule ID could not be computed: {exc.__class__.__name__}"
+                )
+            else:
+                if expected_id is not None:
+                    capsule_id_match = capsule_id == expected_id
+                    if not capsule_id_match:
+                        errors.append(
+                            f"capsule ID mismatch: expected {expected_id}, recomputed {capsule_id}"
+                        )
+
+        authenticated = capsule_id_match is True
+        # Surface the authentication state for machine consumers. Without a
+        # trusted --id the manifest is unauthenticated even when every other
+        # layer passes; text mode already prints this note, so JSON must carry
+        # it too or a CI gate reading `status` alone accepts a forgery (#58).
+        warning = None
+        if not authenticated:
+            warning = (
+                "manifest is not authenticated — nothing on disk can attest to it; "
+                "pass --id <trusted-id> to verify layer 3 (spec §6)"
+            )
 
         return {
             "status": "fail" if errors else "pass",
@@ -459,7 +539,8 @@ class CapsuleVerifier:
             "checksums_digest_match": checksums_digest_match,
             "capsule_id": capsule_id,
             "capsule_id_match": capsule_id_match,
-            "manifest_authenticated": capsule_id_match is True,
+            "manifest_authenticated": authenticated,
+            "warning": warning,
             "errors": errors,
         }
 
