@@ -1,10 +1,20 @@
 import hashlib
 from pathlib import Path
-import yaml
 import pytest
 from marqov_capsule.builder import CapsuleBuilder
 from marqov_capsule._canonical import compute_capsule_id, load_manifest_yaml
 from marqov_capsule.redactor import RedactorError
+
+
+def _parse_checksums(text: str) -> dict[str, str]:
+    """Parse the spec-format .checksums ('sha256:<hex>  <path>' lines)."""
+    out: dict[str, str] = {}
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        digest, path = line.split("  ", 1)
+        out[path] = digest
+    return out
 
 
 def test_start_capsule_sets_required_fields():
@@ -48,7 +58,7 @@ def test_save_checksums_excludes_capsule_yaml(tmp_path):
 
     b = CapsuleBuilder()
     checksums_path = b.save_checksums(capsule_dir)
-    checksums = yaml.safe_load(checksums_path.read_text())
+    checksums = _parse_checksums(checksums_path.read_text())
 
     assert "capsule.yaml" not in checksums
     assert ".checksums" not in checksums
@@ -97,7 +107,7 @@ def test_save_checksums_skips_symlinks(tmp_path):
 
     b = CapsuleBuilder()
     checksums_path = b.save_checksums(capsule_dir)
-    checksums = yaml.safe_load(checksums_path.read_text())
+    checksums = _parse_checksums(checksums_path.read_text())
 
     assert "payload/link.txt" not in checksums
     assert "payload/results.json" in checksums

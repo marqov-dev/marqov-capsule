@@ -4,7 +4,7 @@ description: Parent capsule in a provenance chain
 lifecycle_state: sealed
 sealed_at: '2026-06-11T00:00:01Z'
 sealed_by: conformance-fixture
-checksums_digest: sha256:85ec7cda9090637cb21abd150a471010ff7b2789ea09934ed69e9b370e96c131
+checksums_digest: sha256:60b89ba62c852be3e00cfe7d93601049e7e119477e01e7d11b197b12052231de
 requirements:
   paradigm:
   - gate-based
