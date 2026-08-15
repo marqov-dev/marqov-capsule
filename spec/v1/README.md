@@ -173,7 +173,7 @@ capsule_id = hex(SHA-256(canonical_json(capsule.yaml)))
 ```
 
 Canonical JSON follows RFC 8785 (JSON Canonicalization Scheme, JCS):
-- Object keys sorted as arrays of UTF-16 code units by unsigned value (RFC 8785 §3.2.3 — this differs from code-point order for characters outside the Basic Multilingual Plane)
+- Object keys sorted as arrays of UTF-16 code units, compared as unsigned integers (RFC 8785 §3.2.3); note that this order differs from Unicode code-point order for characters outside the Basic Multilingual Plane
 - No insignificant whitespace
 - Number serialisation per ECMAScript `Number::toString` (RFC 8785 §3.2.2.3)
 - UTF-8 encoding
