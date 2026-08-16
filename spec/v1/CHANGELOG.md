@@ -8,6 +8,10 @@ Version history for the Marqov Capsule format specification.
 
 Clarifications to the digest scheme and manifest canonicalization ahead of the first tag, making the format byte-reproducible across independent implementations. See [`docs/research/2026-08-14-checksums-canonicalization.md`](../../docs/research/2026-08-14-checksums-canonicalization.md) and [#20](https://github.com/marqov-dev/marqov-capsule/issues/20).
 
+### Schema
+
+- Added `annealing` to the `requirements.paradigm` enum (now `gate-based`, `analog`, `classical`, `annealing`) so quantum-annealing workloads (e.g. D-Wave) can produce schema-valid capsules. The CLI already advertised `annealing`; this resolves the mismatch by extending the schema (the value the product needs) rather than dropping it from the CLI.
+
 ### Digest scheme
 
 - **`.checksums` line format is `sha256:<hex>  <relative/path>`**, with the `sha256:` algorithm prefix — superseding the v1.0.0 entry's prefix-less `<sha256hex>  <path>`, which disagreed with §2.2/§5 of the spec. The reference implementation previously emitted a YAML mapping; it now emits this line format.
