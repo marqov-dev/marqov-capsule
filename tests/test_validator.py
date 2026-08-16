@@ -109,3 +109,25 @@ def test_sealed_capsule_with_required_fields_passes():
         "requirements": {"paradigm": ["gate-based"], "max_qubit_count": 2},
     })
     assert result["valid"] is True
+
+
+def test_annealing_paradigm_validates():
+    """#53: D-Wave / annealing workloads must produce schema-valid capsules."""
+    result = CapsuleValidator.validate({
+        "version": "1.0.0",
+        "name": "dwave-run",
+        "lifecycle_state": "runnable",
+        "requirements": {"paradigm": ["annealing"], "max_qubit_count": 2000},
+    })
+    assert result["valid"] is True
+
+
+def test_unknown_paradigm_still_rejected():
+    """Adding 'annealing' must not weaken the enum — junk still fails."""
+    result = CapsuleValidator.validate({
+        "version": "1.0.0",
+        "name": "x",
+        "lifecycle_state": "runnable",
+        "requirements": {"paradigm": ["photonic"], "max_qubit_count": 2},
+    })
+    assert result["valid"] is False

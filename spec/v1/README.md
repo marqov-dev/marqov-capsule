@@ -80,7 +80,7 @@ The full schema is in `capsule-schema.json` (JSON Schema 2020-12). Key fields:
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `paradigm` | array of strings | yes | Values: `gate-based`, `analog`, `classical` |
+| `paradigm` | array of strings | yes | Values: `gate-based`, `analog`, `classical`, `annealing` |
 | `max_qubit_count` | integer ≥ 1 | yes | |
 | `gate_set` | array of strings | no | e.g. `["CX", "RZ", "SX"]` |
 
