@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import hashlib
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
 import yaml
 
-from marqov_capsule._canonical import compute_capsule_id
+from marqov_capsule._canonical import coerce_for_canonical, compute_capsule_id
 from marqov_capsule.redactor import CapsuleRedactor
 
 # Root-level files deliberately left out of .checksums: .checksums cannot hash
@@ -18,6 +19,44 @@ from marqov_capsule.redactor import CapsuleRedactor
 # CapsuleVerifier imports this so the seal and verify sides cannot drift: a file
 # one side skips and the other flags is either a false failure or a blind spot.
 UNCHECKSUMMED_ROOT_FILES = frozenset({".checksums", "capsule.yaml"})
+
+# Lifecycle states that a capsule can never be sealed out of. Sealing is a
+# one-way transition (spec §4: draft/runnable -> sealed -> archived, no
+# backward moves); re-sealing one of these would mint a fresh ID over mutated
+# content while presenting the result as an original seal.
+_TERMINAL_STATES = frozenset({"sealed", "archived"})
+
+
+def _checksum_path(rel: str) -> str:
+    """Return the spec-canonical form of a payload path for the ``.checksums`` file.
+
+    The path is NFC-normalised (so a decomposed vs precomposed filename hashes to
+    one value, §2.2/§5) and then a minimal, unambiguous set of bytes is
+    percent-encoded with UPPERCASE triplets — only the four that would otherwise
+    break the line grammar or the ``/`` separator:
+
+      * ``%``  -> ``%25``  (must go first, so an existing ``%`` is not aliased)
+      * ``\\`` -> ``%5C``  (a literal backslash in a filename, not a separator)
+      * ``\\n`` -> ``%0A`` and ``\\r`` -> ``%0D``  (would split the line)
+
+    Spaces are left literal (the field separator is two spaces, and paths may
+    legitimately contain single spaces); ``/`` separators are preserved.
+    """
+    rel = unicodedata.normalize("NFC", rel)
+    rel = rel.replace("%", "%25")
+    rel = rel.replace("\\", "%5C")
+    rel = rel.replace("\n", "%0A")
+    rel = rel.replace("\r", "%0D")
+    return rel
+
+
+class CapsuleStateError(RuntimeError):
+    """Raised when an operation is illegal for the capsule's lifecycle state.
+
+    A subclass of RuntimeError so existing ``except RuntimeError`` handlers keep
+    working, while callers that want to react specifically (e.g. the CLI, which
+    turns it into a clean non-zero exit) can catch it by name.
+    """
 
 
 class CapsuleBuilder:
@@ -161,9 +200,25 @@ class CapsuleBuilder:
           (Caller must call save_capsule() after this to write capsule.yaml.)
 
         Returns redactor scan result dict.
+        Raises CapsuleStateError if the capsule is already sealed or archived.
         Raises ValueError if requirements not set.
         Raises RedactorError if secrets found and not warn_only.
         """
+        # Lifecycle gate: sealing is one-way. Refuse to re-seal a capsule that is
+        # already sealed/archived — otherwise re-running seal on mutated content
+        # silently mints a new ID and a fresh checksums_digest/sealed_at, which
+        # contradicts the immutability guarantee. This is checked against the
+        # manifest's own lifecycle_state (not the transient _sealed flag) so the
+        # CLI/from_manifest path and the in-process path enforce it identically. (#59)
+        state = self._capsule.get("lifecycle_state")
+        if state in _TERMINAL_STATES:
+            raise CapsuleStateError(
+                f"Cannot seal a capsule already in '{state}' state: sealing is a "
+                "one-way transition and re-sealing would mint a new ID over "
+                "possibly-mutated content. Start from a fresh draft to create a "
+                "derived capsule."
+            )
+
         req = self._capsule.get("requirements")
         if not req or "paradigm" not in req or "max_qubit_count" not in req:
             raise ValueError(
@@ -171,6 +226,15 @@ class CapsuleBuilder:
             )
 
         capsule_path = Path(capsule_dir)
+
+        # Step 0: materialise the in-memory manifest so the credential scan below
+        # covers secrets that live ONLY in the manifest (e.g. a token passed as a
+        # parameter). The CLI path scans capsule.yaml by accident of ordering
+        # (init wrote it first); the from_manifest().seal() API path did not, so a
+        # manifest-borne secret sealed unscanned. Writing it here closes that gap
+        # on both entry points. save_capsule (called after this) rewrites it with
+        # the final sealed fields; save_checksums excludes it either way. (#57)
+        self.save_capsule(capsule_path / "capsule.yaml")
 
         # Step 1: credential scan
         redactor = CapsuleRedactor(capsule_path, mode="warn_only" if warn_only else "block")
@@ -199,17 +263,35 @@ class CapsuleBuilder:
         return scan_result
 
     def save_capsule(self, filepath: str | Path) -> Path:
-        """Write capsule.yaml to disk."""
+        """Write capsule.yaml to disk.
+
+        Serialises the same coerced form used to compute the capsule ID
+        (``coerce_for_canonical``): datetimes are written as their ISO 8601
+        string, not as a raw YAML timestamp. Otherwise the on-disk value
+        (``2026-06-11 00:00:00``, space-separated, read back as a string) would
+        disagree with the ID computed from ``datetime.isoformat()`` (``T``
+        separator), so a verifier recomputing the ID from the file would never
+        match the ID the sealer published. (#20)
+        """
         path = Path(filepath)
         if path.is_dir() or not path.suffix:
             path = path / "capsule.yaml"
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
-            yaml.dump(self._capsule, f, default_flow_style=False, sort_keys=False)
+            yaml.dump(coerce_for_canonical(self._capsule), f,
+                      default_flow_style=False, sort_keys=False)
         return path
 
     def save_checksums(self, capsule_dir: str | Path) -> Path:
         """Compute and write .checksums for all files except .checksums and capsule.yaml.
+
+        Emits the normative spec format (§2.2/§5): newline-delimited
+        ``sha256:<hex>  <relative-path>`` lines (two-space separator), sorted
+        lexicographically by path, one line per payload file. Because
+        ``checksums_digest`` is the SHA-256 of these exact bytes, this is the
+        interoperable form a third-party implementation reads — the previous
+        YAML-mapping form produced a different digest, hence a different capsule
+        ID, for the identical payload set. (#20)
 
         Raises RuntimeError if called after seal_capsule() — rewriting .checksums would
         make the embedded checksums_digest stale and silently break the Merkle chain.
@@ -220,21 +302,27 @@ class CapsuleBuilder:
                 "Call seal_capsule() again if payload files have changed."
             )
         capsule_path = Path(capsule_dir)
-        checksums: dict[str, str] = {}
+        entries: list[tuple[str, str]] = []
         for file_path in sorted(capsule_path.rglob("*")):
             # Never follow symlinks — hashing a link would enroll an outside file's
             # content into this capsule (exfiltration when re-sealing a received capsule).
             if file_path.is_symlink():
                 continue
             if file_path.is_file():
-                rel = str(file_path.relative_to(capsule_path))
+                # as_posix() gives the '/'-separated relative path on every OS;
+                # the root exclusion is by that relative name, not the basename.
+                rel = file_path.relative_to(capsule_path).as_posix()
                 if rel in UNCHECKSUMMED_ROOT_FILES:
                     continue
                 digest = hashlib.sha256(file_path.read_bytes()).hexdigest()
-                checksums[rel] = f"sha256:{digest}"
+                entries.append((_checksum_path(rel), f"sha256:{digest}"))
+        # Spec §5: one "sha256:<hex>  <path>" line per file, sorted byte-wise by
+        # the (encoded) path. Empty (no payload files) is a zero-byte file, whose
+        # digest still pins "no payload".
+        entries.sort(key=lambda e: e[0].encode("utf-8"))
+        lines = [f"{digest}  {path}\n" for path, digest in entries]
         checksums_path = capsule_path / ".checksums"
-        with open(checksums_path, "w") as f:
-            yaml.dump(checksums, f, default_flow_style=False, sort_keys=True)
+        checksums_path.write_text("".join(lines), encoding="utf-8")
         return checksums_path
 
     def to_yaml(self) -> str:

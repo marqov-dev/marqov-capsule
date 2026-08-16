@@ -2,7 +2,7 @@ import json
 import sys
 from pathlib import Path
 import click
-from marqov_capsule.builder import CapsuleBuilder
+from marqov_capsule.builder import CapsuleBuilder, CapsuleStateError
 from marqov_capsule.redactor import CapsuleRedactor, RedactorError
 from marqov_capsule._canonical import load_manifest_yaml
 
@@ -73,6 +73,14 @@ def seal(directory, warn_only, dry_run, sealed_by, as_json):
             sealed_by=sealed_by or "marqov-capsule-cli",
             warn_only=warn_only,
         )
+    except CapsuleStateError as e:
+        # Already sealed/archived: refuse rather than silently re-seal mutated
+        # content with a fresh ID. Same gate the Python API enforces. (#59)
+        if as_json:
+            click.echo(json.dumps({"status": "error", "message": str(e)}, indent=2))
+        else:
+            click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
     except RedactorError as e:
         if as_json:
             click.echo(json.dumps({"status": "error", "message": str(e)}, indent=2))

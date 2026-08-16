@@ -4,6 +4,23 @@ Version history for the Marqov Capsule format specification.
 
 ---
 
+## Unreleased
+
+Clarifications to the digest scheme and manifest canonicalization ahead of the first tag, making the format byte-reproducible across independent implementations. See [`docs/research/2026-08-14-checksums-canonicalization.md`](../../docs/research/2026-08-14-checksums-canonicalization.md) and [#20](https://github.com/marqov-dev/marqov-capsule/issues/20).
+
+### Digest scheme
+
+- **`.checksums` line format is `sha256:<hex>  <relative/path>`**, with the `sha256:` algorithm prefix — superseding the v1.0.0 entry's prefix-less `<sha256hex>  <path>`, which disagreed with §2.2/§5 of the spec. The reference implementation previously emitted a YAML mapping; it now emits this line format.
+- Pinned the byte-exact `.checksums` grammar (§5, Layer 1): two-space separator, lowercase hex, `/` path separator, Unicode NFC, narrow percent-encoding of `LF`/`CR`/`%`/`\`, byte-wise path sort, LF framing with a trailing newline, and a zero-length file for an empty payload.
+- **Capsule IDs re-base.** Because `checksums_digest` is the SHA-256 of the `.checksums` bytes, this format change alters every capsule ID. Done before the first public tag, while no ID is published; capsules sealed under the old YAML-mapping form still verify, as the verifier reads both.
+
+### Canonicalization
+
+- Pinned parse-time conformance rules (§5, Layer 3): JSON-aligned (YAML 1.2 Core) scalar typing, decimal-only integers bounded to 2⁵³−1, `NaN`/`Infinity` rejected, `-0`→`0`, NFC on string values and keys, and unique string mapping keys.
+- Corrected the key-ordering description to UTF-16 code units per RFC 8785 §3.2.3 (was "code point order").
+
+---
+
 ## v1.0.0 — 2026-06-13
 
 Initial specification release.

@@ -26,20 +26,43 @@ def open_cmd(capsule, dest, expected_id, as_json):
                 click.echo(f"  {err}", err=True)
         sys.exit(1)
 
+    # Even on a pass, the manifest may be unauthenticated (no trusted --id).
+    # Machine consumers must see the same warning text mode already prints, so a
+    # forged-but-self-consistent capsule is not silently accepted (#58).
+    warning = check.get("warning")
+
     if dest:
         dest_path = Path(dest)
         dest_path.mkdir(parents=True, exist_ok=True)
+        opened_to = dest_path / capsule_path.name
         # symlinks=True copies links as links rather than materialising their target
         # content into the destination (defence-in-depth; verify_checksums already
-        # rejects capsules containing symlinks).
-        shutil.copytree(str(capsule_path), str(dest_path / capsule_path.name),
-                        dirs_exist_ok=True, symlinks=True)
+        # rejects capsules containing symlinks). A non-regular member (FIFO/socket/
+        # device) makes copytree raise shutil.Error — fail cleanly, no traceback.
+        try:
+            shutil.copytree(str(capsule_path), str(opened_to),
+                            dirs_exist_ok=True, symlinks=True)
+        except (shutil.Error, OSError) as e:
+            if as_json:
+                click.echo(json.dumps(
+                    {"status": "error", "message": "could not extract capsule", "detail": str(e)},
+                    indent=2))
+            else:
+                click.echo(f"Error: could not extract capsule: {e}", err=True)
+            sys.exit(1)
         if as_json:
-            click.echo(json.dumps({"status": "opened", "dest": str(dest_path / capsule_path.name)}, indent=2))
+            payload = {"status": "opened", "dest": str(opened_to), "warning": warning}
+            click.echo(json.dumps(payload, indent=2))
         else:
-            click.echo(f"Opened to: {dest_path / capsule_path.name}")
+            click.echo(f"Opened to: {opened_to}")
+            if warning:
+                click.echo(f"  Warning: {warning}", err=True)
     else:
         if as_json:
-            click.echo(json.dumps({"status": "verified", "capsule": str(capsule_path)}, indent=2))
+            click.echo(json.dumps(
+                {"status": "verified", "capsule": str(capsule_path), "warning": warning},
+                indent=2))
         else:
             click.echo(f"Verified: {capsule_path}")
+            if warning:
+                click.echo(f"  Warning: {warning}", err=True)

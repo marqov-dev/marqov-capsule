@@ -310,7 +310,9 @@ def test_nested_capsule_yaml_is_checksummed(tmp_path):
     (payload / "results.json").write_text('{"counts": {"00": 1}}')
     (capsule_dir / "capsule.yaml").write_text("version: '1.0.0'\n")
 
-    checksums = yaml.safe_load(CapsuleBuilder().save_checksums(capsule_dir).read_text())
+    raw = CapsuleBuilder().save_checksums(capsule_dir).read_text()
+    checksums = {line.split("  ", 1)[1]: line.split("  ", 1)[0]
+                 for line in raw.splitlines() if line.strip()}
     assert "payload/capsule.yaml" in checksums
     assert "capsule.yaml" not in checksums
 

@@ -35,13 +35,13 @@ The manifest. A YAML file that conforms to `capsule-schema.json`. It describes t
 
 ### 2.2 `.checksums`
 
-A newline-delimited text file written at seal time. Each line has the form:
+A newline-delimited UTF-8 text file written at seal time. Each line has the form:
 
 ```
 sha256:<hex>  <relative-path>
 ```
 
-One entry per payload file. `capsule.yaml` and `.checksums` itself are excluded. The file is sorted lexicographically by path. Its SHA-256 hash becomes `checksums_digest` in the manifest.
+— a `sha256:` prefix, 64 lowercase hex characters, exactly two ASCII spaces, then the payload file's capsule-relative path. One entry per payload file; `capsule.yaml` and `.checksums` itself are excluded. Lines are sorted in byte-wise ascending order of the encoded path and terminated by a single `LF`; a capsule with no payload files has a zero-length `.checksums`. Its SHA-256 becomes `checksums_digest` in the manifest. Because these bytes are hashed into the capsule ID, the exact byte grammar is normative — see §5, Layer 1.
 
 ### 2.3 Payload files
 
@@ -143,13 +143,20 @@ The digest chain has three layers:
 
 ### Layer 1: Payload file digests
 
-For each payload file (excluding `capsule.yaml` and `.checksums`):
+For each payload file (excluding `capsule.yaml` and `.checksums`), `.checksums` contains one line:
 
 ```
 sha256:<hex(SHA-256(file_bytes))>  <relative_path>
 ```
 
-Lines are sorted lexicographically by path. Written to `.checksums`.
+Because these bytes are hashed into `checksums_digest` and hence the capsule ID, the serialisation is byte-exact and normative:
+
+- **Digest**: the literal prefix `sha256:` followed by exactly 64 lowercase hex characters (`[a-f0-9]{64}`; uppercase MUST NOT be used). A reader MUST reject a line whose algorithm prefix it does not recognise rather than guess. Future spec versions may register additional prefixes (e.g. `sha512:`) without invalidating existing IDs.
+- **Separator**: exactly two ASCII space characters (`0x20 0x20`).
+- **Path**: the file's capsule-relative path, using `/` as the separator on every platform. It MUST be relative and MUST NOT contain `..` or be absolute. Paths MUST be Unicode NFC-normalised before writing. The bytes `LF` (`%0A`), `CR` (`%0D`), `%` (`%25`), and `\` (`%5C`) — and only those — MUST be percent-encoded (RFC 3986, uppercase hex triplet); a space is left literal, since the fixed two-space separator keeps the line unambiguous.
+- **Order**: lines are sorted in byte-wise ascending order of the encoded path (ordinal comparison, not locale- or codepoint-collated).
+- **Framing**: UTF-8, no BOM; each line terminated by a single `LF`; the file ends with one trailing `LF`. A capsule with no payload files has a zero-length `.checksums` (whose SHA-256 is the empty-string digest `e3b0c442…b855`).
+- **Uniqueness**: each path appears at most once.
 
 ### Layer 2: Checksums digest
 
@@ -166,14 +173,22 @@ capsule_id = hex(SHA-256(canonical_json(capsule.yaml)))
 ```
 
 Canonical JSON follows RFC 8785 (JSON Canonicalization Scheme, JCS):
-- Keys sorted lexicographically (Unicode code point order)
+- Object keys sorted as arrays of UTF-16 code units, compared as unsigned integers (RFC 8785 §3.2.3); note that this order differs from Unicode code-point order for characters outside the Basic Multilingual Plane
 - No insignificant whitespace
-- IEEE 754 number serialisation
+- Number serialisation per ECMAScript `Number::toString` (RFC 8785 §3.2.2.3)
 - UTF-8 encoding
 
-Because `capsule.yaml` is YAML, implementers must parse it to a dict, then serialise that dict as JCS canonical JSON to compute the ID. The capsule ID is a 64-character lowercase hex string.
+Because `capsule.yaml` is YAML, implementers parse it to a value, then serialise that value as JCS canonical JSON to compute the ID. The capsule ID is a 64-character lowercase hex string.
 
-**Key constraint:** All timestamp fields (`created_at`, `sealed_at`, `start_time`, `end_time`) must be stored as ISO 8601 strings. Numeric timestamps would produce non-deterministic canonical JSON across implementations with different float precision.
+RFC 8785 canonicalises an already-valid value; it does not validate. For two independent implementations to agree on the ID of a byte-identical `capsule.yaml`, a conformant implementation MUST additionally enforce, at parse time:
+
+- **YAML typing**: resolve unquoted scalars using the JSON-aligned (YAML 1.2 Core) schema only — `true`/`false`/`null`, decimal integers, JSON-shaped floats. `yes`/`no`/`on`/`off`, hexadecimal/octal/underscored/sexagesimal numbers, and unquoted timestamps MUST read as strings, not be coerced. A language's default "safe" YAML loader is typically YAML 1.1 and MUST NOT be relied on unmodified.
+- **Integers**: a leading-zero integer is decimal, never octal. Any integer with absolute value greater than 2⁵³−1 MUST be rejected, or authored as a string — outside that range JSON/JCS interoperability is not guaranteed (RFC 8785 App. D; RFC 8259 §6).
+- **Floats**: `NaN` and `±Infinity` MUST cause an error (RFC 8785 §3.2.2.3); `-0` normalises to `0`.
+- **Strings and keys**: Unicode NFC-normalised before hashing — JCS does not normalise (RFC 8785 §3.1).
+- **Keys**: mapping keys MUST be unique (a duplicate key is an error, not last-wins) and MUST be strings; a non-string key is stringified by the same rule used for the corresponding value type.
+
+**Key constraint:** All timestamp fields (`created_at`, `sealed_at`, `start_time`, `end_time`) must be stored as ISO 8601 strings, and serialised identically (ISO 8601, `T` separator) whether the ID is computed by the sealer or recomputed by a verifier from the written file. Numeric or space-separated timestamps would produce non-deterministic canonical JSON.
 
 ---
 
@@ -246,9 +261,9 @@ Schema `$id`: `https://marqov.ai/schemas/capsule/v1/capsule-schema.json`
 A conformant capsule implementation must:
 
 - Produce `capsule.yaml` that validates against `capsule-schema.json`.
-- Compute `.checksums` and `checksums_digest` using the scheme in §5.
+- Compute `.checksums` and `checksums_digest` using the scheme in §5, and serialise `.checksums` using the byte-exact grammar in §5, Layer 1 (two-space separator, lowercase hex, NFC and percent-encoded paths, byte-wise sort, LF framing).
 - Refuse to seal a capsule that contains credentials (API keys, tokens, high-entropy secrets). See the reference implementation's `CapsuleRedactor` for the normative pattern list.
-- Compute capsule IDs using JCS canonical JSON (RFC 8785).
+- Compute capsule IDs using JCS canonical JSON (RFC 8785), enforcing the parse-time canonicalisation constraints in §5, Layer 3 (JSON-aligned YAML typing, the 2⁵³ integer bound, NFC, unique string keys) before hashing.
 - Use seed 12345 for bootstrap TVD CIs.
 
 ---
