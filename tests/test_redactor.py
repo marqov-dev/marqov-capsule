@@ -24,7 +24,14 @@ def test_detects_name_based_token(tmp_path):
     redactor = CapsuleRedactor(tmp_path)
     result = redactor.scan()
     assert result["has_secrets"] is True
-    assert any("IBM_QUANTUM_TOKEN" in f["match"] for f in result["findings"])
+    # §9.7: report the (redacted) value, not the variable name. The finding must
+    # point at the token value, and must NOT leak the whole value or echo the
+    # bare variable name (the old behaviour reported m.group(0) — the name).
+    findings = result["findings"]
+    assert any(f["reason"] == "name_pattern" for f in findings)
+    assert not any(f["match"] == "IBM_QUANTUM_TOKEN" for f in findings)
+    assert any(f["match"].startswith("fake") for f in findings)
+    assert not any("fake-token-abcdef1234567890" in f["match"] for f in findings)
 
 
 def test_detects_constructor_pattern(tmp_path):
@@ -330,3 +337,191 @@ def test_credential_file_error_advises_removal_not_annotation(tmp_path):
     msg = str(exc.value)
     assert "capsule:allow" not in msg, msg
     assert "move" in msg.lower() or "remove" in msg.lower(), msg
+
+
+# --- #18 / research §9: two-tier detection ---------------------------------
+# Tier A = distinctive shape rules -> BLOCK. Tier B = keyword-proximity +
+# charset-split entropy -> WARN, never block. The current single-entropy
+# mechanism produced false negatives (hex/lowercase) and false positives
+# (numerical payloads) at once; these pin the corrected behaviour.
+
+# A well-distributed 64-char hex value (IBM Quantum token shape). Written as
+# 8-char groups so the length is guaranteed correct by construction.
+HEX64 = ("7e2a91c4" "f0b8d63e" "5a1f8c02" "d94b7e6a"
+         "3f5c8091" "b2d4e6f7" "a0c1b3d5" "e7f9a2c4")
+assert len(HEX64) == 64
+
+
+def _blocks(capsule_dir):
+    """True iff a block-mode scan_and_raise raises on this directory."""
+    try:
+        CapsuleRedactor(capsule_dir, mode="block").scan_and_raise()
+        return False
+    except RedactorError:
+        return True
+
+
+def test_ibm_64hex_token_is_flagged_and_blocks(tmp_path):
+    """`ibm_quantum_token = "<64-hex>"` scanned clean before (entropy 4.5 is
+    above the lowercase-hex ceiling of 4.0). It must now block (Tier A)."""
+    src = tmp_path / "source"
+    src.mkdir()
+    (src / "cfg.py").write_text(f'ibm_quantum_token = "{HEX64}"\n')
+    result = CapsuleRedactor(tmp_path).scan()
+    assert result["has_secrets"] is True, result
+    assert _blocks(tmp_path)
+
+
+def test_ibm_64hex_via_keyword_proximity_blocks(tmp_path):
+    """The IBM rule is keyword-proximity + 64-hex, not a bare \\b[a-f0-9]{64}\\b.
+    A non-credential variable name still blocks when an IBM keyword is near."""
+    src = tmp_path / "source"
+    src.mkdir()
+    (src / "run.py").write_text(f'creds = "{HEX64}"  # qiskit runtime token\n')
+    assert _blocks(tmp_path)
+
+
+def test_bare_64hex_checksum_does_not_block(tmp_path):
+    """A 64-hex with no IBM keyword nearby is a checksum, not a token. It must
+    not block (the research's central warning against a bare 64-hex rule)."""
+    src = tmp_path / "source"
+    src.mkdir()
+    (src / "manifest.txt").write_text(f'{HEX64}  results.json\n')
+    assert not _blocks(tmp_path)
+
+
+def test_aws_access_key_id_is_flagged_and_blocks(tmp_path):
+    """AKIA-prefixed access key IDs have a distinctive shape -> Tier A block."""
+    src = tmp_path / "source"
+    src.mkdir()
+    (src / "boto.py").write_text('key = "AKIAIOSFODNN7EXAMPLE"\n')
+    result = CapsuleRedactor(tmp_path).scan()
+    assert result["has_secrets"] is True, result
+    assert _blocks(tmp_path)
+
+
+def test_various_shape_rules_block(tmp_path):
+    src = tmp_path / "source"
+    src.mkdir()
+    samples = {
+        "gh.py": 'tok = "ghp_' + "a" * 36 + '"\n',
+        "google.py": 'k = "AIza' + "B" * 35 + '"\n',
+        "stripe.py": 'k = "sk_live_' + "c" * 24 + '"\n',
+        "slack.py": 'k = "xoxb-1234567890-0987654321-' + "d" * 24 + '"\n',
+        "jwt.py": 'k = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
+                  'eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ.abcDEFghiJKL"\n',
+        "pem.py": ('-----BEGIN RSA PRIVATE KEY-----\n' + 'MIIBOwIBAAJB' * 8
+                   + '\n-----END RSA PRIVATE KEY-----\n'),
+    }
+    for name, body in samples.items():
+        (src / name).write_text(body)
+    assert _blocks(tmp_path)
+    # every distinctive-shape file must be independently blocking
+    for name, body in samples.items():
+        one = tmp_path / name
+        one.mkdir()
+        (one / "f.py").write_text(body)
+        assert _blocks(one), name
+
+
+def test_base64_statevector_payload_is_not_flagged(tmp_path):
+    """A base64 float64 / complex128 statevector is entropy-indistinguishable
+    from a base64 secret. The length cap (safe now that Tier A catches long
+    structured secrets) must skip it -> no false positive. See note §1, §9."""
+    import base64
+    np = pytest.importorskip("numpy")  # numpy-free base install must skip, not fail
+    rng = np.random.default_rng(0)
+    payload = tmp_path / "payload"
+    payload.mkdir()
+    f64 = base64.b64encode(rng.standard_normal(1024).tobytes()).decode()
+    c128 = base64.b64encode(
+        (rng.standard_normal(512) + 1j * rng.standard_normal(512)).tobytes()
+    ).decode()
+    (payload / "sv.py").write_text(f'statevector = "{f64}"\namplitudes = "{c128}"\n')
+    result = CapsuleRedactor(tmp_path).scan()
+    assert result["has_secrets"] is False, result["findings"]
+
+
+def test_os_environ_reference_does_not_block(tmp_path):
+    """`os.environ['IBM_QUANTUM_TOKEN']` is a *safe* reference — reading a token
+    from the environment, not embedding one. It must not block (or warn)."""
+    src = tmp_path / "source"
+    src.mkdir()
+    (src / "safe.py").write_text(
+        "import os\n"
+        "token = os.environ['IBM_QUANTUM_TOKEN']\n"
+        "svc = QiskitRuntimeService(token=token)\n"
+    )
+    result = CapsuleRedactor(tmp_path).scan()
+    assert result["has_secrets"] is False, result["findings"]
+    assert not _blocks(tmp_path)
+
+
+def test_minified_json_capsule_allow_does_not_disable_whole_file(tmp_path):
+    """`# capsule:allow` must suppress a single finding, not the whole line.
+    A minified single-line JSON puts everything on one line; one occurrence of
+    the literal must not disable scanning of a real token elsewhere on it."""
+    src = tmp_path / "source"
+    src.mkdir()
+    line = ('{"note": "# capsule:allow", '
+            '"AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE", "x": "y"}')
+    (src / "data.json").write_text(line + "\n")
+    result = CapsuleRedactor(tmp_path).scan()
+    assert result["has_secrets"] is True, result
+    assert _blocks(tmp_path)
+
+
+def test_capsule_allow_trailing_comment_still_suppresses(tmp_path):
+    """The narrowed annotation must still work as a genuine trailing comment."""
+    src = tmp_path / "source"
+    src.mkdir()
+    (src / "cfg.py").write_text('key = "AKIAIOSFODNN7EXAMPLE"  # capsule:allow\n')
+    result = CapsuleRedactor(tmp_path).scan()
+    assert result["has_secrets"] is False, result["findings"]
+
+
+def test_public_and_primary_key_names_are_not_flagged(tmp_path):
+    """Allowlisted key-shaped names must not fire. A bare name can no longer
+    match at all; these are the classic false positives from #18."""
+    src = tmp_path / "source"
+    src.mkdir()
+    (src / "db.py").write_text(
+        'PUBLIC_KEY = "rsa-pub"\n'
+        'PRIMARY_KEY = "id"\n'
+        'SORTING_KEY = "created_at"\n'
+        'foreign_key = "user_id"\n'
+    )
+    result = CapsuleRedactor(tmp_path).scan()
+    assert result["has_secrets"] is False, result["findings"]
+
+
+def test_prose_mentioning_credential_names_is_not_flagged(tmp_path):
+    """A bare name in prose/docs must not match — a capsule shipping an analysis
+    README that discusses IBM_QUANTUM_TOKEN / *_KEY must still seal (#18)."""
+    (tmp_path / "README.md").write_text(
+        "Set the IBM_QUANTUM_TOKEN environment variable before running.\n"
+        "The AWS_SECRET_ACCESS_KEY and GITHUB_TOKEN are read from the env.\n"
+        "Never hardcode a _SECRET or _KEY in source.\n"
+    )
+    result = CapsuleRedactor(tmp_path).scan()
+    assert result["has_secrets"] is False, result["findings"]
+
+
+def test_generic_key_entropy_warns_but_does_not_block(tmp_path):
+    """Tier B (keyword-proximity + entropy) warns; it never blocks."""
+    src = tmp_path / "source"
+    src.mkdir()
+    (src / "svc.py").write_text('SERVICE_API_KEY = "aGVsbG8x9Qk3Zm9vYmFyM2Qz7cLh"\n')
+    result = CapsuleRedactor(tmp_path).scan()
+    assert result["has_secrets"] is True, result
+    assert not _blocks(tmp_path)  # Tier B must not block
+
+
+def test_env_local_bak_and_uppercase_pem_are_credential_files(tmp_path):
+    """File patterns must also cover .env.local, *.bak and case-variant .PEM."""
+    (tmp_path / ".env.local").write_text("AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n")
+    (tmp_path / "config.bak").write_text("secret backup\n")
+    (tmp_path / "cert.PEM").write_text("-----BEGIN CERTIFICATE-----\n")
+    reasons = [f["reason"] for f in CapsuleRedactor(tmp_path).scan()["findings"]]
+    assert reasons.count("credential_file") == 3, reasons
+    assert _blocks(tmp_path)

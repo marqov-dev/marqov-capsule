@@ -1,29 +1,146 @@
-"""CapsuleRedactor — scans capsule content for credentials before sealing."""
+"""CapsuleRedactor — best-effort credential scan run before sealing a capsule.
+
+This is a **best-effort** scanner, not a guarantee. It is modelled on how
+production scanners (gitleaks, trufflehog, detect-secrets) actually work, and
+inherits their honest framing: a clean scan means no *known* credential shape
+was found — it does not prove the capsule is free of secrets. Regex shape rules
+may miss novel or reshaped tokens (recall is bounded); the entropy tier may
+require tuning for a given corpus (precision is bounded). See
+``docs/research/2026-08-11-credential-detection.md`` for the full rationale.
+
+Two tiers, following the arrangement every upstream scanner uses (#18):
+
+* **Tier A — distinctive shape rules → BLOCK.** Prefix-anchored value shapes
+  (AWS ``AKIA…``, GitHub ``ghp_…`` / ``github_pat_…``, Google ``AIza…``, Stripe,
+  Slack, JWT, PEM private-key blocks), an IBM Quantum token rule expressed as
+  *keyword proximity to a 64-char hex value* (never a bare ``\\b[a-f0-9]{64}\\b``,
+  which would fire on every checksum), a small set of high-signal credential
+  *name* assignments, and inline SDK constructors handed a literal token. These
+  have near-zero false-positive rates and gate the seal.
+* **Tier B — keyword proximity + charset-split entropy → WARN.** Entropy is used
+  only as a *filter over a keyword/assignment candidate*, never as a standalone
+  detector, with charset-specific thresholds (hex 3.0, base64 4.5) computed over
+  the candidate's own charset and a length cap. Tier B is reported but never
+  blocks — entropy cannot reliably separate a secret from a numerical payload.
+"""
 from __future__ import annotations
 
 import math
 import re
+import string
 from pathlib import Path
 from typing import Any
 
 
-# Name-based patterns: env var names and constructor patterns
-_NAME_PATTERNS = [
-    re.compile(r"\bIBM_QUANTUM_TOKEN\b"),
-    re.compile(r"\bAWS_ACCESS_KEY_ID\b"),
-    re.compile(r"\bAWS_SECRET_ACCESS_KEY\b"),
-    re.compile(r"\bGITHUB_TOKEN\b"),
-    re.compile(r"\bAZURE_QUANTUM_\w+\b"),
-    re.compile(r"\b\w+(_KEY|_SECRET|_TOKEN|_PASSWORD|_CREDENTIAL)\b"),
-    re.compile(r"IBMProvider\s*\(\s*token\s*="),
-    re.compile(r"QiskitRuntimeService\s*\(\s*token\s*="),
-    re.compile(r"AWSSession\s*\(\s*credentials\s*="),
+# ---------------------------------------------------------------------------
+# Tier A — distinctive value-shape rules (block). Prefix-anchored, low FP.
+# Regexes adapted from gitleaks' ruleset (research note §6). The captured
+# secret is group("val") where present, else group(0).
+# ---------------------------------------------------------------------------
+_SHAPE_RULES: list[tuple[str, re.Pattern[str]]] = [
+    ("aws_access_key_id",
+     re.compile(r"\b(?P<val>(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16})\b")),
+    ("github_token",
+     re.compile(r"\b(?P<val>gh[pousr]_[0-9A-Za-z]{36})\b")),
+    ("github_fine_grained_pat",
+     re.compile(r"\b(?P<val>github_pat_\w{82})\b")),
+    ("google_api_key",
+     re.compile(r"\b(?P<val>AIza[0-9A-Za-z_\-]{35})\b")),
+    ("stripe_key",
+     re.compile(r"\b(?P<val>(?:sk|rk)_(?:test|live|prod)_[0-9A-Za-z]{10,99})\b")),
+    ("slack_token",
+     re.compile(r"(?P<val>xox[baprs]-[0-9]{10,13}-[0-9A-Za-z-]{10,})")),
+    ("jwt",
+     re.compile(r"\b(?P<val>ey[0-9A-Za-z]{10,}\.ey[0-9A-Za-z/\\_-]{10,}\.[0-9A-Za-z/\\_.+-]{5,})")),
 ]
 
-# Spec-defined digest field lines — never flagged by entropy heuristic
-_DIGEST_LINE_RE = re.compile(
-    r"(?:checksums_digest|derived_from|\w+_digest)\s*:\s*(?:sha256:)?[0-9a-f]{64}"
+# PEM private-key block — a multi-line shape, scanned against the whole file
+# rather than line by line (a line-oriented scan never sees BEGIN and END on the
+# same line). ``-----BEGIN CERTIFICATE-----`` is not a private key and is left
+# to the credential-file filename rule.
+_PRIVATE_KEY_BLOCK_RE = re.compile(
+    r"-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----"
+    r"[\s\S]{16,}?-----END[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----"
 )
+
+# IBM Quantum token: keyword proximity to a 64-char hex value. There is no
+# upstream rule for this shape; expressed as proximity precisely because a bare
+# 64-hex rule would match every sha256 in a checksum manifest (research §7).
+_HEX64_RE = re.compile(r"(?<![0-9A-Fa-f])[0-9A-Fa-f]{64}(?![0-9A-Fa-f])")
+_IBM_KEYWORD_RE = re.compile(r"ibmq?|qiskit|quantum|token|api[_.-]?key", re.IGNORECASE)
+_IBM_PROXIMITY = 40  # chars either side, mirroring trufflehog's PrefixRegex
+
+# High-signal credential *names*. A bare name can no longer match: an operator
+# and a captured literal value are required (research §5). Case-insensitive, so
+# ``ibm_quantum_token`` matches as well as ``IBM_QUANTUM_TOKEN`` (#18).
+_KNOWN_NAME_RE = re.compile(
+    r"\b(?P<name>IBM_QUANTUM_TOKEN|IBMQ_TOKEN|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|"
+    r"GITHUB_TOKEN|AZURE_QUANTUM_[A-Z0-9_]+)\b"
+    r"['\"]?\s*[:=]\s*['\"]?(?P<val>[^'\"\n]{1,200})",
+    re.IGNORECASE,
+)
+
+# Inline SDK constructors handed a *quoted literal* token. ``Service(token=var)``
+# (passing a variable read from the environment) is safe and does not match.
+_CONSTRUCTOR_RE = re.compile(
+    r"(?:QiskitRuntimeService|IBMProvider|IBMQ|AWSSession)\s*\([^)]*?"
+    r"(?:token|credentials?|api_?key|secret)\s*=\s*['\"](?P<val>[^'\"\n]{3,200})['\"]",
+    re.IGNORECASE,
+)
+
+# ---------------------------------------------------------------------------
+# Tier B — keyword proximity + charset-split entropy (warn, never block).
+# ---------------------------------------------------------------------------
+# Generic name family: name + operator + value + entropy (research §5), minus an
+# allowlist of key-shaped-but-benign names (PUBLIC_KEY / PRIMARY_KEY / …).
+_GENERIC_NAME_RE = re.compile(
+    r"\b(?P<name>[A-Za-z][A-Za-z0-9]*(?:[_.-][A-Za-z0-9]+)*"
+    r"(?:_KEY|_SECRET|_TOKEN|_PASSWORD|_PASSWD|_CREDENTIAL|_CREDENTIALS|_APIKEY|_API_KEY))\b"
+    r"['\"]?\s*[:=]\s*['\"]?(?P<val>[^'\"\n]{1,200})",
+    re.IGNORECASE,
+)
+_NAME_ALLOWLIST_RE = re.compile(
+    r"^(?:bucket|foreign|hot|idx|natural|primary|pub(?:lic)?|schema|sequence|"
+    r"sort(?:ing)?|partition|cluster|composite|shard|index|group)[_.-]?key$"
+    r"|key[_.-]?(?:alias|board|code|id|name|pair|ring|size|word|store|space|stroke)$",
+    re.IGNORECASE,
+)
+
+# Values that are references / placeholders, not embedded secrets.
+_VALUE_REJECT_RE = re.compile(
+    r"os\.environ|getenv|process\.env|environ\[|\$\{|\$[A-Za-z_]|%[A-Za-z_]+%|<[^>]*>",
+    re.IGNORECASE,
+)
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+)
+
+_HEX_CHARSET = "0123456789abcdef"
+_BASE64_CHARSET = string.ascii_letters + string.digits + "+/=-_"
+_HEX_ENTROPY_THRESHOLD = 3.0
+_BASE64_ENTROPY_THRESHOLD = 4.5
+_MIN_ENTROPY_LEN = 20
+_MAX_ENTROPY_LEN = 200  # length cap — safe only because Tier A catches long
+#                         structured secrets (PEM/JWT/prefixed); see note §9.
+
+# Backwards-compatible aliases (the research reproduction imports these).
+_HIGH_ENTROPY_THRESHOLD = _BASE64_ENTROPY_THRESHOLD
+_MIN_ENTROPY_LENGTH = _MIN_ENTROPY_LEN
+
+# Digest / checksum lines — never a secret. Covers named digest fields, any
+# algorithm-labelled hash (``sha256:<hex>``, the .checksums manifest format),
+# so lowering the hex threshold below the sha256 ceiling cannot fire on them.
+_DIGEST_LINE_RE = re.compile(
+    r"(?:checksums_digest|derived_from|\w+_digest)\s*[:=]\s*['\"]?(?:sha\d+:)?[0-9a-f]{64}"
+    r"|(?:sha1|sha224|sha256|sha384|sha512|blake2[bs]|md5|digest|hash|checksum)"
+    r"\s*[:=]\s*['\"]?[0-9a-f]{32,128}",
+    re.IGNORECASE,
+)
+
+# ``# capsule:allow`` — narrowed from "suppress the whole line" to "suppress
+# this finding" (like ``#gitleaks:allow``). Matched with or without the space so
+# a minified single-line file cannot disable scanning of the rest of the line.
+_ALLOW_RE = re.compile(r"#\s*capsule:allow", re.IGNORECASE)
 
 # Build noise. Never worth scanning, and a .capsuleignore may add to this set
 # but never remove from it — otherwise a capsule could un-skip nothing useful
@@ -36,11 +153,10 @@ _SCAN_SKIP_DEFAULTS = {
 # had it exactly backwards: the file was excluded from *scanning* while
 # save_checksums still packaged it, so a directory holding .env and deploy.key
 # scanned clean and sealed with both inside (#34). Presence is the finding —
-# not scanning a secret does not make it absent from the capsule.
-_CREDENTIAL_FILE_PATTERNS = {".env", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa", "id_ed25519"}
-
-_HIGH_ENTROPY_THRESHOLD = 4.5  # bits/char — applied to strings > 20 chars
-_MIN_ENTROPY_LENGTH = 20
+# not scanning a secret does not make it absent from the capsule. Extension
+# matching is case-insensitive and ``.env`` matches ``.env.local`` etc (#18).
+_CREDENTIAL_EXACT_NAMES = {"id_rsa", "id_ed25519", "id_ecdsa", "id_dsa"}
+_CREDENTIAL_EXTENSIONS = {".pem", ".key", ".p12", ".pfx", ".bak", ".keystore", ".jks"}
 
 
 class RedactorError(Exception):
@@ -48,17 +164,56 @@ class RedactorError(Exception):
 
 
 def _shannon_entropy(s: str) -> float:
+    """Shannon entropy over the string's own alphabet. Retained for reference;
+    the tiered detector uses :func:`_charset_entropy` instead."""
     if not s:
         return 0.0
-    freq = {}
+    freq: dict[str, int] = {}
     for c in s:
         freq[c] = freq.get(c, 0) + 1
     n = len(s)
     return -sum((f / n) * math.log2(f / n) for f in freq.values())
 
 
+def _charset_entropy(s: str, charset: str) -> float:
+    """Entropy computed over ``charset`` rather than the string's own alphabet,
+    as detect-secrets does. The same string scores differently under the hex
+    and base64 charsets, which is why the thresholds are charset-specific."""
+    if not s:
+        return 0.0
+    n = len(s)
+    entropy = 0.0
+    for x in charset:
+        p_x = s.count(x) / n
+        if p_x > 0:
+            entropy -= p_x * math.log2(p_x)
+    return entropy
+
+
+def _redact_value(value: str) -> str:
+    """Report a value without leaking it — a short locating prefix, masked."""
+    v = value.strip().strip("'\"").strip()
+    if not v:
+        return "***"
+    if len(v) <= 6:
+        return v[:2] + "***"
+    return v[:4] + "…" + "*" * min(len(v) - 4, 8)
+
+
 def _looks_like_digest_line(line: str) -> bool:
     return bool(_DIGEST_LINE_RE.search(line))
+
+
+def _is_credential_file(rel_path: str) -> bool:
+    """Credential-shaped filename check: case-insensitive, ``.env`` family, and
+    the credential extensions. Runs independently of the scan-skip ignore set."""
+    name = Path(rel_path).name
+    lower = name.lower()
+    if lower in _CREDENTIAL_EXACT_NAMES:
+        return True
+    if lower == ".env" or lower.startswith(".env."):
+        return True
+    return any(lower.endswith(ext) for ext in _CREDENTIAL_EXTENSIONS)
 
 
 def _load_capsuleignore(capsule_dir: Path) -> set[str]:
@@ -95,37 +250,162 @@ def _is_ignored(rel_path: str, ignores: set[str]) -> bool:
     return False
 
 
+def _is_embedded_value(value: str) -> bool:
+    """A high-signal credential *name* (IBM_QUANTUM_TOKEN, AWS_*, …) blocks on
+    any embedded literal, not only high-entropy ones — the name carries the
+    signal. But a reference (``os.environ[...]``) or placeholder is not embedded
+    and must not block."""
+    v = value.strip().strip("'\"").strip()
+    return bool(v) and not _VALUE_REJECT_RE.search(v)
+
+
+def _plausible_secret_value(value: str) -> bool:
+    """A captured value that could be a secret: non-trivial, has a digit, and is
+    not an environment reference / placeholder. Rejects ``^[A-Za-z_.-]+$`` — a
+    value with no digit at all is not a secret (research §5.3)."""
+    v = value.strip().strip("'\"").strip()
+    if len(v) < 4 or v.isspace():
+        return False
+    if _VALUE_REJECT_RE.search(v):
+        return False
+    if re.fullmatch(r"[A-Za-z_.\-]+", v):
+        return False
+    return True
+
+
+def _entropy_reason(candidate: str) -> str | None:
+    """Charset-split entropy verdict for a candidate, or None. Returns the
+    finding reason so hex and base64 hits are distinguishable in a report."""
+    if _UUID_RE.match(candidate) or candidate.isdigit():
+        return None
+    if re.fullmatch(r"[0-9A-Fa-f]+", candidate):
+        if _charset_entropy(candidate.lower(), _HEX_CHARSET) >= _HEX_ENTROPY_THRESHOLD:
+            return "high_entropy_hex"
+        return None
+    if re.fullmatch(r"[A-Za-z0-9+/=_\-]+", candidate):
+        # Base64 secrets carry digits; identifier-like names do not.
+        if not any(c.isdigit() for c in candidate):
+            return None
+        if _charset_entropy(candidate, _BASE64_CHARSET) >= _BASE64_ENTROPY_THRESHOLD:
+            return "high_entropy_base64"
+    return None
+
+
+def _iter_entropy_candidates(line: str):
+    """Yield ``(value, start, end, reason)`` for entropy candidates that appear
+    in quoting or assignment context (research §9.4). Maximal tokens only: an
+    over-length token (e.g. a base64 statevector) is skipped by the length cap,
+    never truncated to its cap-length prefix and matched."""
+    # Exclude '=' from the token so an unquoted ``KEY=value`` splits on the
+    # operator (rather than merging into one token); base64 padding '=' is
+    # immaterial to the entropy score, which is computed over the charset.
+    for m in re.finditer(r"[A-Za-z0-9+/_\-]+", line):
+        tok = m.group(0)
+        if not (_MIN_ENTROPY_LEN <= len(tok) <= _MAX_ENTROPY_LEN):
+            continue
+        before = line[:m.start()].rstrip()
+        if not before or before[-1] not in "'\"=:":
+            continue  # not quoted / not an assignment RHS
+        reason = _entropy_reason(tok)
+        if reason:
+            yield tok, m.start(), m.end(), reason
+
+
+def _finding_allowed(line: str, match_end: int) -> bool:
+    """True if a ``# capsule:allow`` annotation suppresses the finding that ends
+    at ``match_end``. Scoped to a trailing comment on the same statement: the
+    annotation must appear after the match and before any ``,`` — so one literal
+    inside a minified JSON value cannot disable a real token elsewhere."""
+    tail = line[match_end:]
+    comma = tail.find(",")
+    region = tail if comma == -1 else tail[:comma]
+    return bool(_ALLOW_RE.search(region))
+
+
 def _scan_text(text: str, filepath: str) -> list[dict]:
-    findings = []
+    findings: list[dict] = []
+
+    # Multi-line shape: PEM private-key blocks, scanned across the whole file.
+    for m in _PRIVATE_KEY_BLOCK_RE.finditer(text):
+        line_no = text.count("\n", 0, m.start()) + 1
+        begin_line = text[m.start():text.find("\n", m.start())]
+        if _ALLOW_RE.search(begin_line):
+            continue
+        findings.append({
+            "file": filepath,
+            "line": line_no,
+            "match": _redact_value(m.group(0)),
+            "reason": "private_key_block",
+            "blocking": True,
+            "tier": "A",
+        })
+
     for i, line in enumerate(text.splitlines(), 1):
-        # Skip digest-field lines — they contain long hex strings by design
+        # Digest / checksum lines contain long hex by design — never a secret.
         if _looks_like_digest_line(line):
             continue
-        # capsule:allow annotation suppresses ALL pattern matching on this line
-        if "# capsule:allow" in line:
-            continue
-        # Name-based patterns
-        for pat in _NAME_PATTERNS:
-            m = pat.search(line)
-            if m:
-                findings.append({
-                    "file": filepath,
-                    "line": i,
-                    "match": m.group(0),
-                    "reason": "name_pattern",
-                })
-                break
-        # Entropy heuristic on text values
-        tokens = re.findall(r"[A-Za-z0-9+/=_\-]{%d,}" % _MIN_ENTROPY_LENGTH, line)
-        for token in tokens:
-            if _shannon_entropy(token) > _HIGH_ENTROPY_THRESHOLD:
-                findings.append({
-                    "file": filepath,
-                    "line": i,
-                    "match": token[:40] + "...",
-                    "reason": "high_entropy",
-                })
-                break
+
+        # (start, end, finding) for this line, deduped and allow-filtered below.
+        candidates: list[tuple[int, int, dict]] = []
+
+        def add(start: int, end: int, reason: str, value: str, blocking: bool, tier: str):
+            candidates.append((start, end, {
+                "file": filepath,
+                "line": i,
+                "match": _redact_value(value),
+                "reason": reason,
+                "blocking": blocking,
+                "tier": tier,
+            }))
+
+        # --- Tier A: distinctive value shapes (block) ---
+        for reason, rx in _SHAPE_RULES:
+            for m in rx.finditer(line):
+                val = m.groupdict().get("val") or m.group(0)
+                add(m.start(), m.end(), reason, val, True, "A")
+
+        # --- Tier A: IBM Quantum token = 64-hex + keyword proximity (block) ---
+        for m in _HEX64_RE.finditer(line):
+            lo = max(0, m.start() - _IBM_PROXIMITY)
+            hi = min(len(line), m.end() + _IBM_PROXIMITY)
+            if _IBM_KEYWORD_RE.search(line[lo:hi]):
+                add(m.start(), m.end(), "ibm_quantum_token", m.group(0), True, "A")
+
+        # --- Tier A: high-signal credential name = literal value (block) ---
+        for m in _KNOWN_NAME_RE.finditer(line):
+            val = m.group("val")
+            if _is_embedded_value(val):
+                add(m.start("val"), m.end("val"), "name_pattern", val, True, "A")
+
+        # --- Tier A: SDK constructor handed a literal token (block) ---
+        for m in _CONSTRUCTOR_RE.finditer(line):
+            add(m.start("val"), m.end("val"), "constructor_pattern",
+                m.group("val"), True, "A")
+
+        # --- Tier B: generic key-name family + value entropy (warn) ---
+        for m in _GENERIC_NAME_RE.finditer(line):
+            name = m.group("name")
+            if _NAME_ALLOWLIST_RE.search(name):
+                continue
+            val = m.group("val")
+            if not _plausible_secret_value(val):
+                continue
+            add(m.start("val"), m.end("val"), "name_entropy", val, False, "B")
+
+        # --- Tier B: quoted / assignment entropy candidates (warn) ---
+        for val, start, end, reason in _iter_entropy_candidates(line):
+            add(start, end, reason, val, False, "B")
+
+        # Dedup overlaps (prefer the blocking finding), then apply allow scoping.
+        candidates.sort(key=lambda c: (not c[2]["blocking"], c[0]))
+        accepted: list[tuple[int, int]] = []
+        for start, end, finding in candidates:
+            if any(start < a_end and end > a_start for a_start, a_end in accepted):
+                continue
+            accepted.append((start, end))
+            if _finding_allowed(line, end):
+                continue
+            findings.append(finding)
 
     return findings
 
@@ -185,8 +465,9 @@ class CapsuleRedactor:
 
     Args:
         capsule_dir: Root of the capsule directory.
-        mode: "block" (default) raises RedactorError on findings.
-               "warn_only" returns findings without raising.
+        mode: "block" (default) raises RedactorError on *blocking* (Tier A /
+               credential-file) findings. "warn_only" returns findings without
+               raising. Tier B (entropy) findings warn but never block.
     """
 
     def __init__(self, capsule_dir: str | Path, mode: str = "block"):
@@ -227,12 +508,14 @@ class CapsuleRedactor:
             # Credential-shaped filenames are a packaging problem, not a scanning
             # one: the file is going into the capsule whether or not it is read.
             # Checked before the ignore test so .capsuleignore cannot suppress it.
-            if _is_ignored(rel, _CREDENTIAL_FILE_PATTERNS):
+            if _is_credential_file(rel):
                 all_findings.append({
                     "file": rel,
                     "line": 0,
                     "match": rel,
                     "reason": "credential_file",
+                    "blocking": True,
+                    "tier": "file",
                 })
                 continue
 
@@ -258,18 +541,23 @@ class CapsuleRedactor:
         }
 
     def scan_and_raise(self) -> dict[str, Any]:
-        """Scan and raise RedactorError if secrets found (block mode)."""
+        """Scan and raise RedactorError if *blocking* secrets are found.
+
+        Only Tier A (distinctive shape) and credential-file findings block the
+        seal. Tier B (entropy) findings are returned as warnings but never raise
+        — entropy cannot reliably tell a secret from a numerical payload.
+        """
         result = self.scan()
-        if result["has_secrets"] and self.mode == "block":
+        blocking = [f for f in result["findings"] if f.get("blocking")]
+        if blocking and self.mode == "block":
             summary = "; ".join(
-                f"{f['file']}:{f['line']} ({f['reason']})"
-                for f in result["findings"][:5]
+                f"{f['file']}:{f['line']} ({f['reason']})" for f in blocking[:5]
             )
             # Remediation has to match the finding. `# capsule:allow` is a
             # line annotation and cannot suppress a whole-file finding, so
             # offering it for a .env would send the user down a dead end.
             credential_files = [
-                f["file"] for f in result["findings"] if f["reason"] == "credential_file"
+                f["file"] for f in blocking if f["reason"] == "credential_file"
             ]
             if credential_files:
                 advice = (
