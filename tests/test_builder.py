@@ -204,8 +204,9 @@ def test_seal_convenience_returns_capsule_id(tmp_path):
     capsule_dir = tmp_path / "test.capsule"
     capsule_dir.mkdir()
     capsule_id = b.seal(capsule_dir=capsule_dir, sealed_by="test-runner")
-    assert len(capsule_id) == 64
-    assert all(c in "0123456789abcdef" for c in capsule_id)
+    assert capsule_id.startswith("mqc:1:")
+    assert all(c in "0123456789abcdef" for c in capsule_id.split(":")[-1])
+    assert len(capsule_id.split(":")[-1]) == 64
     # capsule.yaml was written
     assert (capsule_dir / "capsule.yaml").exists()
     sealed = load_manifest_yaml((capsule_dir / "capsule.yaml").read_text())

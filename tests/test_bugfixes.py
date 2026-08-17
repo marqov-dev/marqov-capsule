@@ -79,7 +79,7 @@ def test_clean_manifest_still_seals_via_python_api(tmp_path):
     capsule_dir = tmp_path / "clean.capsule"
     _populate(capsule_dir)
     cid = CapsuleBuilder.from_manifest(_draft()).seal(capsule_dir=capsule_dir, sealed_by="test")
-    assert len(cid) == 64
+    assert cid.startswith("mqc:1:") and len(cid.split(":")[-1]) == 64
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +188,7 @@ def test_non_string_mapping_keys_do_not_crash():
     and deterministically instead of raising out of jcs. (#20)"""
     manifest = load_manifest_yaml("parameters:\n  123: foo\n  true: bar\n")
     cid = compute_capsule_id(manifest)
-    assert len(cid) == 64
+    assert cid.startswith("mqc:1:") and len(cid.split(":")[-1]) == 64
     assert cid == compute_capsule_id(manifest)
 
 
@@ -201,7 +201,7 @@ def test_verify_integrity_survives_non_string_key(tmp_path):
     )
     result = CapsuleVerifier.verify_integrity(capsule_dir)
     assert result["status"] in ("pass", "fail")
-    assert result["capsule_id"] is not None and len(result["capsule_id"]) == 64
+    assert result["capsule_id"] is not None and result["capsule_id"].startswith("mqc:1:") and len(result["capsule_id"].split(":")[-1]) == 64
 
 
 # ---------------------------------------------------------------------------

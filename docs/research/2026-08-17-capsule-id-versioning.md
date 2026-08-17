@@ -1,7 +1,7 @@
 # Versioning the capsule ID string (future-proofing for a v2 format)
 
 **Date:** 2026-08-17
-**Status:** **Proposed — decision pending.** Best made in the `0.1.0` release-candidate window, because it is a format change and becomes irreversible once `0.1.0` is published (real IDs in the wild).
+**Status:** **Accepted — implemented** (branch `feat/versioned-capsule-id` / #69), landed in the `0.1.0` release-candidate window before the format freezes. Chosen form: `mqc:1:<hex>`.
 **Related:** [#20](https://github.com/marqov-dev/marqov-capsule/issues/20) (format), [#12](https://github.com/marqov-dev/marqov-capsule/issues/12) (first publish), `docs/research/2026-08-14-checksums-canonicalization.md`, `docs/platform-unvendor-plan.md` (§0 `CapsuleId`, §5 discriminator).
 
 ---

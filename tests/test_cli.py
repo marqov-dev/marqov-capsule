@@ -117,7 +117,7 @@ def test_seal_actually_seals(tmp_path):
     sealed_line = [l for l in result.output.splitlines() if l.startswith("Sealed:")]
     assert sealed_line, f"No 'Sealed:' line in output: {result.output}"
     capsule_id = sealed_line[0].split("Sealed: ")[-1].strip()
-    assert len(capsule_id) == 64, f"Expected 64-char ID, got: {capsule_id!r}"
+    assert capsule_id.startswith("mqc:1:") and len(capsule_id.split(":")[-1]) == 64, f"Expected mqc:1:<64hex> ID, got: {capsule_id!r}"
 
 
 def test_init_creates_draft_manifest(tmp_path):
