@@ -115,6 +115,21 @@ def test_derived_capsule_chain():
     )
 
 
+# Invariant 9b: the capsule ID is self-describing — mqc:<version>:<64-hex>
+def test_capsule_id_is_versioned():
+    import re
+    import pytest
+    from marqov_capsule._canonical import parse_capsule_id
+    cap = load_manifest_yaml((FIXTURE_DIR / "valid_capsule/capsule.yaml").read_text())
+    cid = compute_capsule_id(cap)
+    assert re.fullmatch(r"mqc:1:[0-9a-f]{64}", cid), cid
+    version, digest = parse_capsule_id(cid)
+    assert version == 1 and len(digest) == 64
+    # a bare hex string is no longer a valid capsule ID — reject, don't guess
+    with pytest.raises(ValueError):
+        parse_capsule_id("a" * 64)
+
+
 # Invariant 10: CLI commands exit non-zero on error paths
 def test_validate_exits_nonzero_on_invalid():
     from click.testing import CliRunner

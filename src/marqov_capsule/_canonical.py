@@ -253,10 +253,37 @@ def canonical_bytes(obj: Any) -> bytes:
     return jcs.canonicalize(coerce_for_canonical(obj))
 
 
-def compute_capsule_id(capsule_dict: dict) -> str:
-    """Return SHA-256 hex digest of RFC 8785 canonical JSON of capsule_dict.
+# The capsule ID is a self-describing identifier: ``mqc:<version>:<hex>``.
+# ``version`` names the *whole* derivation procedure (canonicalisation +
+# ``.checksums`` grammar + hash), so any reader can tell from the ID alone
+# which format produced it (cf. OCI ``sha256:…``, SWHID ``swh:1:…``, IPFS
+# CIDv1). A future format change increments the version without invalidating
+# existing IDs; readers MUST reject an unrecognised version rather than guess.
+CAPSULE_ID_SCHEME = "mqc"
+CAPSULE_ID_VERSION = 1
+_CAPSULE_ID_RE = re.compile(r"^mqc:([0-9]+):([0-9a-f]{64})$")
 
-    This is the capsule's content-addressed identity — stable across YAML
-    emitters because it operates on the parsed dict, not raw YAML bytes.
+
+def compute_capsule_id(capsule_dict: dict) -> str:
+    """Return the capsule's content-addressed identity: ``mqc:1:<64-hex>``.
+
+    The hash is SHA-256 of the RFC 8785 canonical JSON of the parsed manifest
+    — stable across YAML emitters because it operates on the parsed dict, not
+    raw YAML bytes. The ``mqc:<version>:`` prefix makes the ID self-describing
+    (see the module note); this is format version 1.
     """
-    return hashlib.sha256(canonical_bytes(capsule_dict)).hexdigest()
+    digest = hashlib.sha256(canonical_bytes(capsule_dict)).hexdigest()
+    return f"{CAPSULE_ID_SCHEME}:{CAPSULE_ID_VERSION}:{digest}"
+
+
+def parse_capsule_id(capsule_id: str) -> tuple[int, str]:
+    """Parse ``mqc:<version>:<hex>`` into ``(version, hex)``.
+
+    Raises ``ValueError`` on anything that is not a well-formed capsule ID.
+    Consumers use this to dispatch on the format version and to reject an
+    unrecognised version rather than guessing (spec §5, Layer 3).
+    """
+    m = _CAPSULE_ID_RE.match(capsule_id)
+    if not m:
+        raise ValueError(f"not a valid capsule ID: {capsule_id!r}")
+    return int(m.group(1)), m.group(2)

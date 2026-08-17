@@ -42,7 +42,7 @@
     },
     "derived_from": {
       "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
+      "pattern": "^mqc:[0-9]+:[0-9a-f]{64}$"
     },
     "requirements": {
       "type": "object",

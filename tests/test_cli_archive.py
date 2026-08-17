@@ -163,7 +163,7 @@ def test_pack_reports_the_capsule_id_as_identity(tmp_path):
     d = _sealed(tmp_path)
     out = json.loads(CliRunner().invoke(
         cli, ["pack", str(d), "-o", str(tmp_path / "a.capsule"), "--json"]).output)
-    assert len(out["capsule_id"]) == 64, out
+    assert out["capsule_id"].startswith("mqc:1:") and len(out["capsule_id"].split(":")[-1]) == 64, out
     assert out["payload_digest"].startswith("sha256:"), out
 
 

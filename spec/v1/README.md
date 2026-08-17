@@ -70,7 +70,7 @@ The full schema is in `capsule-schema.json` (JSON Schema 2020-12). Key fields:
 | `created_by` | string | Identity of the creator |
 | `sealed_at` | string (ISO 8601) | Set automatically at seal time |
 | `sealed_by` | string | Identity of the sealer |
-| `derived_from` | string (64 hex) | Capsule ID of a parent capsule, for provenance chains |
+| `derived_from` | string (versioned capsule ID) | Capsule ID of a parent capsule (`mqc:1:<hex>`), for provenance chains |
 
 **Important:** timestamps must be stored as ISO 8601 strings (not numeric epoch) so that canonical JSON serialisation is deterministic across implementations (see §5).
 
@@ -169,7 +169,7 @@ This value is embedded in `capsule.yaml` before the capsule ID is computed.
 ### Layer 3: Capsule ID
 
 ```
-capsule_id = hex(SHA-256(canonical_json(capsule.yaml)))
+capsule_id = "mqc:1:" + hex(SHA-256(canonical_json(capsule.yaml)))
 ```
 
 Canonical JSON follows RFC 8785 (JSON Canonicalization Scheme, JCS):
@@ -178,7 +178,11 @@ Canonical JSON follows RFC 8785 (JSON Canonicalization Scheme, JCS):
 - Number serialisation per ECMAScript `Number::toString` (RFC 8785 §3.2.2.3)
 - UTF-8 encoding
 
-Because `capsule.yaml` is YAML, implementers parse it to a value, then serialise that value as JCS canonical JSON to compute the ID. The capsule ID is a 64-character lowercase hex string.
+Because `capsule.yaml` is YAML, implementers parse it to a value, then serialise that value as JCS canonical JSON to compute the hash.
+
+The capsule ID is **self-describing**: `mqc:<version>:<64-lowercase-hex>` (namespace : format version : hash) — e.g. `mqc:1:283f9421…`. The `version` names the *whole* derivation procedure (canonicalisation + `.checksums` grammar + hash), so any reader can tell from the ID alone which format produced it (cf. OCI `sha256:…`, Software Heritage `swh:1:…`, IPFS CIDv1). This document defines version `1`.
+
+**Migration policy (normative).** A reader **MUST** parse the `<scheme>:<version>:` prefix and dispatch on the version, and **MUST** reject an unrecognised version rather than guess. A future format version (`mqc:2:…`) **does not invalidate existing IDs** — v1 IDs remain valid v1 identifiers permanently — and conformant tooling **retains prior-version derivations** as read-only paths, so it can recompute and verify any earlier-version capsule. `derived_from` therefore carries a full versioned ID.
 
 RFC 8785 canonicalises an already-valid value; it does not validate. For two independent implementations to agree on the ID of a byte-identical `capsule.yaml`, a conformant implementation MUST additionally enforce, at parse time:
 
