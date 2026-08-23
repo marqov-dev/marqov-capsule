@@ -4,17 +4,21 @@ Adapted from [`marqov-sdk/RELEASING.md`](https://github.com/marqov-dev/marqov-sd
 which is proven. Differences from the SDK are noted inline rather than silently
 diverging.
 
-Everything before the `v*` tag push is reversible; the tag is the irreversible
-step (PyPI never lets a version be reused), so validate hard and tag last.
+The `v*` tag push is the irreversible step (PyPI never lets a version be
+reused) — but the step-3 TestPyPI dry-run below also burns a version number
+permanently (TestPyPI publish uses `skip-existing`, so a *re-run* of the same
+version is safe, but the version string itself is spent there). Use a
+throwaway version for dry-runs, validate hard, and tag last.
 
 > **How the tag publishes:** pushing a `v*` tag triggers
 > `.github/workflows/release.yml`, which builds and publishes to PyPI via
 > **OIDC trusted publishing** (`id-token: write` + the `pypi` environment — no
 > stored token). Manual "Run workflow" dispatch runs the same build and
-> publishes to **TestPyPI** instead. The two paths are mutually exclusive by
-> `if:` condition, so they cannot double-fire. If publishing fails at the auth
-> step it is the PyPI trusted-publisher config (project / repo / workflow /
-> environment), not a token.
+> publishes to **TestPyPI** instead — `publish-pypi` requires both a tag ref
+> *and* `event_name == 'push'`, so a dispatch run against a tag ref still
+> cannot reach real PyPI. If publishing fails at the auth step it is the PyPI
+> trusted-publisher config (project / repo / workflow / environment), not a
+> token.
 >
 > *Differs from the SDK:* the version is **static** in `pyproject.toml`, not
 > read from `__init__.py`. `release.yml` asserts the built wheel filename
@@ -65,21 +69,29 @@ step (PyPI never lets a version be reused), so validate hard and tag last.
       uvx twine check dist/*
       ```
 - [ ] Push a `release/X.Y.Z` branch (version bumped, changelog dated).
+- [ ] **CI (full suite) green on the branch** — before the dry-run, not after:
+      the dry-run publish below burns the `X.Y.Z` version string on TestPyPI
+      even though it never reaches real PyPI, so don't spend it on a branch
+      that hasn't passed CI.
 - [ ] Dry-run: `gh workflow run release.yml --ref release/X.Y.Z` (TestPyPI only).
 - [ ] `gh run watch <id> --exit-status` — build ✅, publish-testpypi ✅,
       publish-pypi skipped.
 - [ ] **Validate the PUBLISHED artifact, not just the pipeline** — install from
-      TestPyPI and exercise it, while it is still free:
+      TestPyPI *only* and exercise it, while it is still free:
       ```
-      pip install --index-url https://test.pypi.org/simple/ \
-                  --extra-index-url https://pypi.org/simple/ marqov-capsule==X.Y.Z
+      pip install --no-deps --index-url https://test.pypi.org/simple/ \
+                  marqov-capsule==X.Y.Z
+      pip install pyyaml click jsonschema jcs   # runtime deps, from real PyPI
       marqov-capsule init ./t --name t --paradigm gate-based --qubits 2
       mkdir -p t/payload && echo '{"counts":{"00":1}}' > t/payload/results.json
       marqov-capsule seal ./t && marqov-capsule pack ./t -o t.capsule
       marqov-capsule verify t.capsule && marqov-capsule unpack t.capsule -o ./r
       ```
-      (`--extra-index-url` because dependencies aren't on TestPyPI.)
-- [ ] CI (full suite) green on the branch.
+      (`--no-deps` + a separate PyPI install, not `--extra-index-url`: merging
+      both indexes into one candidate pool lets a runtime dep resolve to a
+      stranger's higher-versioned TestPyPI upload — see [PyPA guidance on
+      dependency confusion](https://packaging.python.org/en/latest/guides/using-testpypi/).
+      This block is executed by `tests/test_releasing.py`, so it can't drift.)
 
 ## 4. Cut the release
 - [ ] Fast-forward `main` to the release commit and push.
@@ -157,8 +169,9 @@ Checked, so they don't have to be rediscovered on release day:
 
 - ✅ `pypi` and `testpypi` GitHub Environments both exist.
 - ✅ `release.yml` cannot double-fire — `publish-testpypi` requires
-  `github.event_name == 'workflow_dispatch'`, `publish-pypi` requires a
-  `refs/tags/v` ref.
+  `github.event_name == 'workflow_dispatch'`, `publish-pypi` requires
+  *both* `github.event_name == 'push'` *and* a `refs/tags/v` ref, so a manual
+  dispatch pointed at a tag ref still only reaches TestPyPI.
 - ❓ **PyPI trusted publisher.** Cannot be checked from the repo. For a first
   publish the project does not exist yet, so it needs a *pending publisher* for
   `marqov-capsule` bound to `marqov-dev/marqov-capsule`, workflow `release.yml`,
