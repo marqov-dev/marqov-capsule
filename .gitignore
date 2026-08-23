@@ -5,7 +5,7 @@ dist/
 build/
 .pytest_cache/
 .venv/
-*.capsule/
+*.capsule
 
 # Coverage artifacts (pytest-cov / coverage.py)
 .coverage
