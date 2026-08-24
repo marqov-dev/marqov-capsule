@@ -126,12 +126,12 @@ Note the limit: the digest chain detects modification, not forgery. Anyone who r
 
 ## Roadmap
 
-**Statistical equivalence testing is not in this release.** Comparing two runs and getting a VERIFIED / REJECTED verdict is the natural companion to sealing, and it is the next thing being built — but the estimator we had was miscalibrated badly enough that a distribution compared *against itself* was rejected from roughly four qubits upward. Shipping it would have meant shipping a verdict that carries no information at realistic problem sizes.
+**Statistical equivalence testing has no CLI in this release.** Comparing two runs and getting a verdict is the natural companion to sealing. The estimator behind it was miscalibrated badly enough that a distribution compared *against itself* was rejected as non-reproducible from roughly four qubits upward — that's now fixed: `CapsuleVerifier.verify_statistical` uses a closed-form one-sided confidence bound instead of the broken bootstrap, and reports `VERIFIED` / `INCONCLUSIVE` (no affirmative `REJECTED` — no valid construction lower-bounds true TVD the way the bound works in the other direction). What's still missing is the CLI surface and spec text to go with it.
 
-Rather than ship it caveated, it is cut until it is right. The investigation is written up in full, including the four candidate replacements that were measured and rejected and why:
+The investigation is written up in full, including the candidate replacements that were measured and rejected and why:
 
 - [`docs/research/2026-08-10-tvd-equivalence-testing.md`](https://github.com/marqov-dev/marqov-capsule/blob/main/docs/research/2026-08-10-tvd-equivalence-testing.md) — why the plug-in estimator fails, why the bootstrap cannot be repaired for this functional, and the one-sided bound that does work
-- Tracked in [#15](https://github.com/marqov-dev/marqov-capsule/issues/15)
+- Tracked in [#15](https://github.com/marqov-dev/marqov-capsule/issues/15); CLI wiring and spec reconciliation in [#20](https://github.com/marqov-dev/marqov-capsule/issues/20)
 
 Also on the roadmap, with the research already done:
 

@@ -210,21 +210,31 @@ Any mismatch must be reported as a verification failure.
 
 ### Statistical equivalence (probabilistic results)
 
-> **⚠ Under revision — do not implement.** The procedure below is miscalibrated
-> and is being replaced. The plug-in TVD estimator carries a noise floor of
-> `√((K−1)/πn)`, and the percentile bootstrap prescribed here is displaced upward
-> by it rather than corrected downward, so a distribution compared **against
-> itself** is rejected from roughly four qubits upward. The bootstrap is also
-> provably inconsistent for this functional: total variation distance is not
-> Hadamard-differentiable at `p = q`, which is exactly the null being tested.
+> **⚠ Under revision — do not implement as written.** The bootstrap CI
+> procedure below is retired in the reference implementation: it was
+> provably inconsistent for this functional (total variation distance is not
+> Hadamard-differentiable at `p = q`, the null under test), and rejected
+> byte-identical distributions as non-reproducible from roughly four qubits
+> upward. `CapsuleVerifier.verify_statistical` now uses a closed-form
+> one-sided upper confidence bound (Jensen + McDiarmid) instead — no
+> resampling, no seed, and no `REJECTED` verdict (there is no valid
+> construction that lower-bounds true TVD the way the upper bound works, so
+> the honest verdict space is `VERIFIED` / `INCONCLUSIVE`). See
+> `CapsuleVerifier.verify_statistical` and `_tvd_upper_confidence_bound` in
+> `src/marqov_capsule/verifier.py`.
 >
-> The reference implementation does **not** ship this in v0.1.0. Independent
-> implementers should not build against it until it is revised. Analysis,
-> measurements, and four evaluated replacements:
+> This section's field names (`tvd_threshold`, `ci_level`, `n_resamples`) do
+> not match the reference implementation's `verification_settings`
+> (`epsilon`, `min_shots`, `tolerance_regime`, `epsilon_drift`) — that
+> reconciliation, plus rewriting this section normatively, is tracked
+> separately in [#20](https://github.com/marqov-dev/marqov-capsule/issues/20).
+> The statistical design itself, its citations, and coverage measurements are
+> in
 > [`docs/research/2026-08-10-tvd-equivalence-testing.md`](../../docs/research/2026-08-10-tvd-equivalence-testing.md).
 > Tracked in [#15](https://github.com/marqov-dev/marqov-capsule/issues/15).
 >
-> Retained here only as a record of what v1 originally specified.
+> The procedure below is retained only as a record of what v1 originally
+> specified, pending #20.
 
 QPU results are shot distributions. Two capsules are statistically equivalent if their distributions are close within a confidence interval. The normative procedure:
 

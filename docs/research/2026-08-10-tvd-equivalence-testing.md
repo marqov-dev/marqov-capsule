@@ -89,19 +89,19 @@ Verified across four distribution shapes, K ∈ {16,64}, n ∈ {4096,16384}; err
 
 Note `Σᵢ√(p̂ᵢ(1−p̂ᵢ))` and effective support `K_eff = (Σᵢ√pᵢ)²` are **the same quantity**, not alternatives: for small `pᵢ`, `Σᵢ√(pᵢ(1−pᵢ)) ≈ Σᵢ√pᵢ = √K_eff`, so the bias law is `≈ √(K_eff/(πn))`. Present it once.
 
-The `√((K−1)/(πn))` constant is derivable folklore — numerically confirmed here to under 1%, but not located as a stated theorem. For a citable version use Berend & Kontorovich ([arXiv:1205.6711](https://arxiv.org/abs/1205.6711)), which gives constants 1/4 and 1 without the π. **[reported]**
+The `√((K−1)/(πn))` constant is derivable folklore — numerically confirmed here to under 1%, but not located as a stated theorem. **Berend & Kontorovich** ([arXiv:1205.6711](https://arxiv.org/abs/1205.6711)) was considered as a citable alternative but is **rejected on verification** — **[verified]**, Proposition 5 read directly: it bounds the **one-sample** `E‖p̂ₙ − p‖₁` (an empirical estimate against the fixed true `p`), not the **two-sample** plug-in `TVD(p̂, q̂)` between two independently-estimated multinomials used here — no `q` appears anywhere in that paper. Its bound is also two-sided (`(αₙ+βₙ)/4 − 1/√n` from below, `αₙ+βₙ` from above), not the single constant pair the earlier draft implied. Do not cite it as a drop-in form of this document's bias law without an explicit bridging derivation.
 
 ---
 
 ## 3. Why the bootstrap cannot be repaired
 
-**Fang & Santos**, *Rev. Econ. Studies* 86(1):377–412, 2019 ([arXiv:1404.3763](https://arxiv.org/abs/1404.3763)): full Hadamard differentiability is **necessary and sufficient** for bootstrap consistency. The L¹ norm is only *directionally* differentiable at `p = q` — precisely the null under test. Their Example 2.1 (`|E[X]|`) is the same pathology. **[reported]**
+**Fang & Santos**, *Rev. Econ. Studies* 86(1):377–412, 2019 ([arXiv:1404.3763](https://arxiv.org/abs/1404.3763)) — **[verified]**, Theorem 3.1 read directly: full Hadamard differentiability is **necessary and sufficient** for bootstrap consistency (conditional on the limiting distribution being Gaussian on a subspace, ordinarily satisfied here by the CLT). Their Example 2.1 (`|θ|`, non-differentiable exactly at `θ = 0`) is a structurally identical pathology to `|p − q|` at `p = q`. **Correction:** the paper never discusses TV, L1, or multinomials — the link to TV distance is this document's own analogical inference, not a claim Fang & Santos make. That inference is independently correct and is now also directly established for TV by Sreekumar–Goldfeld–Kato below.
 
-**Sreekumar, Goldfeld & Kato**, *IEEE Trans. IT* 70(2):1233–1267, 2024, name TV as *the* exception: "Bootstrap consistency results for other f-divergences (except TV distance) may be derived in an analogous manner." **[reported]**
+**Sreekumar, Goldfeld & Kato**, *IEEE Trans. IT* 70(2):1233–1267, 2024 (arXiv:2211.11184) — **[verified]**, quote and proof read directly. Name TV as *the* exception: "Bootstrap consistency results for other f-divergences (except TV distance) may be derived in an analogous manner." Their Section VII proves *why*: `φ(x,y) = |x−y|/2` violates their Hadamard-differentiability assumption "at x = y" — the null under test, the same failure mode as Fang & Santos's Example 2.1, now stated for TV specifically. **Scope note:** their result is for Gaussian-smoothed f-divergences on continuous ℝᵈ, not the raw discrete multinomial TVD used here; the non-differentiability mechanism transfers directly, the asymptotic theory around it does not need to.
 
 **Bastian, Dette & Koletzko** ([arXiv:2305.08609](https://arxiv.org/abs/2305.08609)) — **[verified]**, abstract read directly: their method "does not require differentiability of the norm and is in particular applicable for the maximum- and L¹-norm." The existence of a paper solving this problem specifically is itself evidence the naive approach fails.
 
-**Sommerfeld & Munk**, *JRSS-B* 80(1):219–238, 2018 ([arXiv:1610.03287](https://arxiv.org/abs/1610.03287)): on finite support, plug-in bootstrap inconsistent (Thm 6); m-out-of-n consistent (Thm 2). **[reported]**
+**Sommerfeld & Munk**, *JRSS-B* 80(1):219–238, 2018 ([arXiv:1610.03287](https://arxiv.org/abs/1610.03287)) — **[verified]**, Theorems 2 and 6 read directly: on finite support, plug-in bootstrap inconsistent (Thm 6, citing Dümbgen 1993 and Fang & Santos); m-out-of-n consistent (Thm 2).
 
 ### A correction recorded deliberately
 
@@ -254,7 +254,7 @@ The value of a closed form is that ε and shot count are chosen **together, befo
 | **Estimate** TVD to ±ε | Θ(K/(ε² log K)); Ω(K/log K) even at ε = 0.49 |
 | Plug-in estimator | Θ(K/ε²) |
 
-Testing: Chan, Diakonikolas, G. Valiant & P. Valiant, SODA 2014 ([arXiv:1308.3946](https://arxiv.org/abs/1308.3946)). Estimation: Jiao, Han & Weissman, *IEEE Trans. IT* 64(10):6672–6706, 2018 ([arXiv:1705.00807](https://arxiv.org/abs/1705.00807), Thm 4). **[reported]**
+Testing: Chan, Diakonikolas, G. Valiant & P. Valiant, SODA 2014 ([arXiv:1308.3946](https://arxiv.org/abs/1308.3946)) — **[verified]**, Theorem 1 read directly, exact match. Estimation: Jiao, Han & Weissman, *IEEE Trans. IT* 64(10):6672–6706, 2018 ([arXiv:1705.00807](https://arxiv.org/abs/1705.00807), Thm 4) — **[verified]** for the headline `Θ(K/(ε² log K))` rate (a direct algebraic corollary of Theorem 4's MSE form `≍ K/(n log n)`). The additional claim that this remains `Ω(K/log K)` even at `ε = 0.49` could **not** be located anywhere in the paper (no mention of 0.49 or a near-maximal-ε floor) — **retracted**; treat the estimation lower bound as holding at small/moderate ε only, not verified at the near-trivial end of the range.
 
 **In this project's regime the celebrated K^{2/3} branch never fires.** The branches cross at ε = K^{−1/4} (0.177 at K=1024), so for ε ≤ 0.10 the governing cost is plain **√K/ε²**. **[reported]**
 
@@ -266,7 +266,7 @@ The estimation lower bound applies to *estimating* TVD for arbitrary `p, q`. **A
 
 There is no contradiction with the tolerant-testing lower bound, because **A is valid but not tight**: it declines to certify sparse differences even when `TVD ≤ ε`. For the case that actually matters — a genuine reproduction, where the difference *is* pure sampling noise and therefore spread out — A fires. For peaked `p`, `‖p‖₂ → 1` and A degrades to arm C's scaling. That complementarity is why `min(A, C)` is the right shape rather than either alone.
 
-**Hore & Barber** ([arXiv:2602.05862](https://arxiv.org/abs/2602.05862)) — **[verified]**: "certifying equality of distributions, or even providing a tight upper bound on the total variation (TV) distance between the distributions, is impossible to achieve in a distribution-free regime." Their impossibility concerns arbitrary supports; a finite known support admits bounds, at cost `n ≳ K/ε²` — which is exactly the floor in §2.
+**Hore & Barber**, "Distribution-free two-sample testing with blurred total variation distance," submitted 2026-02-05 ([arXiv:2602.05862](https://arxiv.org/abs/2602.05862)) — **[verified]**, abstract and Theorem 1.1 read directly, quote confirmed verbatim: "certifying equality of distributions, or even providing a tight upper bound on the total variation (TV) distance between the distributions, is impossible to achieve in a distribution-free regime." Confirmed scope: the impossibility is specifically for non-overlapping/continuous supports where samples are almost-surely distinct; the paper explicitly distinguishes finite alphabets, where consistent estimation "requires sample sizes satisfying n, m ≫ K" — hard, not impossible. That is exactly the floor in §2.
 
 ---
 
@@ -296,7 +296,7 @@ Sloppiness biases equivalence testing *toward* the desired verdict. Degenerate i
 | **Quantum Volume** (Cross et al., [arXiv:1811.12926](https://arxiv.org/abs/1811.12926)) | false success | 2.3% (z=2, 97.5% one-sided), ≥100-trial hard guard |
 | criterion.rs | false regression alarm | ~5%, documented |
 
-**[reported]** Quantum Volume is the closest in-domain precedent, and four of its properties transplant directly: one-sided, explicit error rate, domain-motivated fixed threshold, and a hard minimum-n guard independent of the statistic.
+**[verified]** — read directly. Eq. 6 gives the 2/3 heavy-output threshold exactly; Algorithm 1's return condition uses `z=2`, and the paper's own text glosses this as "a strict threshold ... for a 97.5% one-sided confidence interval," confirming z=2 ↔ 97.5% one-sided. Algorithm 1's signature `ISHEAVY(m,d; n_c ≥ 100, n_s)` states the ≥100-trial floor as a hard parameter constraint, independent of `n_s` or any other input. Quantum Volume is the closest in-domain precedent, and four of its properties transplant directly: one-sided, explicit error rate, domain-motivated fixed threshold, and a hard minimum-n guard independent of the statistic.
 
 ### Repeated verification voids the guarantee
 
@@ -500,14 +500,23 @@ for K in (16, 256, 1024, 4096):
 
 ## Appendix B — verification status
 
-**Verified here against primary sources:**
-- Bastian, Dette & Koletzko, [arXiv:2305.08609](https://arxiv.org/abs/2305.08609) — title, authors, abstract; L¹/max-norm and constrained bootstrap claims confirmed verbatim.
-- Hore & Barber, [arXiv:2602.05862](https://arxiv.org/abs/2602.05862) — impossibility statement confirmed verbatim.
+**2026-08-23 — independent citation-verification pass.** Two research agents fetched and read primary sources (PDF full text, not rendered abstract pages) for every load-bearing citation this document intended to carry into a normative spec. Results folded into §3, §6, and §7 above; summary:
+
+**Verified here against primary sources (this pass):**
+- Fang & Santos, [arXiv:1404.3763](https://arxiv.org/abs/1404.3763) — Theorem 3.1 and Example 2.1 confirmed exactly; the TV/L1 link is this document's own inference, not the paper's claim (corrected in §3).
+- Sreekumar, Goldfeld & Kato, arXiv:2211.11184 (IEEE TIT 70(2):1233–1267, 2024) — quote and proof mechanism confirmed verbatim; scope is Gaussian-smoothed/continuous TV, noted in §3.
+- Sommerfeld & Munk, [arXiv:1610.03287](https://arxiv.org/abs/1610.03287) — Theorems 2 and 6 confirmed exactly.
+- Berend & Kontorovich, [arXiv:1205.6711](https://arxiv.org/abs/1205.6711) — confirmed to exist, but **rejected as a citation** for this document's bias law: bounds a different (one-sample) quantity (corrected in §2).
+- Chan, Diakonikolas, Valiant & Valiant, [arXiv:1308.3946](https://arxiv.org/abs/1308.3946) — Theorem 1 confirmed exactly.
+- Jiao, Han & Weissman, [arXiv:1705.00807](https://arxiv.org/abs/1705.00807) Thm 4 — headline rate confirmed as a corollary; the "even at ε=0.49" sub-claim could not be located and is retracted (corrected in §6).
+- Cross et al. (Quantum Volume), [arXiv:1811.12926](https://arxiv.org/abs/1811.12926) — threshold, z-value, and hard trial-count floor all confirmed exactly (corrected in §7).
+- Hore & Barber, [arXiv:2602.05862](https://arxiv.org/abs/2602.05862) — confirmed real (not hallucinated) and impossibility statement + scope confirmed verbatim.
+- Bastian, Dette & Koletzko, [arXiv:2305.08609](https://arxiv.org/abs/2305.08609) — title, authors, abstract; L¹/max-norm and constrained bootstrap claims confirmed verbatim (prior pass, unchanged).
 
 **Measured in this investigation:** every table marked **[measured]**; the bias law across four distribution shapes; all four rejected procedures; UCB coverage and shot budget.
 
-**Reported by research agents claiming a primary read, not independently checked:** Fang & Santos; Sreekumar–Goldfeld–Kato; Sommerfeld–Munk; Chan–Diakonikolas–Valiant–Valiant; Jiao–Han–Weissman; Kitagawa et al.; EMA bioequivalence guideline; Quantum Volume paper; SDK survey.
+**Still reported by research agents claiming a primary read, not independently checked:** Sommerfeld & Munk's own citation of Dümbgen (1993); Kitagawa et al.; EMA bioequivalence guideline; SDK survey (Qiskit/Cirq/pyGSTi behavior).
 
 **Unverified — check before entering a normative spec:** Schuirmann 1987; Berger & Hsu 1996; ICH E9 §3.3.2 and §3.5; property-testing citations [arXiv:1708.00002](https://arxiv.org/abs/1708.00002) and [arXiv:1902.01219](https://arxiv.org/abs/1902.01219).
 
-**Known research hazards in this session:** an automated summariser was caught fabricating quotations from "Justify Your Alpha"; one research stream lost its transcript and was partially reconstructed; the web-search budget was exhausted mid-investigation, so later gaps were filled by direct PDF fetches and by model knowledge. Treat any quotation not marked **[verified]** as provisional.
+**Known research hazards in this session:** an automated summariser was caught fabricating quotations from "Justify Your Alpha"; one research stream lost its transcript and was partially reconstructed; the web-search budget was exhausted mid-investigation, so later gaps were filled by direct PDF fetches and by model knowledge. Treat any quotation not marked **[verified]** as provisional. The 2026-08-23 pass fetched PDFs directly and extracted text with `pdftotext -layout` rather than summarizing rendered pages, specifically to guard against the fabrication hazard noted above.

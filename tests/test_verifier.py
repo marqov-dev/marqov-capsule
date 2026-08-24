@@ -10,11 +10,9 @@ FIXTURE_DIR = Path(__file__).parent.parent / "spec/v1/conformance"
 
 
 def test_identical_distributions_verified():
-    """When ref == new, TVD upper CI should be well below epsilon.
+    """When ref == new, the TVD upper confidence bound should be well below epsilon.
 
-    Using 10,000 shots so the CI upper bound is comfortably < 0.05.
-    With 1,000 shots and a 2-outcome distribution the 97.5th-percentile CI upper
-    bound is ~0.0502, which sits exactly on the threshold and flakes ~50% of runs.
+    Using 10,000 shots so the UCB is comfortably < 0.05.
     """
     counts = {"00": 5000, "11": 5000}  # 10,000 shots
     verifier = CapsuleVerifier()
@@ -22,13 +20,32 @@ def test_identical_distributions_verified():
         ref_counts=counts,
         new_counts=counts,
         verification_settings={"epsilon": 0.05, "min_shots": 100, "tolerance_regime": "strict"},
-        seed=12345,
     )
     assert result["verdict"] == "VERIFIED"
-    assert result["metrics"]["tvd_ci_upper"] <= 0.05
+    assert result["metrics"]["tvd_ucb"] <= 0.05
 
 
-def test_completely_different_distributions_rejected():
+def test_identical_distributions_verified_at_large_outcome_count():
+    """Regression test for #15: the old bootstrap CI rejected byte-identical
+    distributions as non-reproducible above ~4 qubits (K=16+ outcomes) because
+    it was miscalibrated at exactly this null. The old suite only covered
+    K=2, the one regime where the defect was invisible — this covers K=64."""
+    counts = {format(i, "06b"): 100 for i in range(64)}  # K=64, 6,400 shots/arm
+    verifier = CapsuleVerifier()
+    result = verifier.verify_statistical(
+        ref_counts=counts,
+        new_counts=counts,
+        verification_settings={"epsilon": 0.1, "min_shots": 100, "tolerance_regime": "strict"},
+    )
+    assert result["verdict"] == "VERIFIED"
+    assert result["metrics"]["total_variation_distance"] == 0.0
+
+
+def test_completely_different_distributions_not_verified():
+    """No valid construction lower-bounds true TVD from the biased plug-in
+    estimator (#15) — clearly different inputs must not be VERIFIED, but the
+    honest verdict is INCONCLUSIVE ("equivalence not demonstrated"), not an
+    affirmative REJECTED claim the statistics cannot support."""
     ref = {"00": 1000}
     new = {"11": 1000}
     verifier = CapsuleVerifier()
@@ -37,7 +54,10 @@ def test_completely_different_distributions_rejected():
         new_counts=new,
         verification_settings={"epsilon": 0.05, "min_shots": 100, "tolerance_regime": "strict"},
     )
-    assert result["verdict"] == "REJECTED"
+    assert result["verdict"] == "INCONCLUSIVE"
+    # chi-squared needs cell counts >= 5 on both arms; not met here, so it's
+    # simply absent as a diagnostic — the verdict itself is the point of this test.
+    assert "chi_squared_p_value" not in result["metrics"]
 
 
 def test_low_shots_inconclusive():
@@ -65,17 +85,15 @@ def test_calibration_drift_uses_epsilon_drift():
         ref_counts=ref,
         new_counts=new,
         verification_settings={"epsilon": 0.02, "min_shots": 100, "tolerance_regime": "strict"},
-        seed=12345,
     )
     drift_result = verifier.verify_statistical(
         ref_counts=ref,
         new_counts=new,
         verification_settings={"epsilon": 0.02, "epsilon_drift": 0.10, "min_shots": 100, "tolerance_regime": "calibration_drift"},
-        seed=12345,
     )
     assert drift_result["metrics"]["epsilon_used"] == 0.10
     # Drift regime must not be stricter
-    verdicts = ("VERIFIED", "INCONCLUSIVE", "REJECTED")
+    verdicts = ("VERIFIED", "INCONCLUSIVE")
     strict_rank = verdicts.index(strict_result["verdict"])
     drift_rank = verdicts.index(drift_result["verdict"])
     assert drift_rank <= strict_rank, (
@@ -107,17 +125,13 @@ def test_metrics_include_diagnostics_not_verdict():
         ref_counts=ref,
         new_counts=new,
         verification_settings={"epsilon": 0.05, "min_shots": 100, "tolerance_regime": "strict"},
-        seed=12345,
     )
     m = result["metrics"]
     assert "chi_squared_p_value" in m
     assert "energy_distance" in m
-    assert "tvd_ci_lower" in m
-    assert "tvd_ci_upper" in m
-    assert "bootstrap_resamples" in m
-    assert m["bootstrap_resamples"] == 9999
-    assert "rng_seed" in m
-    assert m["rng_seed"] == 12345
+    assert "tvd_ucb" in m
+    assert "alpha" in m
+    assert m["alpha"] == pytest.approx(0.05)
 
 
 def test_energy_distance_uses_hamming_metric():
@@ -128,13 +142,11 @@ def test_energy_distance_uses_hamming_metric():
         ref_counts={"00": 1000},
         new_counts={"11": 1000},
         verification_settings={"epsilon": 0.5, "min_shots": 100, "tolerance_regime": "strict"},
-        seed=12345,
     )
     near = verifier.verify_statistical(
         ref_counts={"00": 1000},
         new_counts={"01": 1000},
         verification_settings={"epsilon": 0.5, "min_shots": 100, "tolerance_regime": "strict"},
-        seed=12345,
     )
     assert far["metrics"]["energy_distance"] > near["metrics"]["energy_distance"]
 
