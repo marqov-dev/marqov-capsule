@@ -4,7 +4,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -12,6 +11,7 @@ import yaml
 
 from marqov_capsule._canonical import compute_capsule_id, load_manifest_yaml
 from marqov_capsule.builder import UNCHECKSUMMED_ROOT_FILES
+from marqov_capsule.policy import resolve_alpha
 
 
 def _is_within_root(rel_path: str, root: Path) -> bool:
@@ -39,45 +39,69 @@ def _require_numpy():
     except ImportError:
         raise ImportError(
             "Statistical verification requires numpy and scipy: "
-            "pip install 'marqov-capsule[verify]'"
+            "pip install numpy scipy"
         )
 
 
-_NORMATIVE_SEED = 12345  # Spec §7: fixed seed for reproducible bootstrap CIs
+def _tvd_point(ref_counts: dict, new_counts: dict, n_ref: int, n_new: int) -> float:
+    """Plug-in total variation distance between two count distributions.
 
-
-def _bootstrap_tvd_ci(
-    ref_counts: dict,
-    new_counts: dict,
-    n_resamples: int = 9999,
-    ci_level: float = 0.95,
-    seed: int = _NORMATIVE_SEED,
-):
-    """Bootstrap CI on TVD. Returns (tvd_point, ci_lower, ci_upper).
-
-    Seed is fixed by spec so the same capsule pair yields the same verdict.
+    ``n_ref``/``n_new`` are passed in rather than recomputed here: callers
+    already have the shot totals (and, in ``verify_statistical``, have
+    already checked them against ``min_shots``), so this stays pure
+    arithmetic on numbers the caller derived once.
     """
     np, _ = _require_numpy()
     all_keys = sorted(set(ref_counts) | set(new_counts))
-    n_ref = sum(ref_counts.values())
-    n_new = sum(new_counts.values())
-
     ref_probs = np.array([ref_counts.get(k, 0) / n_ref for k in all_keys])
     new_probs = np.array([new_counts.get(k, 0) / n_new for k in all_keys])
+    return float(0.5 * np.sum(np.abs(ref_probs - new_probs)))
 
-    tvd_point = float(0.5 * np.sum(np.abs(ref_probs - new_probs)))
 
-    rng = np.random.default_rng(seed)
-    boot_tvds = []
-    for _ in range(n_resamples):
-        r = rng.multinomial(n_ref, ref_probs) / n_ref
-        s = rng.multinomial(n_new, new_probs) / n_new
-        boot_tvds.append(0.5 * float(np.sum(np.abs(r - s))))
+def _tvd_upper_confidence_bound(
+    ref_counts: dict,
+    new_counts: dict,
+    alpha: float = 0.05,
+):
+    """One-sided (1-alpha) upper confidence bound on the true TVD.
 
-    alpha = 1.0 - ci_level
-    ci_lower = float(np.percentile(boot_tvds, 100.0 * alpha / 2))
-    ci_upper = float(np.percentile(boot_tvds, 100.0 * (1.0 - alpha / 2)))
-    return tvd_point, ci_lower, ci_upper
+    Closed-form, no resampling. Two steps, each rigorous on its own:
+
+    1. The plug-in TVD estimator is upward-biased: TV(p,q) <= E[TVD(p_hat,q_hat)]
+       by Jensen's inequality (|.| is convex).
+    2. TVD(p_hat,q_hat) concentrates around its mean within
+       sqrt((log(1/alpha)/2) * (1/n_ref + 1/n_new)) with probability >= 1-alpha,
+       by McDiarmid's *one-sided* bounded-difference inequality (a single sample
+       moves two probability coordinates by 1/n, halved by the 1/2 in TVD, so
+       the bounded difference is 1/n per arm).
+
+    Chaining the two gives P(TV(p,q) <= tvd_point + t) >= 1-alpha. The slack is
+    independent of the number of outcomes K, so this is valid (if conservative)
+    at any K, unlike the bootstrap it replaces — TVD is not Hadamard-
+    differentiable at p=q, which is fatal to bootstrap consistency at exactly
+    the null this function is used to test.
+
+    Uses log(1/alpha), not log(2/alpha): the two-sided constant would silently
+    under-report the true one-sided error rate.
+
+    The returned bound is clamped to 1.0. TV(p,q) <= 1 deterministically for
+    every pair of distributions, so intersecting the McDiarmid bound with that
+    known constraint is always valid: it can only ever fire when the raw
+    tvd_point + slack already exceeded 1.0, in which case the true value was
+    already known to lie in [0, 1] with certainty, so tightening to 1.0 loses
+    no coverage — it only removes a number (e.g. 1.17) that conveys nothing a
+    bound of 1.0 does not. This keeps the (1-alpha) coverage guarantee while
+    matching the schema's declared ``maximum: 1.0`` for this metric.
+
+    See docs/research/2026-08-10-tvd-equivalence-testing.md §5 for the full
+    derivation, coverage measurements, and citations.
+    """
+    np, _ = _require_numpy()
+    n_ref = sum(ref_counts.values())
+    n_new = sum(new_counts.values())
+    tvd_point = _tvd_point(ref_counts, new_counts, n_ref, n_new)
+    slack = float(np.sqrt((np.log(1.0 / alpha) / 2.0) * (1.0 / n_ref + 1.0 / n_new)))
+    return tvd_point, min(tvd_point + slack, 1.0)
 
 
 def _compute_chi_squared_p(ref_counts: dict, new_counts: dict):
@@ -155,7 +179,7 @@ class CapsuleVerifier:
                 self.schema = json.load(f)
 
     # -------------------------------------------------------------------------
-    # New API (Task 7): Bootstrap CI on TVD
+    # New API (Task 7): closed-form upper confidence bound on TVD
     # -------------------------------------------------------------------------
 
     def verify_statistical(
@@ -163,37 +187,46 @@ class CapsuleVerifier:
         ref_counts: dict,
         new_counts: dict,
         verification_settings: dict,
-        seed: int = _NORMATIVE_SEED,
     ) -> dict[str, Any]:
-        """Bootstrap CI equivalence test on TVD. **Not supported in 0.1.0 — see #15.**
+        """One-sided upper-confidence-bound equivalence test on TVD (#15).
 
-        This estimator is miscalibrated and its verdicts are not trustworthy. A
-        distribution compared against itself is REJECTED from roughly four qubits
-        upward: the plug-in TVD carries a noise floor of ``√((K−1)/πn)`` and the
-        bootstrap interval is displaced upward by it rather than corrected
-        downward. The interval also under-covers at the null by construction,
-        because TVD is not Hadamard-differentiable at ``p = q``.
+        Certifies equivalence within tolerance; it does not — and cannot,
+        rigorously, from this construction — assert that two distributions
+        differ. There is no valid ``REJECTED`` verdict here — the verdict
+        space stays VERIFIED / INCONCLUSIVE. That is not because no lower
+        bound on the true TVD exists: the triangle inequality gives one
+        (the plug-in estimate minus the McDiarmid slack minus a one-sample
+        bias bound per arm), and it is valid. It is not deployed because,
+        unlike the upper bound (Jensen + McDiarmid, see
+        ``_tvd_upper_confidence_bound``, whose slack is free of the outcome
+        count), that lower bound's slack depends on the number of outcomes
+        K — and taking K from the observed support rather than the declared
+        register width fails open, exactly the failure mode this project's
+        threat model flags for verifier-side parameters. Separately, the one
+        candidate detection tool, a permutation test against the sharp null,
+        has measured power as low as 42% at K=256 outcomes — too weak to
+        carry an affirmative verdict on its own.
+        A low ``chi_squared_p_value`` is surfaced as a diagnostic hint only;
+        it never changes the verdict.
 
-        The CLI surface for this (``verify --against``) is cut from 0.1.0. The
-        code is kept importable so work on #15 does not have to start by
-        resurrecting it. Do not build on the verdicts.
-
-        Full analysis and the measured behaviour of four candidate replacements:
-        ``docs/research/2026-08-10-tvd-equivalence-testing.md``
+        This replaces a bootstrap CI that was provably miscalibrated: TVD is
+        not Hadamard-differentiable at ``p = q``, which is fatal to bootstrap
+        consistency at exactly the null this function tests. The bootstrap
+        rejected byte-identical distributions as non-reproducible from roughly
+        four qubits upward. Full analysis, citations, and coverage
+        measurements: ``docs/research/2026-08-10-tvd-equivalence-testing.md``.
 
         Decision matrix as implemented:
-          - shots < min_shots           → INCONCLUSIVE
-          - tvd_ci_upper <= epsilon      → VERIFIED
-          - tvd_ci_lower > epsilon       → REJECTED
-          - else                         → INCONCLUSIVE
+          - either arm has zero shots → INCONCLUSIVE
+          - shots < min_shots         → INCONCLUSIVE
+          - tvd_ucb <= epsilon        → VERIFIED
+          - else                      → INCONCLUSIVE
+
+        ``alpha`` (the confidence-bound error rate) is read only from the
+        resolved settings, never trusted raw from a capsule's declaration —
+        see ``marqov_capsule.policy`` — and a malformed value falls back to
+        the default rather than crashing or silently widening the error rate.
         """
-        warnings.warn(
-            "verify_statistical is miscalibrated and unsupported in 0.1.0 (#15): "
-            "identical distributions are REJECTED above ~4 qubits. Verdicts are "
-            "not trustworthy. See docs/research/2026-08-10-tvd-equivalence-testing.md",
-            FutureWarning,
-            stacklevel=2,
-        )
         min_shots = verification_settings.get("min_shots", 100)
         tolerance_regime = verification_settings.get("tolerance_regime", "strict")
         epsilon = verification_settings.get("epsilon", 0.02)
@@ -201,51 +234,60 @@ class CapsuleVerifier:
         if tolerance_regime == "calibration_drift":
             epsilon = verification_settings.get("epsilon_drift", 0.08)
 
+        alpha = resolve_alpha(verification_settings.get("alpha"))
+
         n_ref = sum(ref_counts.values())
         n_new = sum(new_counts.values())
-        total_shots = min(n_ref, n_new)
 
-        if total_shots < min_shots:
+        if n_ref == 0 or n_new == 0:
             return {
                 "verdict": "INCONCLUSIVE",
-                "reason": f"shots ({total_shots}) below min_shots ({min_shots}); bootstrap CI too wide for a meaningful verdict",
+                "reason": "one or both arms have zero shots; TVD is undefined",
                 "metrics": {
                     "epsilon_used": epsilon,
                     "shots_ref": n_ref,
                     "shots_new": n_new,
                     "min_shots": min_shots,
-                    "rng_seed": seed,
                 },
             }
 
-        tvd_point, ci_lower, ci_upper = _bootstrap_tvd_ci(ref_counts, new_counts, seed=seed)
+        total_shots = min(n_ref, n_new)
+
+        if total_shots < min_shots:
+            return {
+                "verdict": "INCONCLUSIVE",
+                "reason": f"shots ({total_shots}) below min_shots ({min_shots}); declined without computing a confidence bound",
+                "metrics": {
+                    "epsilon_used": epsilon,
+                    "shots_ref": n_ref,
+                    "shots_new": n_new,
+                    "min_shots": min_shots,
+                },
+            }
+
+        tvd_point, tvd_ucb = _tvd_upper_confidence_bound(ref_counts, new_counts, alpha=alpha)
         chi2_p = _compute_chi_squared_p(ref_counts, new_counts)
         energy_dist = _compute_energy_distance(ref_counts, new_counts)
 
         metrics: dict[str, Any] = {
             "total_variation_distance": tvd_point,
-            "tvd_ci_lower": ci_lower,
-            "tvd_ci_upper": ci_upper,
-            "bootstrap_resamples": 9999,
+            "tvd_ucb": tvd_ucb,
+            "alpha": alpha,
             "epsilon_used": epsilon,
             "shots_ref": n_ref,
             "shots_new": n_new,
-            "rng_seed": seed,
         }
         if chi2_p is not None:
             metrics["chi_squared_p_value"] = chi2_p
         if energy_dist is not None:
             metrics["energy_distance"] = energy_dist
 
-        if ci_upper <= epsilon:
+        if tvd_ucb <= epsilon:
             verdict = "VERIFIED"
-            reason = f"tvd_ci_upper ({ci_upper:.4f}) <= epsilon ({epsilon})"
-        elif ci_lower > epsilon:
-            verdict = "REJECTED"
-            reason = f"tvd_ci_lower ({ci_lower:.4f}) > epsilon ({epsilon}); TVD = {tvd_point:.4f}"
+            reason = f"tvd_ucb ({tvd_ucb:.4f}) <= epsilon ({epsilon})"
         else:
             verdict = "INCONCLUSIVE"
-            reason = f"CI [{ci_lower:.4f}, {ci_upper:.4f}] straddles epsilon ({epsilon}); recommend more shots"
+            reason = f"tvd_ucb ({tvd_ucb:.4f}) > epsilon ({epsilon}); TVD = {tvd_point:.4f}; equivalence not demonstrated"
 
         return {
             "verdict": verdict,

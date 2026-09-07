@@ -23,7 +23,7 @@ happened and has been folded into this one.
 - **CLI** — `init`, `seal`, `verify`, `inspect`, `open`, `validate`, `pack`, `unpack`.
 - **Spec v1** — the format at `spec/v1/` (CC-BY-4.0), independently implementable.
 
-Statistical equivalence testing is **not** in this release — see Removed below.
+Statistical equivalence testing is **not** in this release — see Not included below.
 
 ### Not claimed
 
@@ -31,9 +31,9 @@ Capsules carry no signatures. The digest chain detects **modification, not forge
 
 ### Not included
 
-- **Statistical equivalence testing is cut from 0.1.0** (#15). `verify --against` and its `--epsilon` / `--min-shots` / `--honor-calibration-drift` options are gone. The estimator is miscalibrated: a distribution compared *against itself* is REJECTED from roughly four qubits upward, because the plug-in TVD carries a noise floor of `√((K−1)/πn)` and the bootstrap interval is displaced upward by it rather than corrected downward. The bootstrap cannot be repaired for this functional — TVD is not Hadamard-differentiable at `p = q`, which is the null under test.
+- **Statistical equivalence testing has no CLI surface in 0.1.0** (#15). `verify --against` and its `--epsilon` / `--min-shots` / `--honor-calibration-drift` options are not wired up. The underlying estimator, however, is fixed: `CapsuleVerifier.verify_statistical` no longer uses a bootstrap CI — it was provably inconsistent for this functional (TVD is not Hadamard-differentiable at `p = q`, the null under test) and rejected a distribution compared *against itself* as non-reproducible from roughly four qubits upward. It now uses a closed-form one-sided upper confidence bound (Jensen + McDiarmid, no resampling, no seed), and no longer reports an affirmative `REJECTED`, so the verdict space is `VERIFIED` / `INCONCLUSIVE`. A valid lower bound on true TVD does exist (triangle inequality: plug-in estimate minus McDiarmid slack minus a one-sample bias term per arm) but isn't deployed — it depends on the outcome count `K`, and taking `K` from observed support rather than the declared register width fails open, unlike the upper bound's `K`-free slack. The one candidate detection tool (a permutation test against the sharp null) measured power as low as 42% at K=256, too weak to carry an affirmative verdict.
 
-  Shipping it caveated would still have shipped a verdict carrying no information at realistic problem sizes, so it is cut until it is right. `CapsuleVerifier.verify_statistical` remains importable, and now emits a `FutureWarning`, so work on #15 does not have to begin by resurrecting deleted code. `VerificationPolicy` (#30) also stays, so the trust boundary is already correct when the feature returns. Spec §6's statistical procedure is marked under-revision, do-not-implement. Analysis: `docs/research/2026-08-10-tvd-equivalence-testing.md`.
+  `VerificationPolicy` (#30) already enforces the trust boundary this needs. Wiring the CLI back up, and reconciling the spec's `tvd_threshold`/`ci_level`/`n_resamples` field names with the implementation's verifier-owned settings vocabulary (`epsilon`, `epsilon_drift`, `min_shots`, `tolerance_regime`, `alpha` — `ci_level` is not read), is tracked in #20. Analysis: `docs/research/2026-08-10-tvd-equivalence-testing.md`.
 
 ---
 
@@ -64,6 +64,7 @@ because what a project looked for says as much as what it shipped.
 
   Thresholds now come from a `VerificationPolicy` owned by the verifier. A capsule's declaration is advisory: it may make verification **stricter** but never looser, and the effective value is reported alongside the verdict. New flags `--epsilon`, `--min-shots`, `--honor-calibration-drift`.
 - **`verify --against` verifies integrity before comparing.** The statistical path ran no integrity check at all, so shot counts from a tampered capsule were compared as though they had been sealed. Both capsules must now pass `verify_integrity` first. This is a behaviour change: previously it would compare unsealed or draft capsules.
+- **`verify_statistical`'s public surface changed along with the CI method** (#15). The `seed=` keyword argument is gone — the closed-form bound has nothing to seed. `REJECTED` is gone from the verdict space, which is now `VERIFIED` / `INCONCLUSIVE`. Emitted metrics are `tvd_ucb` and `alpha`, replacing `tvd_ci_lower`, `tvd_ci_upper`, `bootstrap_resamples`, and `rng_seed`.
 
 ### Packaging and format
 

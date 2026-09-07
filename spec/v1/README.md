@@ -210,21 +210,40 @@ Any mismatch must be reported as a verification failure.
 
 ### Statistical equivalence (probabilistic results)
 
-> **⚠ Under revision — do not implement.** The procedure below is miscalibrated
-> and is being replaced. The plug-in TVD estimator carries a noise floor of
-> `√((K−1)/πn)`, and the percentile bootstrap prescribed here is displaced upward
-> by it rather than corrected downward, so a distribution compared **against
-> itself** is rejected from roughly four qubits upward. The bootstrap is also
-> provably inconsistent for this functional: total variation distance is not
-> Hadamard-differentiable at `p = q`, which is exactly the null being tested.
+> **⚠ Under revision — do not implement as written.** The bootstrap CI
+> procedure below is retired in the reference implementation: it was
+> provably inconsistent for this functional (total variation distance is not
+> Hadamard-differentiable at `p = q`, the null under test), and rejected
+> byte-identical distributions as non-reproducible from roughly four qubits
+> upward. `CapsuleVerifier.verify_statistical` now uses a closed-form
+> one-sided upper confidence bound (Jensen + McDiarmid) instead — no
+> resampling, no seed, and no affirmative `REJECTED` verdict, so the honest
+> verdict space is `VERIFIED` / `INCONCLUSIVE`. That is not because no lower
+> bound on true TVD exists — the triangle inequality gives one (plug-in
+> estimate minus McDiarmid slack minus a one-sample bias term per arm) — but
+> because it isn't deployed: it depends on the outcome count `K`, and taking
+> `K` from observed support rather than the declared register width fails
+> open, a problem the upper bound's `K`-free slack doesn't share. The one
+> candidate detection tool (a permutation test against the sharp null)
+> measured power as low as 42% at K=256, too weak to carry an affirmative
+> verdict. See `CapsuleVerifier.verify_statistical` and
+> `_tvd_upper_confidence_bound` in `src/marqov_capsule/verifier.py`.
 >
-> The reference implementation does **not** ship this in v0.1.0. Independent
-> implementers should not build against it until it is revised. Analysis,
-> measurements, and four evaluated replacements:
+> This section's field names (`tvd_threshold`, `ci_level`, `n_resamples`) do
+> not match the reference implementation's verifier-owned
+> `verification_settings` vocabulary (`epsilon`, `epsilon_drift`,
+> `min_shots`, `tolerance_regime`, `alpha`) — `ci_level` in particular is not
+> read by the implementation, which sources its confidence level from
+> `alpha` on `VerificationPolicy` instead. That reconciliation, plus
+> rewriting this section normatively, is tracked separately in
+> [#20](https://github.com/marqov-dev/marqov-capsule/issues/20).
+> The statistical design itself, its citations, and coverage measurements are
+> in
 > [`docs/research/2026-08-10-tvd-equivalence-testing.md`](../../docs/research/2026-08-10-tvd-equivalence-testing.md).
 > Tracked in [#15](https://github.com/marqov-dev/marqov-capsule/issues/15).
 >
-> Retained here only as a record of what v1 originally specified.
+> The procedure below is retained only as a record of what v1 originally
+> specified, pending #20.
 
 QPU results are shot distributions. Two capsules are statistically equivalent if their distributions are close within a confidence interval. The normative procedure:
 
@@ -248,6 +267,8 @@ QPU results are shot distributions. Two capsules are statistically equivalent if
 
 The seed (12345) is fixed by this spec and must not be changed by conformant implementations. This ensures the same capsule pair always yields the same verdict regardless of which implementation performs the check.
 
+> **Superseded** — see the revised blockquote at the top of this section and [#20](https://github.com/marqov-dev/marqov-capsule/issues/20). The reference implementation no longer resamples or seeds anything.
+
 ---
 
 ## 7. Schema
@@ -268,7 +289,7 @@ A conformant capsule implementation must:
 - Compute `.checksums` and `checksums_digest` using the scheme in §5, and serialise `.checksums` using the byte-exact grammar in §5, Layer 1 (two-space separator, lowercase hex, NFC and percent-encoded paths, byte-wise sort, LF framing).
 - Refuse to seal a capsule that contains credentials (API keys, tokens, high-entropy secrets). See the reference implementation's `CapsuleRedactor` for the normative pattern list.
 - Compute capsule IDs using JCS canonical JSON (RFC 8785), enforcing the parse-time canonicalisation constraints in §5, Layer 3 (JSON-aligned YAML typing, the 2⁵³ integer bound, NFC, unique string keys) before hashing.
-- Use seed 12345 for bootstrap TVD CIs.
+- Use seed 12345 for bootstrap TVD CIs. **Superseded** — see the revised blockquote in §6 and [#20](https://github.com/marqov-dev/marqov-capsule/issues/20); the reference implementation no longer uses a bootstrap CI or a seed.
 
 ---
 

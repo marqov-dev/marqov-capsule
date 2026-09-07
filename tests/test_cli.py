@@ -204,8 +204,8 @@ def test_open_rejects_capsule_with_symlink(tmp_path):
 # --- Statistical equivalence is not in 0.1.0 (#15) --------------------------
 
 def test_verify_has_no_against_option():
-    """`--against` is cut from 0.1.0: the estimator is miscalibrated and returns
-    REJECTED on identical distributions above ~2 qubits. Tracked in #15."""
+    """`--against` is cut from 0.1.0: the estimator itself is fixed, but the
+    comparison CLI surface to go with it isn't built yet. Tracked in #15."""
     runner = CliRunner()
     result = runner.invoke(cli, ["verify", "--against", ".", "."])
     assert result.exit_code != 0

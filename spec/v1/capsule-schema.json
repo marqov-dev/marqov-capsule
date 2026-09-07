@@ -136,9 +136,16 @@
             "type": "object",
             "properties": {
               "total_variation_distance": { "type": "number" },
-              "tvd_ci_lower": { "type": "number" },
-              "tvd_ci_upper": { "type": "number" },
-              "bootstrap_resamples": { "type": "integer" },
+              "tvd_ucb": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0
+              },
+              "alpha": {
+                "type": "number",
+                "exclusiveMinimum": 0.0,
+                "exclusiveMaximum": 1.0
+              },
               "energy_distance": { "type": "number" },
               "chi_squared_p_value": { "type": "number" }
             }

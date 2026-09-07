@@ -29,8 +29,9 @@ def test_schema_id_points_at_one_canonical_host():
 
 
 def test_no_extras_advertise_unsupported_features():
-    """The [verify] extra installed numpy and scipy solely for
-    verify_statistical, which warns callers not to trust it (#15)."""
+    """The [verify] extra would install numpy and scipy for verify_statistical,
+    which is not yet wired into any public CLI/API surface — no extra to
+    advertise until it is."""
     pyproject = (ROOT / "pyproject.toml").read_text()
     optional = re.search(r"\[project\.optional-dependencies\](.*?)(?=\n\[|\Z)", pyproject, re.S)
     names = re.findall(r"^(\w+) = \[", optional.group(1), re.M) if optional else []
