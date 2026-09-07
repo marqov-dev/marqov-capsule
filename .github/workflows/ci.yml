@@ -7,6 +7,12 @@ on:
       - "v*"
   pull_request:
     branches: [main]
+  schedule:
+    # Weekly, not per-PR: tools/check_urls.py hits live external hosts, and
+    # gating every PR on third-party uptime would make CI flaky for reasons
+    # unrelated to the change under review. See the check-urls job below.
+    - cron: "17 6 * * 1"
+  workflow_dispatch: {}
 
 # Cancel superseded in-progress runs on a PR branch when new commits land,
 # but NEVER on main — a post-merge run on the default branch should always
@@ -180,14 +186,45 @@ jobs:
       - name: Run tests at dependency floors
         run: python -m pytest tests/ -q
 
+  # Runs tools/check_urls.py so it's actually exercised instead of rotting
+  # unnoticed (#62) — but only on a schedule / manual dispatch, never on
+  # push or pull_request. It hits live external hosts (github.com, arxiv.org,
+  # pypi.org, ...); making every PR's mergeability depend on those hosts'
+  # uptime would be a worse trade than the dead link it catches. Deliberately
+  # NOT in ci-success's `needs:` — see the note on ci-success below.
+  check-urls:
+    name: Check URLs
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check URLs in tracked files
+        run: python tools/check_urls.py
+
   # Single required status check. Once the ruleset requires only "CI Success",
   # the required context stays stable when the matrix changes — no need to pin
   # each `test (3.x)` individually.
   #
-  # INVARIANT: every job in this workflow must appear in `needs:` below. A job
-  # that's missing here can fail while CI Success stays green and the ruleset
-  # stays satisfied — its failures become invisible. Add new jobs to `needs:` in
-  # the same PR that introduces them. Nothing enforces this automatically.
+  # INVARIANT: every job in this workflow that runs on push/pull_request must
+  # appear in `needs:` below. A job that's missing here can fail while CI
+  # Success stays green and the ruleset stays satisfied — its failures become
+  # invisible. Add new jobs to `needs:` in the same PR that introduces them.
+  # Nothing enforces this automatically.
+  #
+  # EXCEPTION: check-urls is deliberately excluded. It only ever runs on
+  # `schedule` / `workflow_dispatch` (never push/pull_request — see its `if:`),
+  # so on every push/PR run it would be permanently 'skipped'. The `if: always()`
+  # gate below treats 'skipped' as failure for anything in `needs:`, so adding
+  # it here would fail every single push/PR, permanently, for a job that never
+  # even attempted to run. That's the "conditional job" case the comment below
+  # already flags as needing this clause revisited — check-urls is it.
   #
   # `if: always()` runs this even when an upstream job fails; the step then fails
   # unless EVERY needed result is 'success'. A naive `success()` gate would go

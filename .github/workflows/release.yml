@@ -33,10 +33,20 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
         with:
           repository-url: https://test.pypi.org/legacy/
+          # This dry-run publishes the real target version (X.Y.Z from
+          # pyproject.toml on the release branch), and TestPyPI won't let a
+          # version's files be re-uploaded any more than real PyPI will.
+          # skip-existing makes re-running this job against an *unchanged*
+          # build a no-op instead of a hard failure — see RELEASING.md.
           skip-existing: true
 
   publish-pypi:
     needs: build
+    # event_name, not just ref, is the gate: a workflow_dispatch run against
+    # a tag ref still has github.ref == refs/tags/vX.Y.Z, so gating on ref
+    # alone would let a manual dispatch double-fire this job alongside
+    # publish-testpypi and publish to real PyPI. Only an actual tag *push*
+    # may publish here; workflow_dispatch can never reach real PyPI.
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: pypi

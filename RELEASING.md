@@ -4,21 +4,32 @@ Adapted from [`marqov-sdk/RELEASING.md`](https://github.com/marqov-dev/marqov-sd
 which is proven. Differences from the SDK are noted inline rather than silently
 diverging.
 
-The `v*` tag push is the irreversible step (PyPI never lets a version be
-reused) — but the step-3 TestPyPI dry-run below also burns a version number
-permanently (TestPyPI publish uses `skip-existing`, so a *re-run* of the same
-version is safe, but the version string itself is spent there). Use a
-throwaway version for dry-runs, validate hard, and tag last.
+The `v*` tag push to real PyPI is the irreversible step (PyPI never lets a
+version be reused), so validate hard and tag last. But **the TestPyPI dry-run
+in step 3 is not free either** — it publishes the actual target version
+X.Y.Z to TestPyPI, which enforces the same no-reuse rule per file. The
+publish step sets `skip-existing: true`, so re-running the dry-run against an
+*unchanged* build is idempotent — but if the branch needs a new commit after
+a dry-run (e.g. CI turns up something), that build is spent and a fresh dry-run
+of the same version will just skip, not verify the new code. Get CI green on
+the branch *before* triggering the dry-run (step 3 is ordered that way below),
+not just before the tag.
 
 > **How the tag publishes:** pushing a `v*` tag triggers
 > `.github/workflows/release.yml`, which builds and publishes to PyPI via
 > **OIDC trusted publishing** (`id-token: write` + the `pypi` environment — no
 > stored token). Manual "Run workflow" dispatch runs the same build and
-> publishes to **TestPyPI** instead — `publish-pypi` requires both a tag ref
-> *and* `event_name == 'push'`, so a dispatch run against a tag ref still
-> cannot reach real PyPI. If publishing fails at the auth step it is the PyPI
-> trusted-publisher config (project / repo / workflow / environment), not a
-> token.
+> publishes to **TestPyPI** instead. The two paths are gated on
+> `github.event_name` (`push` vs. `workflow_dispatch`), not on the ref, so they
+> cannot double-fire even if a manual dispatch targets a tag ref — a
+> `workflow_dispatch` can never publish to real PyPI, and only an actual tag
+> `push` can. (An earlier version of this workflow gated `publish-pypi` on
+> `startsWith(github.ref, 'refs/tags/v')` alone, which a `workflow_dispatch`
+> run against a tag ref also satisfies — that's fixed now, but if you're
+> reading a stale copy of `release.yml`, check the `if:` conditions before
+> trusting this paragraph.) If publishing fails at the auth step it is the
+> PyPI trusted-publisher config (project / repo / workflow / environment),
+> not a token.
 >
 > *Differs from the SDK:* the version is **static** in `pyproject.toml`, not
 > read from `__init__.py`. `release.yml` asserts the built wheel filename
@@ -53,14 +64,20 @@ throwaway version for dry-runs, validate hard, and tag last.
       per-test, never at module scope — a module-level `importorskip` silently
       widens as tests are appended (see #39).
 - [ ] **URLs resolve** — `python tools/check_urls.py` (must exit 0).
-      Nothing fetches a prose URL, so no unit test catches a dead one. Fails only
-      on non-resolving hosts; a 4xx from an auth-gated API or a transient timeout
-      is a WARN — eyeball each so an outage on release day doesn't block the tag.
+      Nothing fetches a prose URL, so no unit test catches a dead one. FAILs
+      only on an unambiguous reachability signal (connection actively
+      refused, or a TLS cert that doesn't verify) so it can't false-fail a
+      release on someone else's outage; a resolver hiccup, timeout, or 4xx
+      from an auth-gated API is a WARN — eyeball each.
 - [ ] Packaging invariants: `pytest tests/test_packaging.py` — exactly one schema
       ships, it is byte-identical to `spec/v1/`, and no extra advertises an
       unsupported feature.
 
 ## 3. Build, inspect, dry-run to TestPyPI
+
+Ordered so the one-shot TestPyPI upload (which burns the real target version,
+see above) happens *after* everything cheaper has already passed — not before.
+
 - [ ] Look inside the artifact before any upload:
       ```
       uv build
@@ -69,29 +86,30 @@ throwaway version for dry-runs, validate hard, and tag last.
       uvx twine check dist/*
       ```
 - [ ] Push a `release/X.Y.Z` branch (version bumped, changelog dated).
-- [ ] **CI (full suite) green on the branch** — before the dry-run, not after:
-      the dry-run publish below burns the `X.Y.Z` version string on TestPyPI
-      even though it never reaches real PyPI, so don't spend it on a branch
-      that hasn't passed CI.
+- [ ] **CI (full suite) green on the branch** — the last free check before
+      spending the dry-run's one-shot TestPyPI upload of this version.
 - [ ] Dry-run: `gh workflow run release.yml --ref release/X.Y.Z` (TestPyPI only).
 - [ ] `gh run watch <id> --exit-status` — build ✅, publish-testpypi ✅,
       publish-pypi skipped.
-- [ ] **Validate the PUBLISHED artifact, not just the pipeline** — install from
-      TestPyPI *only* and exercise it, while it is still free:
+- [ ] **Validate the PUBLISHED artifact, not just the pipeline** — install
+      from TestPyPI and exercise it while you still can (TestPyPI, like PyPI,
+      never lets these files be re-uploaded):
       ```
-      pip install --no-deps --index-url https://test.pypi.org/simple/ \
-                  marqov-capsule==X.Y.Z
-      pip install pyyaml click jsonschema jcs   # runtime deps, from real PyPI
+      pip install --index-url https://pypi.org/simple/ \
+                  pyyaml jsonschema click jcs
+      pip install --index-url https://test.pypi.org/simple/ \
+                  --no-deps marqov-capsule==X.Y.Z
       marqov-capsule init ./t --name t --paradigm gate-based --qubits 2
       mkdir -p t/payload && echo '{"counts":{"00":1}}' > t/payload/results.json
       marqov-capsule seal ./t && marqov-capsule pack ./t -o t.capsule
       marqov-capsule verify t.capsule && marqov-capsule unpack t.capsule -o ./r
       ```
-      (`--no-deps` + a separate PyPI install, not `--extra-index-url`: merging
-      both indexes into one candidate pool lets a runtime dep resolve to a
-      stranger's higher-versioned TestPyPI upload — see [PyPA guidance on
-      dependency confusion](https://packaging.python.org/en/latest/guides/using-testpypi/).
-      This block is executed by `tests/test_releasing.py`, so it can't drift.)
+      Runtime deps first from real PyPI, then the package itself from TestPyPI
+      with `--no-deps` — **not** `--extra-index-url`. TestPyPI and PyPI share
+      a namespace pool when merged that way (PyPA's own guidance): a dep like
+      `pyyaml`/`click`/`jsonschema`/`jcs` could resolve to a stranger's
+      higher-versioned TestPyPI upload instead of the real package, and you'd
+      never notice from the install succeeding.
 
 ## 4. Cut the release
 - [ ] Fast-forward `main` to the release commit and push.
@@ -170,8 +188,11 @@ Checked, so they don't have to be rediscovered on release day:
 - ✅ `pypi` and `testpypi` GitHub Environments both exist.
 - ✅ `release.yml` cannot double-fire — `publish-testpypi` requires
   `github.event_name == 'workflow_dispatch'`, `publish-pypi` requires
-  *both* `github.event_name == 'push'` *and* a `refs/tags/v` ref, so a manual
-  dispatch pointed at a tag ref still only reaches TestPyPI.
+  **both** `github.event_name == 'push'` **and** a `refs/tags/v` ref. Gating
+  `publish-pypi` on the ref alone used to be enough for a `workflow_dispatch`
+  run against a tag ref to satisfy it too (`github.ref` is still
+  `refs/tags/vX.Y.Z` on a dispatch made against that ref) — fixed by requiring
+  `event_name == 'push'`, which a manual dispatch can never be.
 - ❓ **PyPI trusted publisher.** Cannot be checked from the repo. For a first
   publish the project does not exist yet, so it needs a *pending publisher* for
   `marqov-capsule` bound to `marqov-dev/marqov-capsule`, workflow `release.yml`,
