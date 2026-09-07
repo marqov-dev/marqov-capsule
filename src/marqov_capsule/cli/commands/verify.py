@@ -18,9 +18,10 @@ from marqov_capsule.verifier import CapsuleVerifier
 def verify(capsule, expected_id, as_json):
     """Verify the integrity of a sealed capsule directory or archive.
 
-    Comparing two capsules for equivalence is not available in this release —
-    the estimator is miscalibrated and returns REJECTED on identical
-    distributions above roughly two qubits. Tracked in #15.
+    Comparing two capsules for equivalence is not available in this release.
+    The underlying estimator is fixed (it no longer misfires on identical
+    distributions), but wiring it up to this CLI is separate work, tracked
+    in #15.
     """
     path = Path(capsule)
     verifier = CapsuleVerifier()

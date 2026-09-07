@@ -54,3 +54,5 @@ Initial specification release.
 - Statistical verification: bootstrap CI on total variation distance (TVD), 9999 resamples, normative seed 12345, 95% CI
 - Verdicts: `VERIFIED` (CI upper bound ≤ ε), `REJECTED` (CI lower bound > ε), `INCONCLUSIVE` (otherwise or insufficient shots)
 - Deterministic verification: exact digest comparison
+
+  > **Superseded.** The bootstrap CI above was provably miscalibrated and is retired in the reference implementation, along with the affirmative `REJECTED` verdict. See the revised blockquote in `spec/v1/README.md` §6 and [#20](https://github.com/marqov-dev/marqov-capsule/issues/20).

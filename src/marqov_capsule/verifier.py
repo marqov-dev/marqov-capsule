@@ -11,6 +11,7 @@ import yaml
 
 from marqov_capsule._canonical import compute_capsule_id, load_manifest_yaml
 from marqov_capsule.builder import UNCHECKSUMMED_ROOT_FILES
+from marqov_capsule.policy import resolve_alpha
 
 
 def _is_within_root(rel_path: str, root: Path) -> bool:
@@ -38,16 +39,20 @@ def _require_numpy():
     except ImportError:
         raise ImportError(
             "Statistical verification requires numpy and scipy: "
-            "pip install 'marqov-capsule[verify]'"
+            "pip install numpy scipy"
         )
 
 
-def _tvd_point(ref_counts: dict, new_counts: dict) -> float:
-    """Plug-in total variation distance between two count distributions."""
+def _tvd_point(ref_counts: dict, new_counts: dict, n_ref: int, n_new: int) -> float:
+    """Plug-in total variation distance between two count distributions.
+
+    ``n_ref``/``n_new`` are passed in rather than recomputed here: callers
+    already have the shot totals (and, in ``verify_statistical``, have
+    already checked them against ``min_shots``), so this stays pure
+    arithmetic on numbers the caller derived once.
+    """
     np, _ = _require_numpy()
     all_keys = sorted(set(ref_counts) | set(new_counts))
-    n_ref = sum(ref_counts.values())
-    n_new = sum(new_counts.values())
     ref_probs = np.array([ref_counts.get(k, 0) / n_ref for k in all_keys])
     new_probs = np.array([new_counts.get(k, 0) / n_new for k in all_keys])
     return float(0.5 * np.sum(np.abs(ref_probs - new_probs)))
@@ -79,15 +84,24 @@ def _tvd_upper_confidence_bound(
     Uses log(1/alpha), not log(2/alpha): the two-sided constant would silently
     under-report the true one-sided error rate.
 
+    The returned bound is clamped to 1.0. TV(p,q) <= 1 deterministically for
+    every pair of distributions, so intersecting the McDiarmid bound with that
+    known constraint is always valid: it can only ever fire when the raw
+    tvd_point + slack already exceeded 1.0, in which case the true value was
+    already known to lie in [0, 1] with certainty, so tightening to 1.0 loses
+    no coverage — it only removes a number (e.g. 1.17) that conveys nothing a
+    bound of 1.0 does not. This keeps the (1-alpha) coverage guarantee while
+    matching the schema's declared ``maximum: 1.0`` for this metric.
+
     See docs/research/2026-08-10-tvd-equivalence-testing.md §5 for the full
     derivation, coverage measurements, and citations.
     """
     np, _ = _require_numpy()
     n_ref = sum(ref_counts.values())
     n_new = sum(new_counts.values())
-    tvd_point = _tvd_point(ref_counts, new_counts)
+    tvd_point = _tvd_point(ref_counts, new_counts, n_ref, n_new)
     slack = float(np.sqrt((np.log(1.0 / alpha) / 2.0) * (1.0 / n_ref + 1.0 / n_new)))
-    return tvd_point, tvd_point + slack
+    return tvd_point, min(tvd_point + slack, 1.0)
 
 
 def _compute_chi_squared_p(ref_counts: dict, new_counts: dict):
@@ -165,7 +179,7 @@ class CapsuleVerifier:
                 self.schema = json.load(f)
 
     # -------------------------------------------------------------------------
-    # New API (Task 7): Bootstrap CI on TVD
+    # New API (Task 7): closed-form upper confidence bound on TVD
     # -------------------------------------------------------------------------
 
     def verify_statistical(
@@ -178,12 +192,20 @@ class CapsuleVerifier:
 
         Certifies equivalence within tolerance; it does not — and cannot,
         rigorously, from this construction — assert that two distributions
-        differ. There is no valid ``REJECTED`` verdict here: unlike the upper
-        bound (Jensen + McDiarmid, see ``_tvd_upper_confidence_bound``), there
-        is no symmetric construction that lower-bounds the *true* TVD from the
-        biased plug-in estimator, and the one candidate detection tool
-        (a permutation test against the sharp null) has measured power as low
-        as 42% at K=256 outcomes — too weak to carry an affirmative verdict.
+        differ. There is no valid ``REJECTED`` verdict here — the verdict
+        space stays VERIFIED / INCONCLUSIVE. That is not because no lower
+        bound on the true TVD exists: the triangle inequality gives one
+        (the plug-in estimate minus the McDiarmid slack minus a one-sample
+        bias bound per arm), and it is valid. It is not deployed because,
+        unlike the upper bound (Jensen + McDiarmid, see
+        ``_tvd_upper_confidence_bound``, whose slack is free of the outcome
+        count), that lower bound's slack depends on the number of outcomes
+        K — and taking K from the observed support rather than the declared
+        register width fails open, exactly the failure mode this project's
+        threat model flags for verifier-side parameters. Separately, the one
+        candidate detection tool, a permutation test against the sharp null,
+        has measured power as low as 42% at K=256 outcomes — too weak to
+        carry an affirmative verdict on its own.
         A low ``chi_squared_p_value`` is surfaced as a diagnostic hint only;
         it never changes the verdict.
 
@@ -195,9 +217,15 @@ class CapsuleVerifier:
         measurements: ``docs/research/2026-08-10-tvd-equivalence-testing.md``.
 
         Decision matrix as implemented:
-          - shots < min_shots     → INCONCLUSIVE
-          - tvd_ucb <= epsilon    → VERIFIED
-          - else                  → INCONCLUSIVE
+          - either arm has zero shots → INCONCLUSIVE
+          - shots < min_shots         → INCONCLUSIVE
+          - tvd_ucb <= epsilon        → VERIFIED
+          - else                      → INCONCLUSIVE
+
+        ``alpha`` (the confidence-bound error rate) is read only from the
+        resolved settings, never trusted raw from a capsule's declaration —
+        see ``marqov_capsule.policy`` — and a malformed value falls back to
+        the default rather than crashing or silently widening the error rate.
         """
         min_shots = verification_settings.get("min_shots", 100)
         tolerance_regime = verification_settings.get("tolerance_regime", "strict")
@@ -206,16 +234,29 @@ class CapsuleVerifier:
         if tolerance_regime == "calibration_drift":
             epsilon = verification_settings.get("epsilon_drift", 0.08)
 
-        alpha = 1.0 - verification_settings.get("ci_level", 0.95)
+        alpha = resolve_alpha(verification_settings.get("alpha"))
 
         n_ref = sum(ref_counts.values())
         n_new = sum(new_counts.values())
+
+        if n_ref == 0 or n_new == 0:
+            return {
+                "verdict": "INCONCLUSIVE",
+                "reason": "one or both arms have zero shots; TVD is undefined",
+                "metrics": {
+                    "epsilon_used": epsilon,
+                    "shots_ref": n_ref,
+                    "shots_new": n_new,
+                    "min_shots": min_shots,
+                },
+            }
+
         total_shots = min(n_ref, n_new)
 
         if total_shots < min_shots:
             return {
                 "verdict": "INCONCLUSIVE",
-                "reason": f"shots ({total_shots}) below min_shots ({min_shots}); bound too wide for a meaningful verdict",
+                "reason": f"shots ({total_shots}) below min_shots ({min_shots}); declined without computing a confidence bound",
                 "metrics": {
                     "epsilon_used": epsilon,
                     "shots_ref": n_ref,

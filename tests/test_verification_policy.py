@@ -40,6 +40,20 @@ def test_min_shots_is_never_read_from_the_capsule():
     assert p.resolve({"min_shots": 10**9})["min_shots"] == 100
 
 
+def test_alpha_is_never_read_from_the_capsule():
+    """A declared alpha of 1.0 would zero out the confidence slack and let a
+    bare, upward-biased point estimate carry a VERIFIED verdict — same attack
+    shape as min_shots, so alpha is policy-only too."""
+    p = VerificationPolicy(alpha=0.05)
+    assert p.resolve({"alpha": 1.0})["alpha"] == 0.05
+    assert p.resolve({"alpha": 0.0})["alpha"] == 0.05
+    assert p.resolve(None)["alpha"] == 0.05
+
+
+def test_alpha_defaults_to_0_05():
+    assert VerificationPolicy().resolve({})["alpha"] == 0.05
+
+
 def test_calibration_drift_not_honoured_by_default():
     """The drift regime swaps in a ~4x looser threshold. Opting into that is the
     verifier's judgement, not the author's."""

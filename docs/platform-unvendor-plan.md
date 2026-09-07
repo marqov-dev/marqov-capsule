@@ -16,7 +16,7 @@
 | No capsule code is vendored | a `check_no_vendored_capsule.py` mirroring the platform's existing `check_no_vendored_marqov.py` (I1/I2/I3, §1.1) in the same CI drift-guard job: bans a re-vendored copy, requires an exact `marqov-capsule==` pin, forbids git/URL — **added in §9 phase 2**, permitted in phase 1 | blocks-merge |
 | Capsule identity is never compared across format versions | a `CapsuleId` value object carrying `checksums_format_version`, so a bare-string compare fails type-check; DB `capsule_id` paired with non-null `checksums_format_version` | blocks-merge |
 | Manifest authentication is consumed at every verification site | forged-manifest fixture (recomputed `.checksums`+`checksums_digest`) is rejected by the **platform** path, not merely the library (§4 `:553`) — **gated on §5 phase 0: the trusted `expected_id` is the DB row, so this is only as sound as the discriminator backfill** | blocks-merge |
-| No statistical *verdict* is produced or persisted | `verify_statistical` / `verify_capsule(method="statistical")` unreachable from worker entry points; `filterwarnings = error` for `FutureWarning` from `marqov_capsule` | blocks-merge |
+| No statistical *verdict* is produced or persisted | `verify_statistical` / `verify_capsule(method="statistical")` unreachable from worker entry points and has no CLI surface in capsule 0.1.0 (#15) — **the `FutureWarning`-based check this row previously named was deleted along with the miscalibrated estimator it warned about; capsule now emits no warning at all, so a machine check enforcing this row does not currently exist and is open work** | blocks-merge |
 | Sealing is idempotent-safe under retry | reaper retry path does not re-enter `seal_capsule` on already-sealed content (§2.2, #59) | blocks-deploy |
 | A seal-time `RedactorError` is observable and non-job-fatal | metric + alert on seal-time `RedactorError`, and a defined fallback (not a lost run) — *this is the enforceable form; "never false-positives" is not testable* (§2.3) | blocks-deploy |
 | Capsule byte-output is environment-independent | golden-vector: fixed content → fixed ID under varied `cwd`/`TZ`/locale/enum order (§8) | blocks-merge |
@@ -99,7 +99,7 @@ Independent of the swap: the platform calls `verify_checksums` at `:553` and **d
 from marqov_capsule import CapsuleBuilder, CapsuleValidator, CapsuleVerifier, CapsuleRedactor, RedactorError
 ```
 - **Deterministic path is numpy-free** (verifier imports numpy lazily via `_require_numpy()`).
-- **Statistical path — do not rely on it** (#15; `FutureWarning`; `verify_capsule(method=…)` is method-dispatched; `verify_capsule_results` is **absent**).
+- **Statistical path — do not rely on it** (#15; `verify_statistical` is unreachable from worker entry points and unexposed by the CLI; no `FutureWarning` is emitted any more — the estimator it warned about was replaced, not just silenced; `verify_capsule(method=…)` is method-dispatched; `verify_capsule_results` is **absent**).
 - Runtime deps: `pyyaml/jsonschema/click/jcs`; numpy/scipy `[dev]`-only; `requires-python = ">=3.10"`.
 
 ---
