@@ -108,3 +108,26 @@ against the updated source ran 287 tests with 25 individual skips. The increase
 in reported skips reflects previously invisible tests now being collected,
 not a loss of coverage. Eight new inspect regressions account for the other
 increase in base-install passes. Remote CI must also pass on the final commit.
+
+## Release-check follow-up after #74 merged
+
+PR #74 merged as `bb80f14`. The next change addresses parts of #62 and #64:
+repository-root URL scanning, NUL-delimited tracked filenames, per-URL syntax
+validation, an explicit Marqov hostname policy, warning-only network outages,
+HEAD-to-GET fallback, and a required offline CI links job. Regression tests also
+pin the prose schema ID, Git failure behavior, and CI aggregate coverage.
+The domain guard's historical exception now applies to one exact sentence.
+
+The live network check examined 50 URLs and returned 26 unauthenticated GitHub
+404 warnings, all under the capsule repository. Authenticated `gh repo view`
+confirmed **PRIVATE** visibility on 2026-09-09. Therefore the source-install
+and conference-example links are not publicly accessible yet. Before giving
+these links to conference attendees, explicitly choose public repository
+visibility or another reviewed distribution channel. No visibility was changed.
+The unpublished v0.1.0 release URL also needs post-publication verification.
+
+These changes do not close the whole of #62/#64: broad private-link warning
+suppression is intentionally absent because it would also hide missing paths;
+network warnings still need manual review. The static hostname policy covers
+HTTP(S) links, not every possible prose spelling or Python import. Broader
+bare-domain checks and the remaining tamper-vector requests remain to review.

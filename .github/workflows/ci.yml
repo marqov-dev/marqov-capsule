@@ -180,6 +180,17 @@ jobs:
       - name: Run tests at dependency floors
         run: python -m pytest tests/ -q
 
+  links:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check URL syntax and reviewed Marqov hosts
+        run: python tools/check_urls.py --offline
+
   # Single required status check. Once the ruleset requires only "CI Success",
   # the required context stays stable when the matrix changes — no need to pin
   # each `test (3.x)` individually.
@@ -195,7 +206,7 @@ jobs:
   ci-success:
     name: CI Success
     if: always()
-    needs: [test, wheel-smoke, base-install, minimum-versions]
+    needs: [test, wheel-smoke, base-install, minimum-versions, links]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

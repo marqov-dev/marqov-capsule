@@ -52,10 +52,13 @@ throwaway version for dry-runs, validate hard, and tag last.
       Tests needing an optional dependency must **skip**, not fail. Guard them
       per-test, never at module scope — a module-level `importorskip` silently
       widens as tests are appended (see #39).
-- [ ] **URLs resolve** — `python tools/check_urls.py` (must exit 0).
-      Nothing fetches a prose URL, so no unit test catches a dead one. Fails only
-      on non-resolving hosts; a 4xx from an auth-gated API or a transient timeout
-      is a WARN — eyeball each so an outage on release day doesn't block the tag.
+- [ ] **URL policy and availability reviewed** — `python tools/check_urls.py`
+      must exit 0, and every WARN needs review. Invalid URLs and unapproved
+      Marqov hosts fail regardless of whether DNS resolves. Network errors,
+      including resolver outages and HTTP errors, are inconclusive warnings;
+      exit 0 does not certify that links are public or reachable. The schema
+      `$id` is an identifier and is not fetched. CI runs the deterministic
+      `--offline` check; run the default network check again before publication.
 - [ ] Packaging invariants: `pytest tests/test_packaging.py` — exactly one schema
       ships, it is byte-identical to `spec/v1/`, and no extra advertises an
       unsupported feature.

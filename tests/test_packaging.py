@@ -58,11 +58,11 @@ def test_no_dead_domain_references():
     """
     needle = "marqov" + "." + "dev"
     import subprocess
-    tracked = subprocess.run(["git", "ls-files"], capture_output=True, text=True,
-                             cwd=ROOT).stdout.split()
+    tracked = subprocess.run(["git", "ls-files", "-z"], capture_output=True, text=True,
+                             check=True, cwd=ROOT).stdout.split("\0")
     hits = []
     for rel in tracked:
-        if rel == "RELEASING.md":       # documents the correction itself
+        if not rel:
             continue
         try:
             text = (ROOT / rel).read_text(encoding="utf-8", errors="replace")
@@ -70,5 +70,20 @@ def test_no_dead_domain_references():
             continue
         for i, line in enumerate(text.splitlines(), 1):
             if needle in line:
+                if line == f"This previously read `{needle}`, which is not a domain in use — the product":
+                    continue  # Only the exact historical explanation is exempt.
                 hits.append(f"{rel}:{i}")
     assert not hits, f"{needle} is not a domain in use: {hits}"
+
+
+def test_spec_prose_schema_id_matches_shipped_schema():
+    prose = (ROOT / "spec/v1/README.md").read_text()
+    match = re.search(r"Schema `\$id`: `([^`]+)`", prose)
+    assert match, "Spec must advertise its schema identifier"
+    assert match.group(1) == json.loads(BUNDLED.read_text())["$id"]
+
+
+def test_ci_success_includes_every_job():
+    import yaml
+    jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
+    assert set(jobs["ci-success"]["needs"]) == set(jobs) - {"ci-success"}
