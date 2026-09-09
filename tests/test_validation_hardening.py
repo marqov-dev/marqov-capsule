@@ -17,7 +17,7 @@ def manifest_with_timestamp(field, value):
         manifest["task_executions"] = [{
             "task_id": "550e8400-e29b-41d4-a716-446655440000",
             "status": "success", "result_type": "deterministic",
-            "backend": {"provider": "local", "name": "simulator"}, field: value,
+            "backend": {"provider": "local", "name": "simulator", "shots": 1}, field: value,
         }]
     return manifest
 

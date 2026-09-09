@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import importlib.resources as _pkg_resources
 import json
+import math
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,36 @@ except ImportError:
     _JSONSCHEMA_AVAILABLE = False
 
 _schema_cache: dict | None = None
+
+
+def _json_domain_errors(value, path="", ancestors=frozenset()):
+    """Reject YAML/Python values that cannot participate in the spec JSON model."""
+    def error(message):
+        return {"path": path or "/", "message": message}
+    if isinstance(value, (dict, list)):
+        if id(value) in ancestors:
+            yield error("cyclic values are not permitted in a capsule manifest")
+            return
+        ancestors = ancestors | {id(value)}
+        items = value.items() if isinstance(value, dict) else enumerate(value)
+        normalized_keys = set()
+        for key, child in items:
+            if isinstance(value, dict) and not isinstance(key, str):
+                yield error("manifest object keys must be strings")
+                continue
+            if isinstance(value, dict):
+                normalized = unicodedata.normalize("NFC", key)
+                if normalized in normalized_keys:
+                    yield error("manifest keys collide after Unicode normalization")
+                    continue
+                normalized_keys.add(normalized)
+            yield from _json_domain_errors(child, f"{path}/{key}".lstrip("/"), ancestors)
+    elif isinstance(value, float) and not math.isfinite(value):
+        yield error("manifest numbers must be finite")
+    elif isinstance(value, int) and not isinstance(value, bool) and abs(value) > 2**53 - 1:
+        yield error("manifest integer exceeds the canonical safe range")
+    elif value is not None and not isinstance(value, (str, int, float, bool)):
+        yield error("manifest values must belong to the JSON data model")
 
 
 def _load_schema() -> dict:
@@ -46,12 +78,16 @@ class CapsuleValidator:
         if not _JSONSCHEMA_AVAILABLE:
             raise ImportError("jsonschema>=4.0 required: pip install marqov-capsule")
 
+        domain_errors = list(_json_domain_errors(capsule))
+        if domain_errors:
+            return {"valid": False, "errors": domain_errors}
+
         schema = _load_schema()
         # jsonschema format checks are opt-in, and date-time is only registered
         # when its validator dependency is installed. It is a runtime dependency
         # here so base and development installs enforce the same contract.
         validator = Draft202012Validator(
-            schema, format_checker=jsonschema.FormatChecker(formats=["date-time"])
+            schema, format_checker=jsonschema.FormatChecker(formats=["date-time", "uuid"])
         )
         errors = []
         for err in validator.iter_errors(capsule):
@@ -84,6 +120,8 @@ class CapsuleValidator:
             return {"valid": False, "errors": [{"path": "/", "message": f"File not found: {filepath}"}]}
         except IsADirectoryError:
             return {"valid": False, "errors": [{"path": "/", "message": f"Expected a capsule.yaml file, got a directory: {filepath}"}]}
+        except UnicodeDecodeError:
+            return {"valid": False, "errors": [{"path": "/", "message": "capsule.yaml must be UTF-8 text"}]}
         except yaml.YAMLError as e:
             return {"valid": False, "errors": [{"path": "/", "message": f"YAML parse error: {e}"}]}
 

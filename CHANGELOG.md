@@ -111,3 +111,9 @@ because what a project looked for says as much as what it shipped.
 
 - Retire `verify_capsule`, `compare_capsules`, and `check_calibration_drift`: they could report success from metadata alone, no statistical tests, equal names, or missing fidelity values. Keep explicit migration errors at their public entry points and remove the old private verifier implementation. Supported integrity, deterministic-result, and count-equivalence APIs remain available; see `docs/legacy-verifier-migration.md`.
 - Make `load_capsule` use the capsule YAML profile and reject duplicate keys or non-mapping documents. Loading remains separate from verification.
+
+### Bundled release hardening
+
+- Validate UUID fields, UTF-8 input, and the canonical JSON data model; reject recursive values, normalized key collisions, non-string keys, non-finite numbers, and unsafe integers.
+- Resolve NFC checksum paths to filesystem entries and reject filename normalization collisions. Refuse symlinked metadata and non-regular payloads before reading, and report payload read errors as verification failures.
+- Add trusted-ID CLI regressions for deleted payloads and a fully rewritten digest chain. Clarify the manifest-version pin, explicit environment capture, and zero-qubit classical workloads.

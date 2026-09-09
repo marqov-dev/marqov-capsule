@@ -1,5 +1,46 @@
 # Capsule conference readiness — 2026-09-09
 
+## Current bundled checkpoint
+
+The sections below preserve the earlier audit and its successive follow-ups.
+This checkpoint adds local work after the legacy-verifier change; it has not
+been pushed or submitted as another PR.
+
+- Schema validation now enforces UUIDs and the canonical JSON data model,
+  rejecting typed keys, normalization collisions, nonfinite numbers, oversized
+  integers, binary values, and cyclic aliases. Invalid UTF-8 is a validation
+  failure. Shared acyclic values remain supported.
+- Checksum verification resolves decomposed Unicode filenames and rejects
+  ambiguous normalized names. Sealing rejects encoded-path collisions.
+  Verification refuses symlinked metadata and listed nonregular payloads,
+  including FIFOs, before reading their contents.
+- CLI regressions reject deleted payloads and a rewritten digest chain when
+  checked against the original trusted ID. Internal consistency alone does
+  not authenticate that ID.
+- The spec now states the existing choices explicitly: classical zero-qubit
+  workloads are valid, this schema pins manifest version `1.0.0`, and environment
+  capture is supplied by the author. Canonical helper typed-key coercion remains
+  a legacy extension; schema validation rejects those keys.
+
+Validation of this bundle: Python 3.12 development suite **405 passed, 1 skipped**;
+built-wheel base install **380 passed, 26 skipped** (25 numerical-extra cases
+and one filesystem normalization case); independent Node checker **18 passed**;
+wheel and source metadata checks passed. The new wheel successfully packaged
+the previously generated SDK 0.5.1 Bell export, produced byte-identical archives,
+verified the extracted capsule, and rejected payload/manifest tampering.
+The oldest supported Python 3.10 with the lowest declared direct dependency
+versions also passed **405 tests with 1 skip**, matching the CI floor setup.
+The filename-collision test skips on macOS because its filesystem aliases the
+two spellings; Linux CI still needs to exercise that case for this local bundle.
+
+Remaining conference boundaries: choose an attendee-accessible distribution
+channel (the repository was private at the audit), complete publication
+preflight and TestPyPI validation, and prove platform integration separately.
+The platform still vendors its own implementation. The independent Node checks
+cover canonicalization and checksums, not a second full capsule implementation.
+No package publication, repository visibility change, or platform deployment
+has been performed.
+
 ## Decision
 
 Use capsule for a standalone, reproducible demonstration of an experiment

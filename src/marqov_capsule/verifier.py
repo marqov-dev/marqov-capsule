@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any, NoReturn, Optional, Union
 
@@ -332,11 +333,11 @@ class CapsuleVerifier:
         """
         capsule_path = Path(capsule_dir)
         checksums_file = capsule_path / ".checksums"
-        if not checksums_file.exists():
+        if checksums_file.is_symlink() or not checksums_file.is_file():
             return {
                 "status": "fail",
                 "passed": False,
-                "error": ".checksums not found",
+                "error": ".checksums missing or not a regular file",
                 "files": {},
                 "mismatched": [],
                 "missing": [],
@@ -406,6 +407,28 @@ class CapsuleVerifier:
         symlinks: list[str] = []
         all_match = True
 
+        # Filesystems may expose decomposed Unicode names even though the
+        # format names paths in NFC. Map to actual directory entries, rejecting
+        # collisions rather than choosing one of two identically named payloads.
+        actual_paths = {}
+        colliding_paths = set()
+        for fp in capsule_path.rglob("*"):
+            normalized = unicodedata.normalize("NFC", fp.relative_to(capsule_path).as_posix())
+            if normalized in actual_paths:
+                colliding_paths.add(normalized)
+            actual_paths[normalized] = fp
+        if colliding_paths:
+            invalid.extend(sorted(colliding_paths))
+            all_match = False
+        normalized_expected = set()
+        for path in expected:
+            if isinstance(path, str):
+                normalized = unicodedata.normalize("NFC", path)
+                if normalized in normalized_expected:
+                    invalid.append(normalized)
+                    all_match = False
+                normalized_expected.add(normalized)
+
         for rel_path, expected_digest in expected.items():
             # Keys must be strings; a non-string mapping key (e.g. YAML null or a
             # nested list) must fail, never raise from a path operation (#61).
@@ -423,7 +446,11 @@ class CapsuleVerifier:
                 invalid.append(rel_path)
                 all_match = False
                 continue
-            file_path = capsule_path / rel_path
+            normalized = unicodedata.normalize("NFC", rel_path)
+            if normalized in colliding_paths:
+                all_match = False
+                continue
+            file_path = actual_paths.get(normalized, capsule_path / rel_path)
             # Never dereference symlinks — the target may live outside the capsule.
             if file_path.is_symlink():
                 files[rel_path] = {"expected": expected_digest, "actual": None,
@@ -450,7 +477,20 @@ class CapsuleVerifier:
                 missing.append(rel_path)
                 all_match = False
                 continue
-            actual = "sha256:" + hashlib.sha256(file_path.read_bytes()).hexdigest()
+            if not file_path.is_file():
+                invalid.append(rel_path)
+                files[rel_path] = {"expected": expected_digest, "actual": None,
+                                   "match": False, "error": "not a regular file"}
+                all_match = False
+                continue
+            try:
+                actual = "sha256:" + hashlib.sha256(file_path.read_bytes()).hexdigest()
+            except OSError:
+                invalid.append(rel_path)
+                files[rel_path] = {"expected": expected_digest, "actual": None,
+                                   "match": False, "error": "payload could not be read"}
+                all_match = False
+                continue
             match = actual == expected_digest
             files[rel_path] = {"expected": expected_digest, "actual": actual, "match": match}
             if not match:
@@ -473,11 +513,12 @@ class CapsuleVerifier:
             if fp.is_dir():
                 continue
             if rel not in UNCHECKSUMMED_ROOT_FILES:
-                actual_files.add(rel)
+                actual_files.add(unicodedata.normalize("NFC", rel))
         # .checksums pins a *closed* set: anything on disk but not listed is an
         # injected file. It leaves checksums_digest and the capsule ID intact,
         # so no other layer can catch it (#17).
-        extra = sorted(actual_files - set(expected.keys()))
+        expected_paths = {unicodedata.normalize("NFC", p) for p in expected if isinstance(p, str)}
+        extra = sorted(actual_files - expected_paths)
         if extra:
             all_match = False
 
@@ -526,8 +567,8 @@ class CapsuleVerifier:
 
         manifest_path = capsule_path / "capsule.yaml"
         manifest: Optional[dict] = None
-        if not manifest_path.exists():
-            errors.append("capsule.yaml not found — no manifest to anchor .checksums to")
+        if manifest_path.is_symlink() or not manifest_path.is_file():
+            errors.append("capsule.yaml missing or not a regular file — no manifest to anchor .checksums to")
         else:
             # The manifest is untrusted input: a corrupt or hostile one must fail
             # verification, never raise out of the verifier.
@@ -547,9 +588,9 @@ class CapsuleVerifier:
             checksums_file = capsule_path / ".checksums"
             if declared is None:
                 errors.append("manifest has no checksums_digest — capsule is not sealed")
-            elif not checksums_file.exists():
+            elif checksums_file.is_symlink() or not checksums_file.is_file():
                 checksums_digest_match = False
-                errors.append(".checksums not found but manifest declares checksums_digest")
+                errors.append(".checksums missing or not a regular file but manifest declares checksums_digest")
             else:
                 actual = "sha256:" + hashlib.sha256(checksums_file.read_bytes()).hexdigest()
                 checksums_digest_match = actual == declared

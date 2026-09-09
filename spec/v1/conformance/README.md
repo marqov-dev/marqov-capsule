@@ -41,8 +41,8 @@ number formatting, and path vectors; external review remains release work.
 Changes to expected bytes require an explanation of their identity impact;
 do not regenerate goldens just to make a failing test pass.
 
-The current Python API also accepts typed mapping keys and converts them to
-strings for compatibility. That permissive behavior is not certified by these
+The canonicalization helper accepts typed mapping keys and converts them to
+strings for compatibility; schema validation now rejects such manifests. That permissive behavior is not certified by these
 vectors: spec §5 requires string keys. Normalization collisions are rejected,
 including collisions between a typed key and its string spelling.
 
