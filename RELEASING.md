@@ -70,7 +70,17 @@ throwaway version for dry-runs, validate hard, and tag last.
       python -m zipfile -l dist/*.whl        # wheel contents
       tar tzf dist/*.tar.gz                   # sdist sweep — no strays
       uvx twine check dist/*
+      uv venv /tmp/capsule-release-acceptance
+      uv pip install --python /tmp/capsule-release-acceptance/bin/python dist/*.whl
+      /tmp/capsule-release-acceptance/bin/python -I tools/smoke_distribution.py
       ```
+      The release workflow runs these metadata and clean-wheel acceptance
+      checks before artifacts can reach either publisher. The acceptance check
+      exercises the CLI from outside the checkout, checks the installed schema,
+      deterministic archives, trusted-ID round-trip, and tamper failures.
+      It refuses editable installs. After installing from TestPyPI below, run
+      the same script with that environment's Python to check the published
+      artifact against this release checkout.
 - [ ] Push a `release/X.Y.Z` branch (version bumped, changelog dated).
 - [ ] **CI (full suite) green on the branch** — before the dry-run, not after:
       the dry-run publish below burns the `X.Y.Z` version string on TestPyPI

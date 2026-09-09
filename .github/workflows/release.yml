@@ -18,6 +18,13 @@ jobs:
           test -f "dist/marqov_capsule-${TAG}-py3-none-any.whl" \
             || { echo "FAIL: built wheel is not version ${TAG} (check pyproject version)"; ls dist/; exit 1; }
           echo "version OK: ${TAG}"
+      - name: Check distribution metadata
+        run: uvx twine check dist/*
+      - name: Exercise the built wheel in a clean base environment
+        run: |
+          uv venv /tmp/capsule-release-acceptance
+          uv pip install --python /tmp/capsule-release-acceptance/bin/python dist/*.whl
+          /tmp/capsule-release-acceptance/bin/python -I tools/smoke_distribution.py
       - uses: actions/upload-artifact@v4
         with: { name: dist, path: dist/ }
 

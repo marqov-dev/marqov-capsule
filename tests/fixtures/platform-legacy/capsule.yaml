@@ -1,0 +1,42 @@
+version: 1.0.0
+name: synthetic-platform-bell
+description: ''
+created_at: '2026-09-09T12:00:00Z'
+created_by: fixture
+marqov_version: 0.2.0
+lifecycle_state: sealed
+run_id: 550e8400-e29b-41d4-a716-446655440000
+parameters:
+  shots: 1000
+workflow_ref: null
+environment_ref: null
+backends_ref: null
+max_budget_usd: null
+tags: []
+task_executions:
+- task_id: 550e8400-e29b-41d4-a716-446655440001
+  backend: local_simulator
+  start_time: '2026-09-09T11:59:59Z'
+  end_time: '2026-09-09T12:00:00Z'
+  wall_time_seconds: 1
+  queue_time_seconds: 0
+  cost_usd: 0
+  shots: 1000
+  outputs_digest: sha256:e5872e6ee689791ef5a961616169a282714d597364cdb95b1af94a63852fce97
+  job_id: 550e8400-e29b-41d4-a716-446655440002
+digests:
+  workflow: null
+  environment: null
+  backends: null
+  data: null
+  results: sha256:e5872e6ee689791ef5a961616169a282714d597364cdb95b1af94a63852fce97
+  provenance: sha256:0a29a4caa6a739554059e57365dffb690b900ebe9fb1edd0a1540e5e09781056
+extensions: {}
+sealed_at: '2026-09-09T12:00:00Z'
+sealed_by: marqov-platform
+exit_code: 0
+exit_message: Auto-sealed from completed job
+num_tasks: 1
+wall_time_seconds: 1
+actual_cost_usd: 0
+total_shots: 1000

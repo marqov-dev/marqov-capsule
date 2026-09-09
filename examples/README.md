@@ -1,5 +1,24 @@
 # Quantum Week: a portable experiment record
 
+## Prepare an offline kit
+
+While online on the demonstration machine, build a capsule wheel and collect
+the SDK and dependency wheels using Python 3.12+ with pip installed:
+
+```bash
+uv build
+python3.12 tools/prepare_conference_kit.py dist/marqov_capsule-0.1.0-py3-none-any.whl dist/conference-kit
+```
+
+Use a new kit directory each time. The kit contains the two scripts below,
+all dependency wheels, hash-pinned installation requirements, platform/version
+metadata, licenses and a runbook. Follow its README to install and demonstrate
+with `--no-index` and `--require-hashes`. The target must already have compatible
+Python installed. Build a separate kit for a different OS, architecture or
+Python minor version. Generated kits stay under ignored `dist/`.
+
+## Run the experiment
+
 Run a real two-qubit Bell experiment with the Marqov SDK's local simulator,
 then seal its counts, circuit, source, and environment versions into a capsule.
 No provider credentials, account, network execution, or QPU fees are needed.

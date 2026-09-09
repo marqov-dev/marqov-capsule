@@ -45,6 +45,11 @@ sha256:<hex>  <relative-path>
 
 ### 2.3 Payload files
 
+Environment capture is explicit in this release: authors provide environment
+snapshots as payload files; sealing does not inspect the host or automatically
+create an environment lock. The SDK example records versions but does not claim
+a fully restorable environment.
+
 Any files the capsule author chooses to include: shot count distributions, circuits, environment snapshots, calibration data, etc. There is no required naming convention beyond what the manifest references. Implementers should use standard formats (JSON, OpenQASM, etc.) for interoperability.
 
 ---
@@ -61,6 +66,11 @@ The full schema is in `capsule-schema.json` (JSON Schema 2020-12). Key fields:
 | `name` | string | yes | Human-readable experiment name |
 | `description` | string | no | Free text |
 | `lifecycle_state` | string | yes | One of: `draft`, `runnable`, `sealed`, `archived` |
+
+The manifest version is pinned to `1.0.0` in this release. A validator does not
+assume that future minor versions are compatible: accepting another version
+requires an explicitly supported schema. This manifest version is distinct from
+the `mqc:1:` digest-procedure version.
 
 ### Provenance
 
@@ -81,7 +91,7 @@ The full schema is in `capsule-schema.json` (JSON Schema 2020-12). Key fields:
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `paradigm` | array of strings | yes | Values: `gate-based`, `analog`, `classical`, `annealing` |
-| `max_qubit_count` | integer ≥ 1 | yes | |
+| `max_qubit_count` | integer ≥ 0 | yes | Zero supports classical-only workloads |
 | `gate_set` | array of strings | no | e.g. `["CX", "RZ", "SX"]` |
 
 ### Task executions

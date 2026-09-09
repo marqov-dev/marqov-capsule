@@ -303,6 +303,7 @@ class CapsuleBuilder:
             )
         capsule_path = Path(capsule_dir)
         entries: list[tuple[str, str]] = []
+        encoded_paths: set[str] = set()
         for file_path in sorted(capsule_path.rglob("*")):
             # Never follow symlinks — hashing a link would enroll an outside file's
             # content into this capsule (exfiltration when re-sealing a received capsule).
@@ -314,8 +315,12 @@ class CapsuleBuilder:
                 rel = file_path.relative_to(capsule_path).as_posix()
                 if rel in UNCHECKSUMMED_ROOT_FILES:
                     continue
+                encoded = _checksum_path(rel)
+                if encoded in encoded_paths:
+                    raise ValueError("payload paths collide after Unicode normalization")
+                encoded_paths.add(encoded)
                 digest = hashlib.sha256(file_path.read_bytes()).hexdigest()
-                entries.append((_checksum_path(rel), f"sha256:{digest}"))
+                entries.append((encoded, f"sha256:{digest}"))
         # Spec §5: one "sha256:<hex>  <path>" line per file, sorted byte-wise by
         # the (encoded) path. Empty (no payload files) is a zero-byte file, whose
         # digest still pins "no payload".

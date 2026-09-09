@@ -33,15 +33,17 @@ def open_cmd(capsule, dest, expected_id, as_json):
 
     if dest:
         dest_path = Path(dest)
-        dest_path.mkdir(parents=True, exist_ok=True)
         opened_to = dest_path / capsule_path.name
         # symlinks=True copies links as links rather than materialising their target
         # content into the destination (defence-in-depth; verify_checksums already
         # rejects capsules containing symlinks). A non-regular member (FIFO/socket/
         # device) makes copytree raise shutil.Error — fail cleanly, no traceback.
         try:
+            dest_path.mkdir(parents=True, exist_ok=True)
+            # A fresh destination preserves the verified closed payload set and
+            # prevents existing destination links from redirecting file writes.
             shutil.copytree(str(capsule_path), str(opened_to),
-                            dirs_exist_ok=True, symlinks=True)
+                            symlinks=True)
         except (shutil.Error, OSError) as e:
             if as_json:
                 click.echo(json.dumps(

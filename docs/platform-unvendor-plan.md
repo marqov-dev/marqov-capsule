@@ -1,5 +1,11 @@
 # marqov-capsule → platform: un-vendor spec & plan
 
+> **Current integration evidence:** [September 9 source audit and executable
+> compatibility boundary](platform-integration-current.md) supersede the old
+> call-site and storage-identity assumptions below. The current worker uses a
+> database UUID for storage; a mandatory storage-key rebase is not established.
+> The legacy format fails full standalone integrity checks.
+
 > **2026-09-09 status:** this is a historical migration design, not a current
 > release checklist. See [conference readiness](conference-readiness-2026-09-09.md)
 > for verified updates. Annealing, scanner improvements, versioned IDs, and the

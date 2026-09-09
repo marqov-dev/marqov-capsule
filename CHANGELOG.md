@@ -15,6 +15,7 @@ happened and has been folded into this one.
 
 ### Conference readiness
 
+- Add a host-specific offline demonstration kit builder with all dependency wheels, hash-pinned installation requirements, environment metadata and an SDK/capsule runbook.
 - Added a runnable SDK local Bell-state export and capsule archive/tamper demonstration.
 - Published fixed conformance outputs and tests for digest identity, schema validity, and credential findings.
 - Reconciled the statistical verification description with the implemented one-sided bound and verifier-owned policy.
@@ -111,3 +112,12 @@ because what a project looked for says as much as what it shipped.
 
 - Retire `verify_capsule`, `compare_capsules`, and `check_calibration_drift`: they could report success from metadata alone, no statistical tests, equal names, or missing fidelity values. Keep explicit migration errors at their public entry points and remove the old private verifier implementation. Supported integrity, deterministic-result, and count-equivalence APIs remain available; see `docs/legacy-verifier-migration.md`.
 - Make `load_capsule` use the capsule YAML profile and reject duplicate keys or non-mapping documents. Loading remains separate from verification.
+
+### Bundled release hardening
+
+- Reject ambiguous archive layouts, duplicate/Unicode-colliding members, and existing capsule extraction destinations. Convert manifest and checksum read failures into failed verification results.
+- Keep CLI digest reporting from reading rejected checksum metadata; report incomplete archives and non-archives as verification failures in JSON mode. Require a fresh child destination for `open` so existing files or destination symlinks cannot alter the delivered record.
+- Gate release uploads on distribution metadata checks and isolated, base-wheel CLI acceptance, including trusted-ID round-trip and tamper failures. Provide the same check for local and TestPyPI-installed artifacts.
+- Validate UUID fields, UTF-8 input, and the canonical JSON data model; reject recursive values, normalized key collisions, non-string keys, non-finite numbers, and unsafe integers.
+- Resolve NFC checksum paths to filesystem entries and reject filename normalization collisions. Refuse symlinked metadata and non-regular payloads before reading, and report payload read errors as verification failures.
+- Add trusted-ID CLI regressions for deleted payloads and a fully rewritten digest chain. Clarify the manifest-version pin, explicit environment capture, and zero-qubit classical workloads.
