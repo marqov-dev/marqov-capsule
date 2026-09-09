@@ -1,6 +1,10 @@
 # Quantum Week: a portable experiment record
 
-## Prepare an offline kit
+## Prepare an offline kit (repository checkout only)
+
+This optional preparation tool is available in a repository checkout, not in
+the wheel or source distribution. The two demonstration scripts below are
+included in the source distribution and can be run directly.
 
 While online on the demonstration machine, build a capsule wheel and collect
 the SDK and dependency wheels using Python 3.12+ with pip installed:
@@ -23,7 +27,7 @@ Run a real two-qubit Bell experiment with the Marqov SDK's local simulator,
 then seal its counts, circuit, source, and environment versions into a capsule.
 No provider credentials, account, network execution, or QPU fees are needed.
 
-From the capsule repository root, using Python 3.12+:
+From a repository checkout or the extracted source distribution, using Python 3.12+:
 
 ```bash
 python3.12 -m venv /tmp/marqov-capsule-demo-env
@@ -33,7 +37,7 @@ python3.12 -m venv /tmp/marqov-capsule-demo-env
 ```
 
 Use new output directories on each run; scripts refuse to overwrite existing
-ones. Capsule is installed from this checkout because its first PyPI release
+ones. Capsule is installed from the local source directory because its first PyPI release
 is pending. The SDK and capsule steps may also run in separate environments.
 
 The second script checks schema validity, seals and packs the export twice,

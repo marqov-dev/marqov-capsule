@@ -1,193 +1,99 @@
 # Releasing marqov-capsule
 
-Adapted from [`marqov-sdk/RELEASING.md`](https://github.com/marqov-dev/marqov-sdk/blob/main/RELEASING.md),
-which is proven. Differences from the SDK are noted inline rather than silently
-diverging.
+Release through `.github/workflows/release.yml` using OIDC trusted publishing.
+Manual workflow dispatch publishes to TestPyPI. A pushed `v*` tag publishes to
+PyPI; a manual dispatch against a tag cannot select production publishing.
+The package version is declared in `pyproject.toml` and must match the tag.
 
-The `v*` tag push is the irreversible step (PyPI never lets a version be
-reused) — but the step-3 TestPyPI dry-run below also burns a version number
-permanently (TestPyPI publish uses `skip-existing`, so a *re-run* of the same
-version is safe, but the version string itself is spent there). Use a
-throwaway version for dry-runs, validate hard, and tag last.
+## 1. Prepare the candidate
 
-> **How the tag publishes:** pushing a `v*` tag triggers
-> `.github/workflows/release.yml`, which builds and publishes to PyPI via
-> **OIDC trusted publishing** (`id-token: write` + the `pypi` environment — no
-> stored token). Manual "Run workflow" dispatch runs the same build and
-> publishes to **TestPyPI** instead — `publish-pypi` requires both a tag ref
-> *and* `event_name == 'push'`, so a dispatch run against a tag ref still
-> cannot reach real PyPI. If publishing fails at the auth step it is the PyPI
-> trusted-publisher config (project / repo / workflow / environment), not a
-> token.
->
-> *Differs from the SDK:* the version is **static** in `pyproject.toml`, not
-> read from `__init__.py`. `release.yml` asserts the built wheel filename
-> matches the tag, which is the equivalent guard.
+- Review merged changes, finalize the version and changelog, and record the
+  candidate commit. Unmerged work is not part of the release.
+- Verify that PyPI and TestPyPI each have a trusted publisher for this package,
+  repository, `release.yml`, and their respective `pypi`/`testpypi` environments.
+  A first release may require pending-publisher registration.
+- Check the production environment's reviewer settings. To match the SDK
+  release process, configure its required-reviewer gate before production upload.
+- Run the complete test suite, base-install checks and URL review. A private
+  repository link is not a usable public documentation link.
+- Review actual artifact contents and scan them for secrets and private notes.
+  Package publication and GitHub repository publication are separate decisions.
 
-## 0. Scope
-- [ ] `git log --oneline vLAST..main` — everything merged since the last tag.
-      (For 0.1.0 there is no previous tag: the whole history is in scope.)
-- [ ] Confirm what's in vs. still in flight. Unmerged branches and open PRs are
-      NOT in the release; don't describe them as if they are.
+## 2. Build and inspect
 
-## 1. Changelog & version
-- [ ] CHANGELOG covers every merged user-facing change (cross-check the log).
-- [ ] **No changelog block without a matching tag** (`git ls-remote --tags origin`)
-      — a dated entry with no tag never shipped; fold it in. *This exact defect
-      was found before 0.1.0: a `[0.1.0] — 2026-07-22 "Initial release"` block
-      sat above every real change while nothing had ever been published.*
-- [ ] For a first release, check the changelog does not read as a diff against a
-      predecessor that never existed ("no longer fails on X" implies a shipped X).
-- [ ] Credit contributors: `git shortlog -sne vLAST..main`.
-- [ ] Bump `version` in `pyproject.toml`.
-- [ ] No stale version strings: `git grep '<previous-version>'`.
+Use a fresh output directory so old archives and rehearsal files cannot be
+included accidentally:
 
-## 2. Pre-flight
-- [ ] Full suite green: `.venv/bin/python -m pytest -q`
-- [ ] **Base install green** — the package must work without optional deps:
-      ```
-      uv venv /tmp/base && uv pip install --python /tmp/base/bin/python -e . pytest
-      /tmp/base/bin/python -m pytest tests/ -q
-      ```
-      Tests needing an optional dependency must **skip**, not fail. Guard them
-      per-test, never at module scope — a module-level `importorskip` silently
-      widens as tests are appended (see #39).
-- [ ] **URL policy and availability reviewed** — `python tools/check_urls.py`
-      must exit 0, and every WARN needs review. Invalid URLs and unapproved
-      Marqov hosts fail regardless of whether DNS resolves. Network errors,
-      including resolver outages and HTTP errors, are inconclusive warnings;
-      exit 0 does not certify that links are public or reachable. The schema
-      `$id` is an identifier and is not fetched. CI runs the deterministic
-      `--offline` check; run the default network check again before publication.
-- [ ] Packaging invariants: `pytest tests/test_packaging.py` — exactly one schema
-      ships, it is byte-identical to `spec/v1/`, and no extra advertises an
-      unsupported feature.
+```bash
+uv build --out-dir /tmp/capsule-release-dist
+python tools/check_distribution.py /tmp/capsule-release-dist
+uvx twine check /tmp/capsule-release-dist/*.whl /tmp/capsule-release-dist/*.tar.gz
+uv venv /tmp/capsule-release-acceptance
+uv pip install --python /tmp/capsule-release-acceptance/bin/python /tmp/capsule-release-dist/*.whl
+/tmp/capsule-release-acceptance/bin/python -I tools/smoke_distribution.py
+```
 
-## 3. Build, inspect, dry-run to TestPyPI
-- [ ] Look inside the artifact before any upload:
-      ```
-      uv build
-      python -m zipfile -l dist/*.whl        # wheel contents
-      tar tzf dist/*.tar.gz                   # sdist sweep — no strays
-      uvx twine check dist/*
-      python tools/check_distribution.py dist
-      uv venv /tmp/capsule-release-acceptance
-      uv pip install --python /tmp/capsule-release-acceptance/bin/python dist/*.whl
-      /tmp/capsule-release-acceptance/bin/python -I tools/smoke_distribution.py
-      ```
-      The release workflow runs these metadata and clean-wheel acceptance
-      checks before artifacts can reach either publisher. The acceptance check
-      exercises the CLI from outside the checkout, checks the installed schema,
-      deterministic archives, trusted-ID round-trip, and tamper failures.
-      It refuses editable installs. After installing from TestPyPI below, run
-      the same script with that environment's Python to check the published
-      artifact against this release checkout.
-- [ ] Push a `release/X.Y.Z` branch (version bumped, changelog dated).
-- [ ] **CI (full suite) green on the branch** — before the dry-run, not after:
-      the dry-run publish below burns the `X.Y.Z` version string on TestPyPI
-      even though it never reaches real PyPI, so don't spend it on a branch
-      that hasn't passed CI.
-- [ ] Dry-run: `gh workflow run release.yml --ref release/X.Y.Z` (TestPyPI only).
-- [ ] `gh run watch <id> --exit-status` — build ✅, publish-testpypi ✅,
-      publish-pypi skipped.
-- [ ] **Validate the PUBLISHED artifact, not just the pipeline** — install from
-      TestPyPI *only* and exercise it, while it is still free:
-      ```
-      pip install --no-deps --index-url https://test.pypi.org/simple/ \
-                  marqov-capsule==X.Y.Z
-      pip install pyyaml click jsonschema jcs rfc3339-validator   # runtime deps, from real PyPI
-      marqov-capsule init ./t --name t --paradigm gate-based --qubits 2
-      mkdir -p t/payload && echo '{"counts":{"00":1}}' > t/payload/results.json
-      marqov-capsule seal ./t && marqov-capsule pack ./t -o t.capsule
-      marqov-capsule verify t.capsule && marqov-capsule unpack t.capsule -o ./r
-      ```
-      (`--no-deps` + a separate PyPI install, not `--extra-index-url`: merging
-      both indexes into one candidate pool lets a runtime dep resolve to a
-      stranger's higher-versioned TestPyPI upload — see [PyPA guidance on
-      dependency confusion](https://packaging.python.org/en/latest/guides/using-testpypi/).
-      This block is executed by `tests/test_releasing.py`, so it can't drift.)
+The artifact check inspects source and wheel inventories. Installed-wheel
+acceptance checks the bundled schema, CLI round-trip, deterministic archives,
+trusted-ID verification and tamper rejection. Both checks run in the release
+workflow before artifacts reach a publisher.
 
-## 4. Cut the release
-- [ ] Fast-forward `main` to the release commit and push.
-- [ ] **Wait for CI green on `main`** — the last gate before the irreversible step.
+## 3. TestPyPI validation
 
-### ⚠️ The tag is the point of no return
-Pushing a `v*` tag publishes to real PyPI, and **a PyPI version can never be
-reused or unpublished.** Tag the exact SHA you validated on TestPyPI, and only
-after CI is green on it:
+Push the release branch and open its review so CI runs on the candidate. Wait
+for all required checks before dispatching the TestPyPI workflow against that
+branch. A branch push alone does not trigger the full CI workflow.
+
+```bash
+gh workflow run release.yml --ref release/X.Y.Z
+gh run watch <run-id> --exit-status
+```
+
+Confirm the build and TestPyPI jobs succeeded and production publishing was
+skipped. TestPyPI is public; uploading there discloses package contents too.
+Use a new candidate version if the artifact changes after upload. The workflow's
+`skip-existing` setting does not replace an existing artifact or prove it contains
+new changes. Validate the file downloaded from TestPyPI, not just workflow status.
+
+**Validate the PUBLISHED artifact** in a fresh environment, resolving the package
+and runtime dependencies from their respective indexes separately:
 
 ```
+pip install --no-deps --index-url https://test.pypi.org/simple/ \
+            marqov-capsule==X.Y.Z
+pip install pyyaml click jsonschema jcs rfc3339-validator
+marqov-capsule init ./t --name t --paradigm gate-based --qubits 2
+mkdir -p t/payload && echo '{"counts":{"00":1}}' > t/payload/results.json
+marqov-capsule seal ./t && marqov-capsule pack ./t -o t.capsule
+marqov-capsule verify t.capsule && marqov-capsule unpack t.capsule -o ./r
+```
+
+Do not combine TestPyPI and PyPI into one dependency-resolution pool with
+`--extra-index-url`. Run `tools/smoke_distribution.py` using the TestPyPI-installed
+package's Python to check the complete trusted-ID and tamper acceptance path.
+The script must come from the matching release checkout.
+
+## 4. Publish to PyPI
+
+Merge the validated release candidate and wait for main CI. Ensure the files
+and version still match the candidate tested on TestPyPI; if they changed,
+repeat candidate validation. Record the final commit and artifact hashes.
+
+Pushing the tag triggers public production publication:
+
+```bash
 git tag -a vX.Y.Z <validated-sha> -m "marqov-capsule X.Y.Z"
 git push origin vX.Y.Z
 ```
 
-- [ ] Watch `release.yml` → `publish-pypi` green.
-- [ ] `gh release create vX.Y.Z --title "vX.Y.Z" --notes-file NOTES.md`
-- [ ] Verify: PyPI shows X.Y.Z, both licences render, project URLs resolve, and a
-      clean-venv `pip install marqov-capsule==X.Y.Z` completes a seal → pack →
-      verify round-trip.
+Complete the configured environment approval, watch the publishing job, and
+create the GitHub release notes. Install the published package in a fresh
+environment and repeat acceptance. Confirm package metadata, license texts and
+public documentation links are usable.
 
-## Rollback
-- **Before the tag:** nothing has been published — fix forward with a new commit.
-  Do **not** force-push the default branch.
-- **After the tag:** a PyPI version cannot be unpublished. Ship `X.Y.(Z+1)`.
+## Corrections
 
-## Capsule-specific notes
-
-**The spec is the expensive part.** Code ships every release; `spec/v1/` is
-CC-BY and meant to be cited and independently implemented. A wrong normative
-statement is the one thing that cannot be cheaply undone, so treat spec changes
-with more care than code changes.
-
-**Downstream vendors this package by file copy.** Three platform repos carry a
-`capsule_builder.py` copy with no dependency declaration and therefore no update
-path (#50). Publishing is what unblocks replacing them — a release here is a
-security delivery mechanism, not only a milestone.
-
-### The schema `$id` host
-
-`spec/v1/capsule-schema.json` declares:
-
-```json
-"$id": "https://marqov.ai/schemas/capsule/v1/capsule-schema.json"
-```
-
-This previously read `marqov.dev`, which is not a domain in use — the product
-is `marqov.ai` (marketing) and `app.marqov.ai` (application). It originated in
-agent-written design docs and propagated into the schema, the spec README and a
-test. Corrected before the first tag, because `$id` is the schema's canonical
-identity and changing it after publication breaks anyone who pinned it.
-
-`marqov.ai/schemas/…` returns 404 today. A JSON Schema `$id` is an identifier
-and need not dereference, so this does not block anything — but serving the
-file there is a genuine nice-to-have for a CC-BY spec meant to be implemented
-independently. Not on the release critical path.
-
-## Not adopted from the SDK
-
-- **`tests/test_no_private_references.py`** — the SDK's hygiene gate. No
-  equivalent here yet; worth adding if this repo ever references private infra.
-- **Multiple optional extras.** Capsule has only `dev` after the `[verify]` extra
-  was removed in #51, so there is no separate-`--extra`-flags trap to avoid.
-- **Push-protection secret scanning** — the SDK relies on this in place of a
-  per-release secret grep. On this repository it is **currently disabled**
-  (verified via `gh api repos/marqov-dev/marqov-capsule --jq
-  '.security_and_analysis'` → `secret_scanning: disabled`,
-  `push_protection: disabled`). Worth enabling before adopting the SDK's
-  "no per-release grep needed" assumption — doubly so for a project whose own
-  product is a credential gate.
-
-## Confirmed prerequisites
-
-Checked, so they don't have to be rediscovered on release day:
-
-- ✅ `pypi` and `testpypi` GitHub Environments both exist.
-- ✅ `release.yml` cannot double-fire — `publish-testpypi` requires
-  `github.event_name == 'workflow_dispatch'`, `publish-pypi` requires
-  *both* `github.event_name == 'push'` *and* a `refs/tags/v` ref, so a manual
-  dispatch pointed at a tag ref still only reaches TestPyPI.
-- ❓ **PyPI trusted publisher.** Cannot be checked from the repo. For a first
-  publish the project does not exist yet, so it needs a *pending publisher* for
-  `marqov-capsule` bound to `marqov-dev/marqov-capsule`, workflow `release.yml`,
-  environment `pypi` (and a TestPyPI one for the dry-run, environment
-  `testpypi`). If missing, the tag fires and OIDC fails at upload.
+Before publication, fix and revalidate the candidate. If a TestPyPI artifact
+already exists, use a new candidate version for changed bytes. After production
+publication, issue a new version for corrections. Do not force-push the default
+branch or silently relabel an unvalidated commit as the tested release.

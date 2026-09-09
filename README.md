@@ -10,13 +10,15 @@ The format is an open standard (`spec/v1/`, CC-BY-4.0). The Python tooling is Ap
 
 ## Install
 
+Requires Python 3.10+. Install a supplied release wheel:
+
 ```bash
-git clone https://github.com/marqov-dev/marqov-capsule.git
-cd marqov-capsule
-python -m pip install .
+python -m pip install ./marqov_capsule-0.1.0-py3-none-any.whl
 ```
 
-The first PyPI release is pending; install from source for now. Requires Python 3.10+.
+The first PyPI release is being prepared. The source distribution includes
+`spec/v1/` and `examples/`; from its extracted directory, install with
+`python -m pip install .`.
 
 ## Quick start
 
@@ -28,13 +30,13 @@ from marqov_capsule import CapsuleBuilder
 with tempfile.TemporaryDirectory() as tmp:
     capsule_dir = Path(tmp)
 
-    # Write a result payload before sealing
+    # Write illustrative counts; this example does not execute a backend
     (capsule_dir / "results.json").write_text('{"00": 512, "11": 488}')
 
     builder = CapsuleBuilder()
     builder.start_capsule(
         name="bell-state-v1",
-        description="Two-qubit Bell state on IBM Brisbane",
+        description="Illustrative Bell-state record; no backend execution",
         requirements={"paradigm": ["gate-based"], "max_qubit_count": 2},
         created_by="alice@example.com",
     )
@@ -48,7 +50,11 @@ with tempfile.TemporaryDirectory() as tmp:
 
 ## Runnable SDK demonstration
 
-The [Bell-state example](https://github.com/marqov-dev/marqov-capsule/tree/main/examples) runs the Marqov SDK local simulator, seals its result and circuit, verifies an archive round-trip against a trusted ID, and demonstrates detection of changed payloads and metadata. It needs Python 3.12+ for the SDK, with no provider credentials.
+The source distribution includes `examples/run_bell.py` and
+`examples/seal_bell.py`. They run the Marqov SDK local simulator, seal its result
+and circuit, verify an archive against a trusted ID, and demonstrate detection
+of changed payloads and metadata. Follow `examples/README.md` in the extracted
+source distribution. The SDK demo requires Python 3.12+ and no provider credentials.
 
 ## CLI
 
@@ -140,27 +146,25 @@ Record the capsule ID at seal time and distribute it out of band. Without `--id`
 
 Note the limit: the digest chain detects modification, not forgery. Anyone who rewrites the payload, `.checksums`, and the manifest together produces a self-consistent capsule with a *different* ID — which is why the trusted ID has to come from somewhere other than the capsule. Capsules carry no signatures, so a capsule ID is only as trustworthy as the channel you received it over.
 
-## Roadmap
+## Result comparison and limitations
+
+Integrity verification checks a recorded experiment's files. It does not prove
+scientific correctness, QPU provenance, signer identity, or reproducibility of
+an independently executed experiment. Environment capture is author-supplied;
+sealing does not automatically recreate or lock an execution environment.
+
+The Python API provides `verify_deterministic` for explicit result equality and
+`verify_statistical` for independent count samples. Statistical comparison
+requires NumPy/SciPy and a verifier-owned `VerificationPolicy`; untrusted
+settings must pass through `policy.resolve`. Its one-sided bound returns
+`VERIFIED` or `INCONCLUSIVE`. There is no statistical comparison CLI in this
+release. Sampling assumptions and the decision procedure are in spec §6.
 
 The pre-release `verify_capsule`, `compare_capsules`, and
-`check_calibration_drift` methods are retired because they could report success
-without sufficient evidence. They raise explicit migration errors; see the
-[migration guide](https://github.com/marqov-dev/marqov-capsule/blob/main/docs/legacy-verifier-migration.md)
-for the supported integrity and result-comparison APIs.
-
-**Statistical equivalence testing has no CLI in this release.** Comparing two runs and getting a verdict is the natural companion to sealing. The estimator behind it was miscalibrated badly enough that a distribution compared *against itself* was rejected as non-reproducible from roughly four qubits upward — that's now fixed: `CapsuleVerifier.verify_statistical` uses a closed-form one-sided confidence bound instead of the broken bootstrap, and reports `VERIFIED` / `INCONCLUSIVE`, with no affirmative `REJECTED`. A lower bound on true TVD does exist (triangle inequality: plug-in estimate minus McDiarmid slack minus a one-sample bias term per arm), but it isn't deployed — it depends on the outcome count `K`, and taking `K` from observed support rather than the declared register width fails open, a problem the upper bound's `K`-free slack doesn't share. The one candidate detection tool (a permutation test against the sharp null) measured power as low as 42% at K=256, too weak to carry an affirmative verdict on its own. The implemented procedure is described in spec §6; a statistical CLI remains future work.
-
-The investigation is written up in full, including the candidate replacements that were measured and rejected and why:
-
-- [`docs/research/2026-08-10-tvd-equivalence-testing.md`](https://github.com/marqov-dev/marqov-capsule/blob/main/docs/research/2026-08-10-tvd-equivalence-testing.md) — why the plug-in estimator fails, why the bootstrap cannot be repaired for this functional, and the one-sided bound that does work
-- Tracked in [#15](https://github.com/marqov-dev/marqov-capsule/issues/15); conformance and spec review in [#20](https://github.com/marqov-dev/marqov-capsule/issues/20)
-
-Also on the roadmap, with the research already done:
-
-- Credential scanner precision and recall improvements landed in #68; the supporting research is in [`docs/research/2026-08-11-credential-detection.md`](https://github.com/marqov-dev/marqov-capsule/blob/main/docs/research/2026-08-11-credential-detection.md)
-- [#16](https://github.com/marqov-dev/marqov-capsule/issues/16) — capsules carry no signatures, so the digest chain detects modification but not forgery
-
-Contributions welcome on any of these. The research documents are meant to be a starting point rather than a specification — if you disagree with the analysis, the reproduction scripts are in the appendices.
+`check_calibration_drift` methods are retired and raise migration errors.
+Use `verify_integrity(directory, expected_id=trusted_id)` for artifact integrity;
+compare explicit result payloads separately. No calibration-verdict replacement
+is provided.
 
 ## Spec
 
@@ -174,13 +178,14 @@ The schema is bundled into the Python package and used for validation at runtime
 
 ## License
 
-This repository contains two separately licensed components:
-
-| Component | License | Reason |
-|---|---|---|
-| `spec/v1/` | [CC-BY-4.0](https://github.com/marqov-dev/marqov-capsule/blob/main/LICENSE-SPEC) | The spec is a citable artifact — CC-BY allows citation in academic work and independent implementations without copyleft restrictions |
-| Python package (`src/`) | [Apache 2.0](https://github.com/marqov-dev/marqov-capsule/blob/main/LICENSE-CODE) | Permissive license suitable for use in commercial and research software without viral conditions |
+The Python package is licensed under
+[Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+The specification is licensed under
+[CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/).
+Both license texts are included in the wheel and source distribution.
 
 ## Contributing
 
-See [CONTRIBUTING.md](https://github.com/marqov-dev/marqov-capsule/blob/main/CONTRIBUTING.md) for dev setup, the RFC evolution process for spec changes, and license terms.
+Contributions should include tests for changed behavior and a conformance
+fixture for format changes. Specification changes follow an RFC review process.
+Contact the project at `hello@marqov.ai` for contribution access and support.

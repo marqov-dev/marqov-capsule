@@ -261,8 +261,7 @@ tvd_ucb = min(1, tvd_point + slack)
 Sum over the union of observed outcomes, using zero for absent counts.
 This is a one-sided upper confidence bound on true TVD with coverage at least
 `1-alpha` under the sampling assumptions. The bound uses no resampling or seed.
-Its derivation and limitations are recorded in the
-[statistical research note](../../docs/research/2026-08-10-tvd-equivalence-testing.md).
+The stated sampling assumptions are required for this coverage guarantee.
 
 The decision procedure is:
 
@@ -310,4 +309,6 @@ A conformant capsule implementation must:
 
 This specification is licensed under [CC-BY-4.0](../../LICENSE-SPEC).
 
-Cite as: **Marqov Capsule Specification v1**, Marqov, 2026. `https://github.com/marqov-dev/marqov-capsule/tree/main/spec/v1`
+Cite as: **Marqov Capsule Specification v1**, Marqov, 2026. Distributed in
+the `marqov-capsule` source archive under `spec/v1/`; record the package version
+when citing a specific revision.
