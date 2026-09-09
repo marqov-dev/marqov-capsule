@@ -20,6 +20,8 @@ jobs:
           echo "version OK: ${TAG}"
       - name: Check distribution metadata
         run: uvx twine check dist/*
+      - name: Check distribution contents
+        run: python tools/check_distribution.py dist
       - name: Exercise the built wheel in a clean base environment
         run: |
           uv venv /tmp/capsule-release-acceptance
