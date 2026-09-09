@@ -132,6 +132,12 @@ Note the limit: the digest chain detects modification, not forgery. Anyone who r
 
 ## Roadmap
 
+The pre-release `verify_capsule`, `compare_capsules`, and
+`check_calibration_drift` methods are retired because they could report success
+without sufficient evidence. They raise explicit migration errors; see the
+[migration guide](https://github.com/marqov-dev/marqov-capsule/blob/main/docs/legacy-verifier-migration.md)
+for the supported integrity and result-comparison APIs.
+
 **Statistical equivalence testing has no CLI in this release.** Comparing two runs and getting a verdict is the natural companion to sealing. The estimator behind it was miscalibrated badly enough that a distribution compared *against itself* was rejected as non-reproducible from roughly four qubits upward — that's now fixed: `CapsuleVerifier.verify_statistical` uses a closed-form one-sided confidence bound instead of the broken bootstrap, and reports `VERIFIED` / `INCONCLUSIVE`, with no affirmative `REJECTED`. A lower bound on true TVD does exist (triangle inequality: plug-in estimate minus McDiarmid slack minus a one-sample bias term per arm), but it isn't deployed — it depends on the outcome count `K`, and taking `K` from observed support rather than the declared register width fails open, a problem the upper bound's `K`-free slack doesn't share. The one candidate detection tool (a permutation test against the sharp null) measured power as low as 42% at K=256, too weak to carry an affirmative verdict on its own. The implemented procedure is described in spec §6; a statistical CLI remains future work.
 
 The investigation is written up in full, including the candidate replacements that were measured and rejected and why:

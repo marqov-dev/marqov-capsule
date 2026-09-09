@@ -6,7 +6,7 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, NoReturn, Optional, Union
 
 import yaml
 
@@ -600,280 +600,51 @@ class CapsuleVerifier:
         }
 
     # -------------------------------------------------------------------------
-    # Legacy capsule-level API (kept for backwards compatibility)
+    # Pre-release legacy API migration guards
     # -------------------------------------------------------------------------
 
-    def load_capsule(self, filepath: Union[str, Path]) -> Dict[str, Any]:
-        """Load a Capsule from a YAML file."""
-        filepath = Path(filepath)
-        if not filepath.exists():
-            raise FileNotFoundError(f"Capsule not found: {filepath}")
-        with open(filepath) as f:
-            return yaml.safe_load(f)
+    def load_capsule(self, filepath: Union[str, Path]) -> dict[str, Any]:
+        """Parse a manifest using the capsule YAML profile; does not verify it."""
+        manifest = load_manifest_yaml(Path(filepath).read_text(encoding="utf-8"))
+        if not isinstance(manifest, dict):
+            raise ValueError("capsule.yaml must be a YAML mapping")
+        return manifest
 
     def verify_capsule(
         self,
-        capsule: Dict[str, Any],
+        capsule: dict[str, Any],
         method: Optional[str] = None,
-        reference_results: Optional[Dict[str, Any]] = None,
+        reference_results: Optional[dict[str, Any]] = None,
         tolerance: float = 0.01,
         significance_level: float = 0.05,
-    ) -> Dict[str, Any]:
-        """Verify Capsule reproducibility (legacy API)."""
-        if method is None:
-            tier = capsule.get("reproducibility_tier", "deterministic")
-            method = self._tier_to_method(tier)
+    ) -> NoReturn:
+        """Retired legacy verdict API; retained only for a clear migration error.
 
-        if method == "deterministic":
-            return self._verify_deterministic(capsule, reference_results)
-        elif method == "statistical":
-            return self._verify_statistical(
-                capsule, reference_results, tolerance, significance_level
-            )
-        elif method == "verification-only":
-            return self._verify_metadata_only(capsule)
-        else:
-            raise ValueError(f"Unknown verification method: {method}")
-
-    @staticmethod
-    def _tier_to_method(tier: str) -> str:
-        mapping = {
-            "deterministic": "deterministic",
-            "statistical": "statistical",
-            "verification-only": "verification-only",
-        }
-        return mapping.get(tier, "deterministic")
-
-    def _verify_deterministic(
-        self,
-        capsule: Dict[str, Any],
-        reference_results: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        warnings: list = []
-        details: dict = {}
-
-        if capsule.get("lifecycle_state") != "sealed":
-            warnings.append("Capsule is not sealed - verification may be incomplete")
-
-        digests = capsule.get("digests", {})
-        missing_digests = [k for k in ["workflow", "environment", "backends", "provenance"] if not digests.get(k)]
-        if missing_digests:
-            warnings.append(f"Missing digests: {', '.join(missing_digests)}")
-        details["digests_present"] = {k: v is not None for k, v in digests.items()}
-
-        if reference_results:
-            digest_matches = self._compare_digests(
-                capsule.get("extensions", {}).get("result_digests", {}),
-                reference_results,
-            )
-            details["digest_comparison"] = digest_matches
-            verification_passed = all(digest_matches.values())
-        else:
-            verification_passed = len(missing_digests) == 0
-
-        return {
-            "verification_passed": verification_passed,
-            "method": "deterministic",
-            "details": details,
-            "warnings": warnings,
-        }
-
-    def _verify_metadata_only(self, capsule: Dict[str, Any]) -> Dict[str, Any]:
-        warnings: list = []
-        details: dict = {}
-
-        lifecycle_state = capsule.get("lifecycle_state")
-        details["lifecycle_state"] = lifecycle_state
-        if lifecycle_state != "sealed":
-            warnings.append(f"Capsule lifecycle_state is '{lifecycle_state}', expected 'sealed'")
-
-        required_sections = ["name", "digests", "tasks"]
-        missing_sections = [s for s in required_sections if s not in capsule]
-        details["required_sections_present"] = len(missing_sections) == 0
-        if missing_sections:
-            warnings.append(f"Missing required sections: {', '.join(missing_sections)}")
-
-        digests = capsule.get("digests", {})
-        digests_present = {k: v is not None for k, v in digests.items()}
-        any_digest_recorded = any(digests_present.values()) if digests_present else False
-        details["digests_present"] = digests_present
-        details["any_digest_recorded"] = any_digest_recorded
-        if not any_digest_recorded:
-            warnings.append("No digests recorded in capsule")
-
-        verification_passed = (
-            lifecycle_state == "sealed"
-            and len(missing_sections) == 0
-            and any_digest_recorded
+        Metadata presence and non-rejection of a statistical null do not prove
+        integrity or equivalence. Do not map the old boolean to a new verdict.
+        """
+        raise NotImplementedError(
+            "verify_capsule() was retired before 0.1.0: use "
+            "verify_integrity(directory, expected_id=trusted_id) for file integrity, "
+            "verify_deterministic(ref_data, new_data) for explicit result equality, "
+            "or verify_statistical(ref_counts, new_counts, policy.resolve(declared)) "
+            "with a verifier-owned VerificationPolicy for count equivalence. "
+            "Metadata alone cannot establish any of these guarantees."
         )
-
-        return {
-            "verification_passed": verification_passed,
-            "method": "verification-only",
-            "details": details,
-            "warnings": warnings,
-        }
-
-    def _verify_statistical(
-        self,
-        capsule: Dict[str, Any],
-        reference_results: Optional[Dict[str, Any]] = None,
-        tolerance: float = 0.01,
-        significance_level: float = 0.05,
-    ) -> Dict[str, Any]:
-        try:
-            import numpy as np
-            from scipy import stats as _stats
-        except ImportError:
-            raise ImportError(
-                "numpy and scipy are required for statistical verification. "
-                "Install with: pip install numpy scipy"
-            )
-
-        warnings: list = []
-        details: dict = {}
-        statistical_tests: list = []
-
-        if capsule.get("lifecycle_state") != "sealed":
-            warnings.append("Capsule is not sealed - verification may be incomplete")
-
-        if reference_results:
-            if "distribution" in reference_results:
-                statistical_tests.append(self._ks_test(
-                    capsule.get("extensions", {}).get("distribution"),
-                    reference_results["distribution"],
-                    significance_level,
-                ))
-            if "counts" in reference_results:
-                statistical_tests.append(self._chi_squared_test(
-                    capsule.get("extensions", {}).get("counts"),
-                    reference_results["counts"],
-                    significance_level,
-                ))
-            if "energy" in reference_results:
-                statistical_tests.append(self._energy_tolerance_check(
-                    capsule.get("extensions", {}).get("energy"),
-                    reference_results["energy"],
-                    tolerance,
-                ))
-            verification_passed = all(t.get("passed", False) for t in statistical_tests)
-        else:
-            warnings.append("No reference results - cannot perform statistical verification")
-            verification_passed = False
-
-        details["statistical_tests"] = statistical_tests
-        details["tolerance"] = tolerance
-        details["significance_level"] = significance_level
-
-        return {
-            "verification_passed": verification_passed,
-            "method": "statistical",
-            "details": details,
-            "warnings": warnings,
-        }
-
-    def _ks_test(self, distribution1, distribution2, significance_level):
-        from scipy import stats as _stats
-        if distribution1 is None or distribution2 is None:
-            return {"test": "kolmogorov_smirnov", "passed": False, "error": "Distribution data missing"}
-        try:
-            d_stat, p_value = _stats.ks_2samp(distribution1, distribution2)
-            return {
-                "test": "kolmogorov_smirnov",
-                "d_statistic": float(d_stat),
-                "p_value": float(p_value),
-                "threshold": significance_level,
-                "passed": p_value > significance_level,
-            }
-        except Exception as e:
-            return {"test": "kolmogorov_smirnov", "passed": False, "error": str(e)}
-
-    def _chi_squared_test(self, counts1, counts2, significance_level):
-        import numpy as np
-        from scipy import stats as _stats
-        if counts1 is None or counts2 is None:
-            return {"test": "chi_squared", "passed": False, "error": "Counts data missing"}
-        try:
-            all_keys = sorted(set(counts1.keys()) | set(counts2.keys()))
-            observed = np.array([counts1.get(k, 0) for k in all_keys], dtype=float)
-            expected = np.array([counts2.get(k, 0) for k in all_keys], dtype=float)
-            observed = observed / observed.sum() * expected.sum()
-            chi2_stat, p_value = _stats.chisquare(observed, expected)
-            return {
-                "test": "chi_squared",
-                "chi_squared_statistic": float(chi2_stat),
-                "p_value": float(p_value),
-                "threshold": significance_level,
-                "passed": p_value > significance_level,
-            }
-        except Exception as e:
-            return {"test": "chi_squared", "passed": False, "error": str(e)}
-
-    def _energy_tolerance_check(self, energy1, energy2, tolerance):
-        if energy1 is None or energy2 is None:
-            return {"test": "energy_tolerance", "passed": False, "error": "Energy values missing"}
-        try:
-            delta = abs(energy1 - energy2)
-            return {
-                "test": "energy_tolerance",
-                "energy1": float(energy1),
-                "energy2": float(energy2),
-                "delta": float(delta),
-                "tolerance": tolerance,
-                "passed": delta <= tolerance,
-            }
-        except Exception as e:
-            return {"test": "energy_tolerance", "passed": False, "error": str(e)}
-
-    def _compare_digests(self, digests1: Dict[str, Any], digests2: Dict[str, Any]) -> Dict[str, bool]:
-        all_keys = set(digests1.keys()) | set(digests2.keys())
-        matches = {}
-        for key in all_keys:
-            d1 = digests1.get(key, {}).get("digest") if isinstance(digests1.get(key), dict) else digests1.get(key)
-            d2 = digests2.get(key, {}).get("digest") if isinstance(digests2.get(key), dict) else digests2.get(key)
-            matches[key] = d1 == d2 if d1 and d2 else False
-        return matches
 
     def check_calibration_drift(
         self,
-        capsule1: Dict[str, Any],
-        capsule2: Dict[str, Any],
+        capsule1: dict[str, Any],
+        capsule2: dict[str, Any],
         max_fidelity_drift: float = 0.01,
-    ) -> Dict[str, Any]:
-        """Check if QPU calibration has drifted between two capsules."""
-        cal1 = capsule1.get("extensions", {}).get("qpu_calibration")
-        cal2 = capsule2.get("extensions", {}).get("qpu_calibration")
-
-        if not cal1 or not cal2:
-            return {
-                "calibration_drift_check": False,
-                "error": "Calibration data missing from one or both capsules",
-            }
-
-        fid1 = cal1.get("gate_fidelities", {})
-        fid2 = cal2.get("gate_fidelities", {})
-        single_qubit_drift = abs(
-            fid1.get("single_qubit_gate_fidelity_mean", 0) -
-            fid2.get("single_qubit_gate_fidelity_mean", 0)
+    ) -> NoReturn:
+        """Retired: missing fidelity values formerly compared equal as zero."""
+        raise NotImplementedError(
+            "check_calibration_drift() was retired before 0.1.0. "
+            "No replacement calibration-verdict API is provided; compare explicit, "
+            "validated calibration measurements with a domain-specific policy. "
+            "A statistical calibration_drift tolerance is not a calibration check."
         )
-        two_qubit_drift = abs(
-            fid1.get("two_qubit_gate_fidelity_mean", 0) -
-            fid2.get("two_qubit_gate_fidelity_mean", 0)
-        )
-        acceptable = (
-            single_qubit_drift <= max_fidelity_drift and
-            two_qubit_drift <= max_fidelity_drift
-        )
-        return {
-            "calibration_drift_check": acceptable,
-            "single_qubit_fidelity_delta": single_qubit_drift,
-            "two_qubit_fidelity_delta": two_qubit_drift,
-            "max_allowed_drift": max_fidelity_drift,
-            "calibration_timestamps": {
-                "capsule1": cal1.get("calibration_timestamp"),
-                "capsule2": cal2.get("calibration_timestamp"),
-            },
-        }
 
     def compare_capsules(
         self,
@@ -881,36 +652,11 @@ class CapsuleVerifier:
         capsule2_path: Union[str, Path],
         method: str = "statistical",
         tolerance: float = 0.01,
-    ) -> Dict[str, Any]:
-        """Compare two Capsules for consistency."""
-        capsule1 = self.load_capsule(capsule1_path)
-        capsule2 = self.load_capsule(capsule2_path)
-
-        metadata_comparison = {
-            "same_workflow": capsule1.get("name") == capsule2.get("name"),
-            "workflow1": capsule1.get("name"),
-            "workflow2": capsule2.get("name"),
-        }
-        cost_comparison = {
-            "cost1_usd": capsule1.get("cost", {}).get("actual_cost_usd"),
-            "cost2_usd": capsule2.get("cost", {}).get("actual_cost_usd"),
-        }
-        time1 = capsule1.get("execution", {}).get("wall_time_seconds")
-        time2 = capsule2.get("execution", {}).get("wall_time_seconds")
-        execution_comparison = {
-            "wall_time1_seconds": time1,
-            "wall_time2_seconds": time2,
-            "speedup_ratio": time1 / time2 if time1 and time2 and time2 > 0 else None,
-        }
-        calibration_comparison = None
-        if (capsule1.get("extensions", {}).get("qpu_calibration") and
-                capsule2.get("extensions", {}).get("qpu_calibration")):
-            calibration_comparison = self.check_calibration_drift(capsule1, capsule2)
-
-        return {
-            "overall_consistent": metadata_comparison["same_workflow"],
-            "metadata": metadata_comparison,
-            "cost": cost_comparison,
-            "execution": execution_comparison,
-            "calibration": calibration_comparison,
-        }
+    ) -> NoReturn:
+        """Retired: overall_consistent formerly meant only equal manifest names."""
+        raise NotImplementedError(
+            "compare_capsules() was retired before 0.1.0: verify each directory "
+            "with verify_integrity and its independently trusted ID, then compare "
+            "explicit result data with verify_deterministic or verify_statistical. "
+            "Matching capsule names do not establish consistency."
+        )

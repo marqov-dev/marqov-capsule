@@ -106,3 +106,8 @@ because what a project looked for says as much as what it shipped.
 
 - Enforce declared date-time formats during schema validation, including nested execution timestamps. Add `rfc3339-validator` as a runtime dependency so base installs do not silently skip these checks.
 - Treat overflowing numeric thresholds and alpha values as unusable inputs and fall back to verifier policy/defaults without raising `OverflowError`.
+
+### Retired pre-release verification APIs
+
+- Retire `verify_capsule`, `compare_capsules`, and `check_calibration_drift`: they could report success from metadata alone, no statistical tests, equal names, or missing fidelity values. Keep explicit migration errors at their public entry points and remove the old private verifier implementation. Supported integrity, deterministic-result, and count-equivalence APIs remain available; see `docs/legacy-verifier-migration.md`.
+- Make `load_capsule` use the capsule YAML profile and reject duplicate keys or non-mapping documents. Loading remains separate from verification.
