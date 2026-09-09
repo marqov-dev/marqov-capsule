@@ -90,3 +90,21 @@ a different ID; deterministic packing applies to the same sealed directory.
 Next review the local change, finish the release-gate dispositions above, and
 run the release workflow's preflight. The platform integration needs its own
 reviewable change and end-to-end proof before it joins the conference release.
+
+## Follow-up hardening in PR #74
+
+The first commit passed remote CI on Python 3.10/3.11/3.12, minimum dependencies,
+base install, and wheel smoke. The follow-up addresses two more readiness gaps:
+
+- #35: `inspect` escapes non-printable metadata, including terminal escape
+  sequences, forged newlines, and bidirectional controls. Readable Unicode is
+  preserved, and JSON mode round-trips the original values.
+- #39: optional numerical dependencies are checked only by the individual tests
+  that need them. Eleven previously hidden checksum, deterministic-verification,
+  traversal, symlink, and early statistical-return tests now run on base installs.
+
+Follow-up validation: 312 full-suite tests passed; a NumPy-free environment
+against the updated source ran 287 tests with 25 individual skips. The increase
+in reported skips reflects previously invisible tests now being collected,
+not a loss of coverage. Eight new inspect regressions account for the other
+increase in base-install passes. Remote CI must also pass on the final commit.

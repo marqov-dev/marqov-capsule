@@ -3,12 +3,15 @@ from pathlib import Path
 import pytest
 from marqov_capsule.verifier import CapsuleVerifier
 
-pytest.importorskip("numpy")
-pytest.importorskip("scipy")
+@pytest.fixture
+def statistical_dependencies():
+    pytest.importorskip("numpy")
+    pytest.importorskip("scipy")
 
 FIXTURE_DIR = Path(__file__).parent.parent / "spec/v1/conformance"
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_identical_distributions_verified():
     """When ref == new, the TVD upper confidence bound should be well below epsilon.
 
@@ -25,6 +28,7 @@ def test_identical_distributions_verified():
     assert result["metrics"]["tvd_ucb"] <= 0.05
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_identical_distributions_verified_at_large_outcome_count():
     """Regression test for #15: the old bootstrap CI rejected byte-identical
     distributions as non-reproducible above ~4 qubits (K=16+ outcomes) because
@@ -49,6 +53,7 @@ def test_identical_distributions_verified_at_large_outcome_count():
     assert result["metrics"]["total_variation_distance"] == 0.0
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_completely_different_distributions_not_verified():
     """No valid construction lower-bounds true TVD from the biased plug-in
     estimator (#15) — clearly different inputs must not be VERIFIED, but the
@@ -68,6 +73,7 @@ def test_completely_different_distributions_not_verified():
     assert "chi_squared_p_value" not in result["metrics"]
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_tvd_ucb_clamped_to_one_at_disjoint_supports_and_shot_floor():
     """At the min_shots floor with disjoint supports, the McDiarmid slack term
     alone exceeds 1.0 (log(1/alpha) is large relative to the per-arm 1/n terms
@@ -102,6 +108,7 @@ def test_low_shots_inconclusive():
     assert "shots" in result["reason"].lower()
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_calibration_drift_uses_epsilon_drift():
     """calibration_drift regime uses epsilon_drift not epsilon.
 
@@ -131,6 +138,7 @@ def test_calibration_drift_uses_epsilon_drift():
     )
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_epsilon_drift_defaults_to_0_08_when_absent():
     counts = {"00": 500, "11": 500}
     verifier = CapsuleVerifier()
@@ -147,6 +155,7 @@ def test_epsilon_drift_defaults_to_0_08_when_absent():
     assert result["metrics"]["epsilon_used"] == 0.08
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_metrics_include_diagnostics_not_verdict():
     ref = {"00": 500, "11": 500}
     new = {"00": 495, "11": 505}
@@ -164,6 +173,7 @@ def test_metrics_include_diagnostics_not_verdict():
     assert m["alpha"] == pytest.approx(0.05)
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_ci_level_is_ignored():
     """ci_level was the pre-fix name for the confidence-bound knob and was read
     raw from the untrusted settings dict (#15 follow-up). It must have zero
@@ -190,6 +200,7 @@ def test_ci_level_is_ignored():
 
 
 @pytest.mark.parametrize("bad_ci_level", [0.0, 1.0, 1.5, "0.95"])
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_malformed_ci_level_does_not_crash_or_widen_error_rate(bad_ci_level):
     """Reproduced failures of the pre-fix code: ci_level=0.0 -> alpha=1 (no
     slack, false VERIFIED on the bare point estimate); ci_level=1.0 ->
@@ -214,6 +225,7 @@ def test_malformed_ci_level_does_not_crash_or_widen_error_rate(bad_ci_level):
 
 
 @pytest.mark.parametrize("bad_alpha", [0.0, 1.0, 1.5, -0.1, "0.05", None, float("nan"), True])
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_malformed_alpha_falls_back_to_default(bad_alpha):
     """alpha is verifier-owned but still passes through the same guard as any
     other value coming from a settings dict — a resolved dict could in
@@ -235,6 +247,7 @@ def test_malformed_alpha_falls_back_to_default(bad_alpha):
     assert result["metrics"]["tvd_ucb"] == result["metrics"]["tvd_ucb"]  # not NaN
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_policy_resolved_alpha_carries_through_to_metrics():
     """A policy.resolve() dict's alpha must reach the metrics untouched."""
     from marqov_capsule.policy import VerificationPolicy
@@ -251,6 +264,7 @@ def test_policy_resolved_alpha_carries_through_to_metrics():
     assert result["metrics"]["alpha"] == pytest.approx(0.01)
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_valid_alpha_is_honoured():
     """A well-formed alpha (as policy.resolve would emit) changes the bound,
     proving the guard does not silently ignore good values too."""
@@ -298,6 +312,7 @@ def test_zero_count_new_against_populated_ref_never_verified():
     assert "zero shots" in result["reason"].lower()
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_single_outcome_both_arms_is_verified_not_a_crash():
     """A single shared outcome with nonzero shots is a legitimate (if trivial)
     input — it must resolve normally, not be swept up by the zero-shots guard."""
@@ -311,6 +326,7 @@ def test_single_outcome_both_arms_is_verified_not_a_crash():
     assert result["metrics"]["total_variation_distance"] == 0.0
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_energy_distance_uses_hamming_metric():
     """Energy distance must use Hamming distance on bitstrings, not index proximity."""
     # "00" and "11" are Hamming-distance 2; "00" and "01" are Hamming-distance 1.

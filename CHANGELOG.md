@@ -85,3 +85,8 @@ because what a project looked for says as much as what it shipped.
 - `verify` output header is now `Integrity verification:` (was `Checksum verification:`) and lists the recomputed capsule ID, injected files, and per-layer failures.
 
 [0.1.0]: https://github.com/marqov-dev/marqov-capsule/releases/tag/v0.1.0
+
+### Inspection and base-install coverage
+
+- Escape terminal controls in human-readable `inspect` metadata while preserving readable Unicode and JSON round-tripping (#35).
+- Run checksum, traversal, symlink, deterministic verification, and early statistical-return tests without NumPy/SciPy; skip only individual tests needing those dependencies (#39).
