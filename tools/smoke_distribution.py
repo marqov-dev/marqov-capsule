@@ -55,6 +55,9 @@ def main():
         trusted_id = match.group()
         cli("validate", "experiment")
         cli("verify", "experiment", "--id", trusted_id)
+        cli("open", "experiment", "--dest", "opened", "--id", trusted_id)
+        cli("verify", "opened/experiment", "--id", trusted_id)
+        cli("open", "experiment", "--dest", "opened", "--id", trusted_id, expected=1)
         cli("pack", "experiment", "-o", "first.capsule")
         cli("pack", "experiment", "-o", "second.capsule")
         check((root / "first.capsule").read_bytes() == (root / "second.capsule").read_bytes(),

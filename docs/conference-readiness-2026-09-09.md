@@ -53,6 +53,18 @@ packaging regressions passed. Release metadata validation now also runs before
 either publisher can receive artifacts. These workflow edits await remote CI
 with the later bundled PR.
 
+Command-level delivery checks exposed two additional gaps: digest reporting
+could reread rejected checksum metadata, and `open --dest` merged into existing
+directories. Digest reporting now refuses nonregular/symlinked metadata and runs
+on the extracted archive contents. Missing checksums and invalid archive input
+produce failed verification reports. `open` requires a fresh child destination,
+preserving existing files and refusing destination symlinks. Eight regressions
+exercise these behaviors through the CLI; wheel acceptance also exercises
+verified copying and repeated-destination refusal. Updated validation:
+**413 passed, 1 skipped** on the full suite; **388 passed, 26 skipped** on the
+rebuilt base wheel. Isolated wheel acceptance and both distribution metadata
+checks pass. These changes remain in the local bundle.
+
 ## Decision
 
 Use capsule for a standalone, reproducible demonstration of an experiment

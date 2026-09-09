@@ -34,18 +34,24 @@ def verify(capsule, expected_id, as_json):
 
     # An archive: unpack to a temporary directory and verify the contents.
     if not tarfile.is_tarfile(str(path)):
-        click.echo(f"Error: {path} is not a capsule directory or archive", err=True)
+        message = f"{path} is not a capsule directory or archive"
+        if as_json:
+            click.echo(json.dumps({"status": "fail", "errors": [message]}))
+        else:
+            click.echo(f"Error: {message}", err=True)
         sys.exit(1)
 
-    digest = payload_digest(path)
     with tempfile.TemporaryDirectory() as tmp:
         try:
             unpacked = unpack_capsule(path, output_dir=tmp)
-        except (ValueError, FileNotFoundError, tarfile.TarError) as e:
-            click.echo(f"Error: could not unpack {path}: {e}", err=True)
+        except (ValueError, OSError, tarfile.TarError) as e:
+            if as_json:
+                click.echo(json.dumps({"status": "fail", "errors": [f"could not unpack archive: {e}"]}))
+            else:
+                click.echo(f"Error: could not unpack {path}: {e}", err=True)
             sys.exit(1)
         result = verifier.verify_integrity(unpacked, expected_id=expected_id)
-        result["payload_digest"] = digest
+        result["payload_digest"] = _payload_digest_or_none(unpacked)
         result["archive"] = str(path)
         _report(result, as_json)
         sys.exit(0 if result["status"] == "pass" else 1)
@@ -55,7 +61,7 @@ def _payload_digest_or_none(capsule_dir: Path):
     """The payload digest of an unsealed or malformed capsule is meaningless."""
     try:
         return payload_digest(capsule_dir)
-    except (FileNotFoundError, ValueError):
+    except (OSError, ValueError):
         return None
 
 

@@ -218,6 +218,8 @@ def payload_digest(capsule_dir_or_archive: Union[str, Path]) -> str:
         checksums_path = path / ".checksums"
         if not checksums_path.exists():
             raise FileNotFoundError(f".checksums not found in {path}")
+        if checksums_path.is_symlink() or not checksums_path.is_file():
+            raise ValueError(".checksums must be a regular file, not a symlink")
         checksums_bytes = checksums_path.read_bytes()
     else:
         # Treat as archive — extract .checksums member without full extraction

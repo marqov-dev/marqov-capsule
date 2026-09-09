@@ -91,6 +91,11 @@ marqov-capsule unpack bell-state.capsule -o ./restored
 
 `verify` accepts a directory or an archive interchangeably.
 
+`open` accepts a capsule directory. With `--dest`, it verifies the source and
+copies it into a new child directory under the destination. It refuses an
+existing child directory rather than merging files into a verified record.
+Use `verify` and `unpack` for archives.
+
 Two different digests are reported, and the distinction matters:
 
 | | Covers | Use it for |
