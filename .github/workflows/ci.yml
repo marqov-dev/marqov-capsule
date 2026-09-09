@@ -180,6 +180,21 @@ jobs:
       - name: Run tests at dependency floors
         run: python -m pytest tests/ -q
 
+  conformance-node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tools/conformance/package-lock.json
+      - name: Install pinned independent parser
+        run: npm ci --prefix tools/conformance --ignore-scripts
+      - name: Check corpus with independent YAML and canonicalization
+        run: npm test --prefix tools/conformance
+
   links:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -206,7 +221,7 @@ jobs:
   ci-success:
     name: CI Success
     if: always()
-    needs: [test, wheel-smoke, base-install, minimum-versions, links]
+    needs: [test, wheel-smoke, base-install, minimum-versions, links, conformance-node]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

@@ -1,0 +1,7 @@
+{
+  "name": "capsule-conformance-checks",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node check.mjs" },
+  "dependencies": { "yaml": "2.9.0" }
+}

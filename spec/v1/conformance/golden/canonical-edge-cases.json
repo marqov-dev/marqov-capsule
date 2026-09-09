@@ -42,5 +42,11 @@
     "yaml": "n: .nan\n",
     "canonical_utf8": "{\"n\":\".nan\"}",
     "capsule_id": "mqc:1:75f74d41f2899f5943294c9a8e95fa08649dfacd97bbc249b630733ac6f100ef"
+  },
+  {
+    "name": "numeric-looking-string-keys",
+    "yaml": "\"2\": two\n\"10\": ten\n",
+    "canonical_utf8": "{\"10\":\"ten\",\"2\":\"two\"}",
+    "capsule_id": "mqc:1:b71e124675fc80e7314688bffdb68e83515851fb51474125db9a0c4c8aca3808"
   }
 ]

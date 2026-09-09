@@ -1,6 +1,7 @@
 """Fixed public vectors: never regenerate expected values during a test."""
 import hashlib
 import json
+import unicodedata
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -118,3 +119,62 @@ def test_normalized_collision_is_integrity_failure(tmp_path):
     result = CapsuleVerifier.verify_integrity(tmp_path / "capsule")
     assert result["status"] == "fail"
     assert result["capsule_id"] is None
+
+
+@pytest.mark.parametrize("vector", json.loads(
+    (GOLDEN / "checksum-path-cases.json").read_text()), ids=lambda v: v["name"])
+def test_checksum_path_vectors(vector, tmp_path):
+    for file in vector["files"]:
+        # Materialize NFC names so these vectors are filesystem-independent;
+        # the vector's NFD input is checked directly by the path encoder too.
+        from marqov_capsule.builder import _checksum_path
+        name = unicodedata.normalize("NFC", file["path"])
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(file["utf8"].encode("utf-8"))
+        assert "  " + _checksum_path(file["path"]) + "\n" in vector["checksums_utf8"]
+    actual = CapsuleBuilder().save_checksums(tmp_path).read_bytes()
+    assert actual == vector["checksums_utf8"].encode("utf-8")
+    assert "sha256:" + hashlib.sha256(actual).hexdigest() == vector["checksums_digest"]
+    assert CapsuleVerifier.verify_checksums(tmp_path)["status"] == "pass"
+
+
+@pytest.mark.parametrize("encoded", ["payload/%2E%2E/outside", "payload/%2Fetc", "payload/%0a.txt", "payload/%zz.txt"])
+def test_noncanonical_checksum_escapes_fail(tmp_path, encoded):
+    (tmp_path / ".checksums").write_text("sha256:" + "0" * 64 + "  " + encoded + "\n")
+    assert CapsuleVerifier.verify_checksums(tmp_path)["status"] == "fail"
+
+
+def test_legacy_yaml_paths_are_not_percent_decoded(tmp_path):
+    name = "literal%0A.txt"
+    content = b"legacy payload"
+    (tmp_path / name).write_bytes(content)
+    (tmp_path / ".checksums").write_text(yaml.safe_dump({
+        name: "sha256:" + hashlib.sha256(content).hexdigest(),
+    }))
+    assert CapsuleVerifier.verify_checksums(tmp_path)["status"] == "pass"
+
+
+def test_duplicate_line_paths_fail(tmp_path):
+    (tmp_path / "file").write_text("value")
+    line = "sha256:" + hashlib.sha256(b"value").hexdigest() + "  file\n"
+    (tmp_path / ".checksums").write_text(line * 2)
+    assert CapsuleVerifier.verify_checksums(tmp_path)["status"] == "fail"
+
+
+def test_encoded_paths_survive_sealed_archive_roundtrip(tmp_path):
+    from marqov_capsule.archive import pack_capsule, unpack_capsule
+    capsule = tmp_path / "capsule"
+    capsule.mkdir()
+    for name in ["percent%0A.txt", "line\nbreak.txt", "back\\slash.txt", "trailing "]:
+        (capsule / name).write_text("result\n")
+    builder = CapsuleBuilder().start_capsule(
+        name="path-roundtrip",
+        requirements={"paradigm": ["classical"], "max_qubit_count": 0},
+    )
+    trusted = builder.seal(capsule)
+    archive = pack_capsule(capsule, tmp_path / "result.capsule")
+    restored = unpack_capsule(archive, tmp_path / "restored")
+    result = CapsuleVerifier.verify_integrity(restored, expected_id=trusted)
+    assert result["status"] == "pass"
+    assert result["manifest_authenticated"] is True

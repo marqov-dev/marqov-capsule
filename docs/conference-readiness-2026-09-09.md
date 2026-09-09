@@ -131,3 +131,26 @@ suppression is intentionally absent because it would also hide missing paths;
 network warnings still need manual review. The static hostname policy covers
 HTTP(S) links, not every possible prose spelling or Python import. Broader
 bare-domain checks and the remaining tamper-vector requests remain to review.
+
+## Independent conformance follow-up after #75 merged
+
+PR #75 merged as `caaedab`. A pinned Node/YAML checker now reads the original
+six fixture manifests and payload files with an independent parser, serializer,
+path encoder, and hash implementation. It also checks nine canonicalization
+cases and three checksum-path cases: 18 vectors total, with a required CI job.
+It does not claim schema validation, credential scanning, statistics, or archive
+extraction as a second implementation. Full independent interoperability and
+external review remain open.
+
+The new path vectors exposed two actual reader defects: percent-encoded paths
+were looked up literally, and a single checksum line with a colon-space filename
+could be misread as YAML. The verifier now recognizes normative checksum lines,
+decodes the four permitted escapes once, preserves trailing filename spaces,
+and rejects noncanonical escapes and duplicate line paths. Legacy YAML mappings
+retain literal filename semantics. Existing valid fixture IDs are unchanged.
+A sealed archive round-trip covers encoded filenames and trusted-ID verification.
+
+Validation for this follow-up: 339 full-suite tests pass; the NumPy-free suite
+runs 314 tests with 25 skips; the independent Node checker passes all 18 vectors.
+The JavaScript dependency is confined to development tooling and adds no Python
+runtime dependencies. Public repository visibility remains unchanged.
