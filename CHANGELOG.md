@@ -114,6 +114,7 @@ because what a project looked for says as much as what it shipped.
 
 ### Bundled release hardening
 
+- Gate release uploads on distribution metadata checks and isolated, base-wheel CLI acceptance, including trusted-ID round-trip and tamper failures. Provide the same check for local and TestPyPI-installed artifacts.
 - Validate UUID fields, UTF-8 input, and the canonical JSON data model; reject recursive values, normalized key collisions, non-string keys, non-finite numbers, and unsafe integers.
 - Resolve NFC checksum paths to filesystem entries and reject filename normalization collisions. Refuse symlinked metadata and non-regular payloads before reading, and report payload read errors as verification failures.
 - Add trusted-ID CLI regressions for deleted payloads and a fully rewritten digest chain. Clarify the manifest-version pin, explicit environment capture, and zero-qubit classical workloads.

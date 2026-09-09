@@ -41,6 +41,18 @@ cover canonicalization and checksums, not a second full capsule implementation.
 No package publication, repository visibility change, or platform deployment
 has been performed.
 
+The next local checkpoint adds `tools/smoke_distribution.py`. Both ordinary
+wheel CI and the release build run it against an installed base wheel before
+upload. It exercises actual isolated CLI subprocesses outside the checkout:
+schema validation, sealing, deterministic packing, archive and directory
+verification against a trusted ID, extraction, and payload/manifest tampering.
+It checks the installed schema against the specification and refuses editable
+installs. The check passed locally on the built 0.1.0 wheel; a deliberate
+editable-install attempt failed as intended. All ten release-documentation and
+packaging regressions passed. Release metadata validation now also runs before
+either publisher can receive artifacts. These workflow edits await remote CI
+with the later bundled PR.
+
 ## Decision
 
 Use capsule for a standalone, reproducible demonstration of an experiment
