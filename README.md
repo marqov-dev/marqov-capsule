@@ -11,10 +11,12 @@ The format is an open standard (`spec/v1/`, CC-BY-4.0). The Python tooling is Ap
 ## Install
 
 ```bash
-pip install marqov-capsule
+git clone https://github.com/marqov-dev/marqov-capsule.git
+cd marqov-capsule
+python -m pip install .
 ```
 
-Requires Python 3.10+.
+The first PyPI release is pending; install from source for now. Requires Python 3.10+.
 
 ## Quick start
 
@@ -39,10 +41,14 @@ with tempfile.TemporaryDirectory() as tmp:
 
     capsule_id = builder.seal(capsule_dir, sealed_by="alice@example.com")
     print(f"Capsule ID: {capsule_id}")
-    # → Capsule ID: <64 hex chars>, derived from the manifest contents
+    # → Capsule ID: mqc:1:<64 lowercase hex chars>, derived from the manifest contents
 ```
 
-`seal()` runs the full sealing sequence: credential scan, `.checksums` generation, lifecycle transition to `sealed`, and `capsule.yaml` write. It returns the 64-character hex capsule ID.
+`seal()` runs the full sealing sequence: credential scan, `.checksums` generation, lifecycle transition to `sealed`, and `capsule.yaml` write. It returns a versioned capsule ID: `mqc:1:<64 lowercase hex chars>`.
+
+## Runnable SDK demonstration
+
+The [Bell-state example](https://github.com/marqov-dev/marqov-capsule/tree/main/examples) runs the Marqov SDK local simulator, seals its result and circuit, verifies an archive round-trip against a trusted ID, and demonstrates detection of changed payloads and metadata. It needs Python 3.12+ for the SDK, with no provider credentials.
 
 ## CLI
 
@@ -126,16 +132,16 @@ Note the limit: the digest chain detects modification, not forgery. Anyone who r
 
 ## Roadmap
 
-**Statistical equivalence testing has no CLI in this release.** Comparing two runs and getting a verdict is the natural companion to sealing. The estimator behind it was miscalibrated badly enough that a distribution compared *against itself* was rejected as non-reproducible from roughly four qubits upward — that's now fixed: `CapsuleVerifier.verify_statistical` uses a closed-form one-sided confidence bound instead of the broken bootstrap, and reports `VERIFIED` / `INCONCLUSIVE`, with no affirmative `REJECTED`. A lower bound on true TVD does exist (triangle inequality: plug-in estimate minus McDiarmid slack minus a one-sample bias term per arm), but it isn't deployed — it depends on the outcome count `K`, and taking `K` from observed support rather than the declared register width fails open, a problem the upper bound's `K`-free slack doesn't share. The one candidate detection tool (a permutation test against the sharp null) measured power as low as 42% at K=256, too weak to carry an affirmative verdict on its own. What's still missing is the CLI surface and spec text to go with it.
+**Statistical equivalence testing has no CLI in this release.** Comparing two runs and getting a verdict is the natural companion to sealing. The estimator behind it was miscalibrated badly enough that a distribution compared *against itself* was rejected as non-reproducible from roughly four qubits upward — that's now fixed: `CapsuleVerifier.verify_statistical` uses a closed-form one-sided confidence bound instead of the broken bootstrap, and reports `VERIFIED` / `INCONCLUSIVE`, with no affirmative `REJECTED`. A lower bound on true TVD does exist (triangle inequality: plug-in estimate minus McDiarmid slack minus a one-sample bias term per arm), but it isn't deployed — it depends on the outcome count `K`, and taking `K` from observed support rather than the declared register width fails open, a problem the upper bound's `K`-free slack doesn't share. The one candidate detection tool (a permutation test against the sharp null) measured power as low as 42% at K=256, too weak to carry an affirmative verdict on its own. The implemented procedure is described in spec §6; a statistical CLI remains future work.
 
 The investigation is written up in full, including the candidate replacements that were measured and rejected and why:
 
 - [`docs/research/2026-08-10-tvd-equivalence-testing.md`](https://github.com/marqov-dev/marqov-capsule/blob/main/docs/research/2026-08-10-tvd-equivalence-testing.md) — why the plug-in estimator fails, why the bootstrap cannot be repaired for this functional, and the one-sided bound that does work
-- Tracked in [#15](https://github.com/marqov-dev/marqov-capsule/issues/15); CLI wiring and spec reconciliation in [#20](https://github.com/marqov-dev/marqov-capsule/issues/20)
+- Tracked in [#15](https://github.com/marqov-dev/marqov-capsule/issues/15); conformance and spec review in [#20](https://github.com/marqov-dev/marqov-capsule/issues/20)
 
 Also on the roadmap, with the research already done:
 
-- [#18](https://github.com/marqov-dev/marqov-capsule/issues/18) — credential scanner precision and recall, written up in [`docs/research/2026-08-11-credential-detection.md`](https://github.com/marqov-dev/marqov-capsule/blob/main/docs/research/2026-08-11-credential-detection.md)
+- Credential scanner precision and recall improvements landed in #68; the supporting research is in [`docs/research/2026-08-11-credential-detection.md`](https://github.com/marqov-dev/marqov-capsule/blob/main/docs/research/2026-08-11-credential-detection.md)
 - [#16](https://github.com/marqov-dev/marqov-capsule/issues/16) — capsules carry no signatures, so the digest chain detects modification but not forgery
 
 Contributions welcome on any of these. The research documents are meant to be a starting point rather than a specification — if you disagree with the analysis, the reproduction scripts are in the appendices.

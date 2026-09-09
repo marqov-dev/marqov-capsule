@@ -1,0 +1,73 @@
+[
+  {
+    "fixture": "capsule_with_secrets",
+    "canonical_file": "capsule_with_secrets.canonical.json",
+    "capsule_id": "mqc:1:3d6aad2c213bd9beebea3edabbf0297a7b0a91aaec847f5542f89ce05096a66c",
+    "checksums_digest": null,
+    "schema_valid": true,
+    "schema_error_paths": [],
+    "has_secrets": true,
+    "secret_locations": [
+      {
+        "file": "capsule.yaml",
+        "line": 10
+      }
+    ]
+  },
+  {
+    "fixture": "derived_capsule/child",
+    "canonical_file": "derived_capsule-child.canonical.json",
+    "capsule_id": "mqc:1:2a9f398957cf23ae61723a1d6dd802a46c13a71791c70771b384e100997b79d1",
+    "checksums_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "schema_valid": true,
+    "schema_error_paths": [],
+    "has_secrets": false,
+    "secret_locations": []
+  },
+  {
+    "fixture": "derived_capsule/parent",
+    "canonical_file": "derived_capsule-parent.canonical.json",
+    "capsule_id": "mqc:1:4fc52a8a5b7fed766e065d09dcca47b83e210aabb37da11f0e2f55047dc95740",
+    "checksums_digest": "sha256:60b89ba62c852be3e00cfe7d93601049e7e119477e01e7d11b197b12052231de",
+    "schema_valid": true,
+    "schema_error_paths": [],
+    "has_secrets": false,
+    "secret_locations": []
+  },
+  {
+    "fixture": "invalid_capsule",
+    "canonical_file": "invalid_capsule.canonical.json",
+    "capsule_id": "mqc:1:296ae8f0a0b83e3fbf847896b6feb5261d192b697a352906f7e796b87e5de3b4",
+    "checksums_digest": null,
+    "schema_valid": false,
+    "schema_error_paths": [
+      "lifecycle_state",
+      "name",
+      "requirements/max_qubit_count",
+      "requirements/paradigm",
+      "version"
+    ],
+    "has_secrets": false,
+    "secret_locations": []
+  },
+  {
+    "fixture": "multi_task_capsule",
+    "canonical_file": "multi_task_capsule.canonical.json",
+    "capsule_id": "mqc:1:574769d0fe998250f184a0eeb26623137f737f237457135870d2237f210ed928",
+    "checksums_digest": "sha256:6044d1cc6c3e5b737d670b5381e6691199dbc928c0a872d26db6f6d24b459687",
+    "schema_valid": true,
+    "schema_error_paths": [],
+    "has_secrets": false,
+    "secret_locations": []
+  },
+  {
+    "fixture": "valid_capsule",
+    "canonical_file": "valid_capsule.canonical.json",
+    "capsule_id": "mqc:1:283f9421f62452349360c095d055d42826d1562f51f2f6bb502b47044b3a511a",
+    "checksums_digest": "sha256:60a512e68a2ded62db8c516e4faec51044829eb40235f4ee2c94742e952e15df",
+    "schema_valid": true,
+    "schema_error_paths": [],
+    "has_secrets": false,
+    "secret_locations": []
+  }
+]

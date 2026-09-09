@@ -1,0 +1,1 @@
+{"checksums_digest":"sha256:60b89ba62c852be3e00cfe7d93601049e7e119477e01e7d11b197b12052231de","description":"Parent capsule in a provenance chain","lifecycle_state":"sealed","name":"Original Run","requirements":{"max_qubit_count":2,"paradigm":["gate-based"]},"sealed_at":"2026-06-11T00:00:01Z","sealed_by":"conformance-fixture","task_executions":[],"version":"1.0.0"}

@@ -13,9 +13,18 @@ First public release. Nothing was published before this, despite an earlier
 entry in this file dated 2026-07-22 — that entry described a release that never
 happened and has been folded into this one.
 
+### Conference readiness
+
+- Added a runnable SDK local Bell-state export and capsule archive/tamper demonstration.
+- Published fixed conformance outputs and tests for digest identity, schema validity, and credential findings.
+- Reconciled the statistical verification description with the implemented one-sided bound and verifier-owned policy.
+- Reject mapping keys that collide after NFC normalization or legacy key conversion, rather than silently dropping a value.
+- Avoid credential-scanner false positives on versioned `derived_from` IDs while preserving detection elsewhere on the same line.
+- Corrected source-install instructions and versioned-ID documentation ahead of first publication.
+
 ### What 0.1.0 is
 
-- **Sealing** — `CapsuleBuilder` scans for credentials, writes `.checksums`, embeds `checksums_digest`, transitions lifecycle to `sealed`, and returns a 64-character capsule ID derived from RFC 8785 canonical JSON of the manifest.
+- **Sealing** — `CapsuleBuilder` scans for credentials, writes `.checksums`, embeds `checksums_digest`, transitions lifecycle to `sealed`, and returns a versioned `mqc:1:<64 lowercase hex chars>` capsule ID derived from RFC 8785 canonical JSON of the manifest.
 - **Integrity verification** — `CapsuleVerifier.verify_integrity()` checks all three layers of the digest chain: payload files against `.checksums` (a closed set — injected files fail), `.checksums` against `checksums_digest`, and the recomputed capsule ID against a trusted ID you supply.
 - **Deterministic archives** — `pack` produces a byte-reproducible `.capsule` tarball; `unpack` restores it; `verify` accepts either form.
 - **Validation** — `CapsuleValidator` against the bundled JSON Schema 2020-12.
@@ -76,3 +85,8 @@ because what a project looked for says as much as what it shipped.
 - `verify` output header is now `Integrity verification:` (was `Checksum verification:`) and lists the recomputed capsule ID, injected files, and per-layer failures.
 
 [0.1.0]: https://github.com/marqov-dev/marqov-capsule/releases/tag/v0.1.0
+
+### Inspection and base-install coverage
+
+- Escape terminal controls in human-readable `inspect` metadata while preserving readable Unicode and JSON round-tripping (#35).
+- Run checksum, traversal, symlink, deterministic verification, and early statistical-return tests without NumPy/SciPy; skip only individual tests needing those dependencies (#39).

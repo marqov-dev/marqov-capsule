@@ -137,6 +137,12 @@ _DIGEST_LINE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Versioned provenance IDs are content hashes. Mask only the value, preserving
+# offsets and every other field on the line for credential detection.
+_DERIVED_ID_RE = re.compile(
+    r"\bderived_from['\"]?\s*:\s*['\"]?(?P<id>mqc:[0-9]+:[0-9a-f]{64})(?=['\"\s,}]|$)"
+)
+
 # ``# capsule:allow`` — narrowed from "suppress the whole line" to "suppress
 # this finding" (like ``#gitleaks:allow``). Matched with or without the space so
 # a minified single-line file cannot disable scanning of the rest of the line.
@@ -341,9 +347,12 @@ def _scan_text(text: str, filepath: str) -> list[dict]:
         })
 
     for i, line in enumerate(text.splitlines(), 1):
-        # Digest / checksum lines contain long hex by design — never a secret.
-        if _looks_like_digest_line(line):
-            continue
+        for match in reversed(list(_DERIVED_ID_RE.finditer(line))):
+            start, end = match.span("id")
+            line = line[:start] + " " * (end - start) + line[end:]
+        # Digest values are benign, but other fields on the same line may
+        # contain credentials (e.g. compact JSON). Preserve their scan/offsets.
+        line = _DIGEST_LINE_RE.sub(lambda m: " " * len(m.group(0)), line)
 
         # (start, end, finding) for this line, deduped and allow-filtered below.
         candidates: list[tuple[int, int, dict]] = []

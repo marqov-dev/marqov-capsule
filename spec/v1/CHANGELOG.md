@@ -8,6 +8,11 @@ Version history for the Marqov Capsule format specification.
 
 Clarifications to the digest scheme and manifest canonicalization ahead of the first tag, making the format byte-reproducible across independent implementations. See [`docs/research/2026-08-14-checksums-canonicalization.md`](../../docs/research/2026-08-14-checksums-canonicalization.md) and [#20](https://github.com/marqov-dev/marqov-capsule/issues/20).
 
+### Verification and conformance
+
+- Replaced the retired bootstrap procedure in §6 with the implemented one-sided TVD upper bound, `VERIFIED` / `INCONCLUSIVE` decisions, and verifier-owned policy resolution. No statistical CLI was added.
+- Published fixed golden outputs alongside the conformance corpus, with reference and independent standard-library checks.
+
 ### Schema
 
 - Added `annealing` to the `requirements.paradigm` enum (now `gate-based`, `analog`, `classical`, `annealing`) so quantum-annealing workloads (e.g. D-Wave) can produce schema-valid capsules. The CLI already advertised `annealing`; this resolves the mismatch by extending the schema (the value the product needs) rather than dropping it from the CLI.

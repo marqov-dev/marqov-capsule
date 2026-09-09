@@ -228,7 +228,13 @@ def coerce_for_canonical(obj: Any) -> Any:
     agree by construction and a datetime-bearing manifest round-trips.
     """
     if isinstance(obj, dict):
-        return {_stringify_key(k): coerce_for_canonical(v) for k, v in obj.items()}
+        normalized = {}
+        for key, value in obj.items():
+            canonical_key = _stringify_key(key)
+            if canonical_key in normalized:
+                raise ValueError("mapping keys collide after canonical normalization")
+            normalized[canonical_key] = coerce_for_canonical(value)
+        return normalized
     if isinstance(obj, (list, tuple)):
         return [coerce_for_canonical(v) for v in obj]
     if isinstance(obj, str):
