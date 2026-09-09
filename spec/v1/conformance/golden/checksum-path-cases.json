@@ -1,0 +1,62 @@
+[
+  {
+    "name": "empty",
+    "files": [],
+    "checksums_utf8": "",
+    "checksums_digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "name": "escaping-and-byte-order",
+    "files": [
+      {
+        "path": "payload/plain space.json",
+        "utf8": "{}\n"
+      },
+      {
+        "path": "payload/trailing space ",
+        "utf8": "trailing\n"
+      },
+      {
+        "path": "payload/percent%0A.txt",
+        "utf8": "literal percent\n"
+      },
+      {
+        "path": "payload/line\nbreak.txt",
+        "utf8": "LF\n"
+      },
+      {
+        "path": "payload/carriage\rreturn.txt",
+        "utf8": "CR\n"
+      },
+      {
+        "path": "payload/back\\slash.txt",
+        "utf8": "backslash\n"
+      },
+      {
+        "path": "payload/café.txt",
+        "utf8": "NFC path\n"
+      },
+      {
+        "path": "payload/.txt",
+        "utf8": "BMP\n"
+      },
+      {
+        "path": "payload/😀.txt",
+        "utf8": "astral\n"
+      }
+    ],
+    "checksums_utf8": "sha256:e6f805fa5fc041ab4bb7aa119641f77ac3e9f42106bc9f92354080692736c8de  payload/back%5Cslash.txt\nsha256:7f670bc85c3625039786380833fee0f957630fd916c7c15b2638058690a51915  payload/café.txt\nsha256:4cffdbdbe33beef3679b9b2491e38d0764113bf6d8ba64cb86b3ac75ea071059  payload/carriage%0Dreturn.txt\nsha256:b98208775cf8003f575de7d9f7df3ec0b3fde480dfd699f703c5ddf71ef6d814  payload/line%0Abreak.txt\nsha256:44f1e489d52d77991a0818aa71c58521af1aafd040ffa5759d9bf4ed6d0a889f  payload/percent%250A.txt\nsha256:ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356  payload/plain space.json\nsha256:fa69d7a9c4b0f5ac5b26fd00856f613febaae22857f7f337f3fc156a8360f858  payload/trailing space \nsha256:e64205aeb2e9a17bfc07548cfea8767f1ac5a7a711cf2287b45b66121f0b1c11  payload/.txt\nsha256:5cc892e8dd79d45dfef21f9a87e7955896c96ab9b791f2345e5a456bca444f61  payload/😀.txt\n",
+    "checksums_digest": "sha256:fd4c69d704a118db9d9bf3e3b34001c9cab3dbd42c5011dc21d3ba738e29b020"
+  },
+  {
+    "name": "yaml-looking-line",
+    "files": [
+      {
+        "path": "payload/name: value.txt",
+        "utf8": "colon filename\n"
+      }
+    ],
+    "checksums_utf8": "sha256:04ec806177961791d947da55b32fa2bd741a85c99f7344299704155dc5b16627  payload/name: value.txt\n",
+    "checksums_digest": "sha256:b73e950701d06dd4c864b4935b3b19c84fa30c1c45ad73dd1a5333278f3a0f1c"
+  }
+]

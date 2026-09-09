@@ -96,3 +96,8 @@ because what a project looked for says as much as what it shipped.
 - Anchor URL scanning at the repository root and preserve tracked filenames containing whitespace. Malformed URLs fail individually; DNS and HTTP outages are reported as inconclusive warnings. Reviewed Marqov hosts are checked independently of DNS, with a required offline CI job.
 - Retry restricted HEAD requests with GET, close responses, and exclude the schema identifier from retrieval checks.
 - Assert that the spec's advertised schema ID matches the shipped schema and that CI Success includes every job. Make the domain regression guard fail on Git errors and narrow its historical exception to one exact line.
+
+### Cross-language conformance
+
+- Added a pinned Node/YAML corpus checker with independent canonicalization and checksum serialization, required by CI. Added numeric-looking key and checksum path vectors.
+- Fixed verification of percent-encoded checksum paths and trailing-space filenames. Decode the normative line format exactly once, reject noncanonical/duplicate paths, and preserve literal paths in legacy YAML checksum mappings.

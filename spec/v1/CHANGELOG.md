@@ -10,6 +10,8 @@ Clarifications to the digest scheme and manifest canonicalization ahead of the f
 
 ### Verification and conformance
 
+- Added independent Node checks of the published YAML/digest corpus and fixed path-encoding vectors; no digest-format change.
+
 - Replaced the retired bootstrap procedure in §6 with the implemented one-sided TVD upper bound, `VERIFIED` / `INCONCLUSIVE` decisions, and verifier-owned policy resolution. No statistical CLI was added.
 - Published fixed golden outputs alongside the conformance corpus, with reference and independent standard-library checks.
 

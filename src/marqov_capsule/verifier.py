@@ -4,13 +4,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import yaml
 
 from marqov_capsule._canonical import compute_capsule_id, load_manifest_yaml
-from marqov_capsule.builder import UNCHECKSUMMED_ROOT_FILES
+from marqov_capsule.builder import UNCHECKSUMMED_ROOT_FILES, _checksum_path
 from marqov_capsule.policy import resolve_alpha
 
 
@@ -356,8 +357,13 @@ class CapsuleVerifier:
                 "missing": [],
                 "extra": [],
             }
-        # Support both YAML dict format AND legacy "digest  path" lines
+        # Legacy YAML mappings contain literal paths. Only the normative line
+        # format carries the narrow percent-encoding specified in §5.
         try:
+            if re.match(r"^sha256:[0-9a-f]{64}  ", raw):
+                # A legal filename containing ': ' can make a checksum line
+                # look like a YAML mapping. Recognize the normative framing first.
+                raise ValueError("normative checksum lines")
             expected = yaml.safe_load(raw) or {}
             if not isinstance(expected, dict):
                 raise ValueError("not a mapping")
@@ -366,10 +372,17 @@ class CapsuleVerifier:
             # unpacking, so any malformed line fails the whole capsule (#61).
             try:
                 expected = {}
-                for line in raw.strip().split("\n"):
-                    if not line.strip():
+                for line in raw.split("\n"):
+                    if not line:
                         continue
                     digest, name = line.split("  ", 1)
+                    escapes = {"%25": "%", "%5C": "\\", "%0A": "\n", "%0D": "\r"}
+                    decoded = re.sub(r"%[0-9A-Fa-f]{2}", lambda m: escapes.get(m[0], m[0]), name)
+                    # Re-encoding rejects unknown/lowercase escapes and NFC
+                    # ambiguity without recursively decoding literal % sequences.
+                    if _checksum_path(decoded) != name or decoded in expected:
+                        raise ValueError("noncanonical or duplicate checksum path")
+                    name = decoded
                     expected[name] = digest
             except ValueError:
                 return {
