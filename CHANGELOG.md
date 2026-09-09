@@ -15,6 +15,7 @@ happened and has been folded into this one.
 
 ### Conference readiness
 
+- Add a host-specific offline demonstration kit builder with all dependency wheels, hash-pinned installation requirements, environment metadata and an SDK/capsule runbook.
 - Added a runnable SDK local Bell-state export and capsule archive/tamper demonstration.
 - Published fixed conformance outputs and tests for digest identity, schema validity, and credential findings.
 - Reconciled the statistical verification description with the implemented one-sided bound and verifier-owned policy.
