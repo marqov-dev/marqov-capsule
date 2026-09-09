@@ -84,7 +84,7 @@ throwaway version for dry-runs, validate hard, and tag last.
       ```
       pip install --no-deps --index-url https://test.pypi.org/simple/ \
                   marqov-capsule==X.Y.Z
-      pip install pyyaml click jsonschema jcs   # runtime deps, from real PyPI
+      pip install pyyaml click jsonschema jcs rfc3339-validator   # runtime deps, from real PyPI
       marqov-capsule init ./t --name t --paradigm gate-based --qubits 2
       mkdir -p t/payload && echo '{"counts":{"00":1}}' > t/payload/results.json
       marqov-capsule seal ./t && marqov-capsule pack ./t -o t.capsule

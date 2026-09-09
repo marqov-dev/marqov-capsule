@@ -101,3 +101,8 @@ because what a project looked for says as much as what it shipped.
 
 - Added a pinned Node/YAML corpus checker with independent canonicalization and checksum serialization, required by CI. Added numeric-looking key and checksum path vectors.
 - Fixed verification of percent-encoded checksum paths and trailing-space filenames. Decode the normative line format exactly once, reject noncanonical/duplicate paths, and preserve literal paths in legacy YAML checksum mappings.
+
+### Manifest and policy validation
+
+- Enforce declared date-time formats during schema validation, including nested execution timestamps. Add `rfc3339-validator` as a runtime dependency so base installs do not silently skip these checks.
+- Treat overflowing numeric thresholds and alpha values as unusable inputs and fall back to verifier policy/defaults without raising `OverflowError`.

@@ -27,6 +27,7 @@ direction, so there is no single "declared may only tighten" rule:
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Any, Optional
 
 DEFAULT_EPSILON = 0.02
@@ -39,14 +40,17 @@ def _usable_threshold(value: Any) -> Optional[float]:
     """Return ``value`` as a float if it is a usable threshold, else ``None``.
 
     Rejects strings, ``None``, containers, booleans (``bool`` is an ``int``
-    subclass and ``True`` would otherwise read as 1.0), NaN, and non-positive
-    numbers. A malformed declaration falls back to policy rather than raising:
+    subclass and ``True`` would otherwise read as 1.0), non-finite values,
+    overflowing integers, and non-positive numbers. A malformed declaration falls back to policy rather than raising:
     the capsule is untrusted, so bad input is expected and must not be a crash.
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    v = float(value)
-    if v != v or v <= 0.0:  # NaN, zero, negative
+    try:
+        v = float(value)
+    except OverflowError:
+        return None
+    if not math.isfinite(v) or v <= 0.0:
         return None
     return v
 
@@ -65,7 +69,10 @@ def _usable_alpha(value: Any) -> Optional[float]:
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    v = float(value)
+    try:
+        v = float(value)
+    except OverflowError:
+        return None
     if v != v or not (0.0 < v < 1.0):  # NaN, or outside (0, 1)
         return None
     return v
