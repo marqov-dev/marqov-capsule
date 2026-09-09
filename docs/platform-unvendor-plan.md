@@ -1,5 +1,12 @@
 # marqov-capsule → platform: un-vendor spec & plan
 
+> **2026-09-09 status:** this is a historical migration design, not a current
+> release checklist. See [conference readiness](conference-readiness-2026-09-09.md)
+> for verified updates. Annealing, scanner improvements, versioned IDs, and the
+> replacement statistical bound have landed. Platform main still vendors its
+> builder; its SDK pin is now 0.5.1. Revalidate call sites and rollout assumptions
+> against the target platform commit before implementing this migration.
+
 **Date:** 2026-08-16 · **Rev 9** (propagates Rev 8's findings: publication prerequisite, paradigm-mapping contract, S3 key migration, pin-lattice)
 **Status:** Ready to implement. Open decisions are flagged as such: the rollout model (§9), the credential-scan disposition (§2.3), the statistical disposition (§6), and one **capsule-side blocker** — the schema has no `annealing` paradigm (§2.4).
 **Audience:** (1) implementing agent — §0, §4, §5, §9; (2) technical reviewer — §0, §2, §5, §6, §10, §11.

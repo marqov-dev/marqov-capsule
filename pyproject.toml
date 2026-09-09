@@ -55,6 +55,7 @@ artifacts = ["src/marqov_capsule/schemas/*"]
 include = [
     "src/marqov_capsule/",
     "spec/",
+    "examples/",
     "LICENSE-CODE",
     "LICENSE-SPEC",
     "README.md",

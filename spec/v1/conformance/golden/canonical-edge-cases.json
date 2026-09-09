@@ -1,0 +1,46 @@
+[
+  {
+    "name": "yaml-types",
+    "yaml": "yes_value: yes\nhex_value: 0x1A\ntime_value: 12:30\nleading_zero: 007\ntimestamp: 2026-09-09T00:00:00Z\nnull_value: null\n",
+    "canonical_utf8": "{\"hex_value\":\"0x1A\",\"leading_zero\":7,\"null_value\":null,\"time_value\":\"12:30\",\"timestamp\":\"2026-09-09T00:00:00Z\",\"yes_value\":\"yes\"}",
+    "capsule_id": "mqc:1:340cde334e66dfeea1ae037fc702ea2851e7d0795a8a6bed2e569a6b75498b91"
+  },
+  {
+    "name": "unicode-sort-and-nfc",
+    "yaml": "\"\\uE000\": \"private\"\n\"\\U0001F600\": \"emoji\"\naccent: \"e\\u0301\"\n",
+    "canonical_utf8": "{\"accent\":\"é\",\"😀\":\"emoji\",\"\":\"private\"}",
+    "capsule_id": "mqc:1:bee8770329add5b4ad39ecf2abfbad291dcf080d4639da4673e65c839ac4acd7"
+  },
+  {
+    "name": "number-format",
+    "yaml": "small: 0.0000001\nfixed: 0.000001\nnegative_zero: -0.0\nwhole: 1.0\n",
+    "canonical_utf8": "{\"fixed\":0.000001,\"negative_zero\":0,\"small\":1e-7,\"whole\":1}",
+    "capsule_id": "mqc:1:cce1e64227dd4918a01b209d62f390296b05d6ce3909ef653b2c76b006c35f9b"
+  },
+  {
+    "name": "duplicate-key",
+    "yaml": "a: 1\na: 2\n",
+    "reject": true
+  },
+  {
+    "name": "nfc-key-collision",
+    "yaml": "\"é\": 1\n\"e\\u0301\": 2\n",
+    "reject": true
+  },
+  {
+    "name": "unsafe-integer",
+    "yaml": "n: 9007199254740992\n",
+    "reject": true
+  },
+  {
+    "name": "nonfinite",
+    "yaml": "n: !!float .nan\n",
+    "reject": true
+  },
+  {
+    "name": "literal-nan-string",
+    "yaml": "n: .nan\n",
+    "canonical_utf8": "{\"n\":\".nan\"}",
+    "capsule_id": "mqc:1:75f74d41f2899f5943294c9a8e95fa08649dfacd97bbc249b630733ac6f100ef"
+  }
+]

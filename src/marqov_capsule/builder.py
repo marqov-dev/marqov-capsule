@@ -85,7 +85,7 @@ class CapsuleBuilder:
              warn_only: bool = False, derived_from: Optional[str] = None) -> str:
         """Full sealing sequence: credential scan → checksums → transition → save → ID.
 
-        This is the one-call path for the CLI. Returns the capsule ID (64 hex chars).
+        This is the one-call path for the CLI. Returns the versioned capsule ID (mqc:1:<64 lowercase hex chars>).
         Raises RedactorError if secrets are found and warn_only is False.
         """
         self.seal_capsule(capsule_dir, sealed_by=sealed_by, warn_only=warn_only,

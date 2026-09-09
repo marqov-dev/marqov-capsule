@@ -210,64 +210,66 @@ Any mismatch must be reported as a verification failure.
 
 ### Statistical equivalence (probabilistic results)
 
-> **⚠ Under revision — do not implement as written.** The bootstrap CI
-> procedure below is retired in the reference implementation: it was
-> provably inconsistent for this functional (total variation distance is not
-> Hadamard-differentiable at `p = q`, the null under test), and rejected
-> byte-identical distributions as non-reproducible from roughly four qubits
-> upward. `CapsuleVerifier.verify_statistical` now uses a closed-form
-> one-sided upper confidence bound (Jensen + McDiarmid) instead — no
-> resampling, no seed, and no affirmative `REJECTED` verdict, so the honest
-> verdict space is `VERIFIED` / `INCONCLUSIVE`. That is not because no lower
-> bound on true TVD exists — the triangle inequality gives one (plug-in
-> estimate minus McDiarmid slack minus a one-sample bias term per arm) — but
-> because it isn't deployed: it depends on the outcome count `K`, and taking
-> `K` from observed support rather than the declared register width fails
-> open, a problem the upper bound's `K`-free slack doesn't share. The one
-> candidate detection tool (a permutation test against the sharp null)
-> measured power as low as 42% at K=256, too weak to carry an affirmative
-> verdict. See `CapsuleVerifier.verify_statistical` and
-> `_tvd_upper_confidence_bound` in `src/marqov_capsule/verifier.py`.
->
-> This section's field names (`tvd_threshold`, `ci_level`, `n_resamples`) do
-> not match the reference implementation's verifier-owned
-> `verification_settings` vocabulary (`epsilon`, `epsilon_drift`,
-> `min_shots`, `tolerance_regime`, `alpha`) — `ci_level` in particular is not
-> read by the implementation, which sources its confidence level from
-> `alpha` on `VerificationPolicy` instead. That reconciliation, plus
-> rewriting this section normatively, is tracked separately in
-> [#20](https://github.com/marqov-dev/marqov-capsule/issues/20).
-> The statistical design itself, its citations, and coverage measurements are
-> in
-> [`docs/research/2026-08-10-tvd-equivalence-testing.md`](../../docs/research/2026-08-10-tvd-equivalence-testing.md).
-> Tracked in [#15](https://github.com/marqov-dev/marqov-capsule/issues/15).
->
-> The procedure below is retained only as a record of what v1 originally
-> specified, pending #20.
+This optional procedure describes the reference implementation's current
+`CapsuleVerifier.verify_statistical` API. There is no statistical CLI in 0.1.0.
+Integrity verification and statistical equivalence are separate checks: a
+statistical verdict does not authenticate either input capsule.
 
-QPU results are shot distributions. Two capsules are statistically equivalent if their distributions are close within a confidence interval. The normative procedure:
+Inputs are two count mappings over the same outcome alphabet, with non-negative
+integer counts. The statistical guarantee assumes independent samples within
+and between the two runs from fixed underlying distributions. Reusing the same
+samples in both arms does not establish independent replication.
 
-1. **Metric**: Total variation distance (TVD) between the two shot distributions.
-   ```
-   TVD(p, q) = 0.5 * sum(|p_i - q_i|) over all outcomes i
-   ```
-2. **Bootstrap CI**: 9999 resamples, 95% confidence level, seed **12345** (fixed by this spec for reproducibility).
-3. **Verdict**:
-   - `VERIFIED`: CI upper bound ≤ threshold specified in `verification_settings`
-   - `REJECTED`: CI lower bound > threshold
-   - `INCONCLUSIVE`: CI straddles the threshold
+Acceptance settings belong to the verifier. Callers MUST resolve untrusted
+capsule declarations through `VerificationPolicy.resolve` (or an equivalent
+policy) before passing settings to the low-level statistical API. That API
+accepts already-trusted settings; it does not establish their provenance.
 
-`verification_settings` in the task execution record:
-
-| Field | Type | Notes |
+| Setting | Default | Resolution |
 |---|---|---|
-| `tvd_threshold` | number | Maximum acceptable TVD |
-| `ci_level` | number | Confidence level (default 0.95) |
-| `n_resamples` | integer | Resamples (default 9999) |
+| `epsilon` | 0.02 | Strict TVD ceiling; a usable capsule declaration may only lower it |
+| `epsilon_drift` | 0.08 | Alternative ceiling, used only when the verifier opts into a declared `calibration_drift` regime |
+| `min_shots` | 100 | Minimum shots in each arm; taken only from verifier policy |
+| `alpha` | 0.05 | One-sided error rate, strictly between 0 and 1; taken only from verifier policy |
+| `tolerance_regime` | `strict` | A declared `calibration_drift` is honored only with policy `honor_calibration_drift=True` |
 
-The seed (12345) is fixed by this spec and must not be changed by conformant implementations. This ensures the same capsule pair always yields the same verdict regardless of which implementation performs the check.
+For an accepted drift regime, the effective tolerance is the smaller of the
+policy's drift ceiling and a usable declared `epsilon_drift`; otherwise use
+the strict ceiling and declared `epsilon`. Missing or unusable declarations
+fall back to the policy ceiling. Policy resolution returns regime `strict`
+with the already-resolved tolerance, so downstream code does not widen it again.
+The reference API falls back to `alpha=0.05` for a malformed resolved alpha.
 
-> **Superseded** — see the revised blockquote at the top of this section and [#20](https://github.com/marqov-dev/marqov-capsule/issues/20). The reference implementation no longer resamples or seeds anything.
+For shot totals `n` and `m`, and empirical frequencies `p_hat` and `q_hat`:
+
+```text
+tvd_point = 0.5 * sum(abs(p_hat[i] - q_hat[i]))
+slack = sqrt(0.5 * ln(1 / alpha) * (1 / n + 1 / m))
+tvd_ucb = min(1, tvd_point + slack)
+```
+
+Sum over the union of observed outcomes, using zero for absent counts.
+This is a one-sided upper confidence bound on true TVD with coverage at least
+`1-alpha` under the sampling assumptions. The bound uses no resampling or seed.
+Its derivation and limitations are recorded in the
+[statistical research note](../../docs/research/2026-08-10-tvd-equivalence-testing.md).
+
+The decision procedure is:
+
+1. Either arm has zero shots: `INCONCLUSIVE`, without computing TVD.
+2. Either arm has fewer than `min_shots`: `INCONCLUSIVE`, without computing a bound.
+3. `tvd_ucb <= epsilon`: `VERIFIED` within the resolved tolerance.
+4. Otherwise: `INCONCLUSIVE`.
+
+There is no affirmative `REJECTED` verdict in this procedure. An inconclusive
+result does not prove that the underlying distributions differ. Diagnostic
+chi-squared p-values and energy distance never change the verdict.
+
+When the bound is computed, reports include `total_variation_distance`,
+`tvd_ucb`, `alpha`, `epsilon_used`, `shots_ref`, and `shots_new`. Early returns
+include shot totals, the tolerance, and minimum-shot requirement. Retired
+`ci_level`, `n_resamples`, bootstrap confidence intervals, and RNG seed fields
+have no role in this procedure.
 
 ---
 
@@ -289,7 +291,8 @@ A conformant capsule implementation must:
 - Compute `.checksums` and `checksums_digest` using the scheme in §5, and serialise `.checksums` using the byte-exact grammar in §5, Layer 1 (two-space separator, lowercase hex, NFC and percent-encoded paths, byte-wise sort, LF framing).
 - Refuse to seal a capsule that contains credentials (API keys, tokens, high-entropy secrets). See the reference implementation's `CapsuleRedactor` for the normative pattern list.
 - Compute capsule IDs using JCS canonical JSON (RFC 8785), enforcing the parse-time canonicalisation constraints in §5, Layer 3 (JSON-aligned YAML typing, the 2⁵³ integer bound, NFC, unique string keys) before hashing.
-- Use seed 12345 for bootstrap TVD CIs. **Superseded** — see the revised blockquote in §6 and [#20](https://github.com/marqov-dev/marqov-capsule/issues/20); the reference implementation no longer uses a bootstrap CI or a seed.
+- If statistical equivalence is implemented, use the policy boundary and decision procedure in §6.
+- Match the published [golden vectors](conformance/README.md). These are fixed expected outputs, not outputs regenerated during tests.
 
 ---
 
