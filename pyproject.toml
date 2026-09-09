@@ -27,6 +27,7 @@ classifiers = [
 dependencies = [
     "pyyaml>=6.0",
     "jsonschema>=4.0",
+    "rfc3339-validator>=0.1.4",
     "click>=8.0",
     "jcs>=0.2",
 ]

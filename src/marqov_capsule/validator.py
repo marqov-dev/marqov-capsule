@@ -47,7 +47,12 @@ class CapsuleValidator:
             raise ImportError("jsonschema>=4.0 required: pip install marqov-capsule")
 
         schema = _load_schema()
-        validator = Draft202012Validator(schema)
+        # jsonschema format checks are opt-in, and date-time is only registered
+        # when its validator dependency is installed. It is a runtime dependency
+        # here so base and development installs enforce the same contract.
+        validator = Draft202012Validator(
+            schema, format_checker=jsonschema.FormatChecker(formats=["date-time"])
+        )
         errors = []
         for err in validator.iter_errors(capsule):
             parts = [str(p) for p in err.absolute_path]

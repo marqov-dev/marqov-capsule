@@ -154,3 +154,24 @@ Validation for this follow-up: 339 full-suite tests pass; the NumPy-free suite
 runs 314 tests with 25 skips; the independent Node checker passes all 18 vectors.
 The JavaScript dependency is confined to development tooling and adds no Python
 runtime dependencies. Public repository visibility remains unchanged.
+
+## Validation follow-up after #76 merged
+
+PR #76 merged as `ca4eb51`. Two remaining #61 items were reproduced and fixed:
+invalid date-time strings previously validated successfully, and huge numeric
+threshold/alpha inputs raised `OverflowError`. Date-time assertions now run for
+created/sealed and nested start/end timestamps, with a declared runtime
+`rfc3339-validator` dependency. Invalid numeric values fall back to policy.
+The TestPyPI install recipe includes the new dependency explicitly.
+
+Validation: 365 full-suite tests passed; the fresh base wheel ran 340 tests with
+25 skips. Source/wheel metadata checks and all 18 independent Node vectors pass.
+The new format check covers date-time; it does not claim enforcement of every
+other schema format. Invalid timestamps that previously passed now fail; valid
+fixture identities remain unchanged.
+
+Review of #61's historical checklist confirms archive prefix/output placement,
+feature-guarded extraction on older Python patches, deterministic tar metadata,
+and annealing support are already implemented. Legacy verifier methods remain
+in the package, including the old statistical path, and still need a separate
+API/behavior disposition. This follow-up does not close the grouped issue.
