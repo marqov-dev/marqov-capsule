@@ -94,6 +94,7 @@ because what a project looked for says as much as what it shipped.
 
 ### Release checks
 
+- Restrict source distributions to explicit repository paths so nested local worktrees cannot be included. Check source and wheel inventories in CI and before release upload.
 - Anchor URL scanning at the repository root and preserve tracked filenames containing whitespace. Malformed URLs fail individually; DNS and HTTP outages are reported as inconclusive warnings. Reviewed Marqov hosts are checked independently of DNS, with a required offline CI job.
 - Retry restricted HEAD requests with GET, close responses, and exclude the schema identifier from retrieval checks.
 - Assert that the spec's advertised schema ID matches the shipped schema and that CI Success includes every job. Make the domain regression guard fail on Git errors and narrow its historical exception to one exact line.

@@ -91,7 +91,10 @@ jobs:
       - name: Build wheel
         run: |
           pip install build
-          python -m build --wheel
+          python -m build
+
+      - name: Check distribution contents
+        run: python tools/check_distribution.py dist
 
       - name: Install from wheel (not editable)
         run: pip install dist/*.whl

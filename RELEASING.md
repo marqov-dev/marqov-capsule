@@ -70,6 +70,7 @@ throwaway version for dry-runs, validate hard, and tag last.
       python -m zipfile -l dist/*.whl        # wheel contents
       tar tzf dist/*.tar.gz                   # sdist sweep — no strays
       uvx twine check dist/*
+      python tools/check_distribution.py dist
       uv venv /tmp/capsule-release-acceptance
       uv pip install --python /tmp/capsule-release-acceptance/bin/python dist/*.whl
       /tmp/capsule-release-acceptance/bin/python -I tools/smoke_distribution.py

@@ -53,11 +53,12 @@ packages = ["src/marqov_capsule"]
 artifacts = ["src/marqov_capsule/schemas/*"]
 
 [tool.hatch.build.targets.sdist]
-include = [
+only-include = [
     "src/marqov_capsule/",
     "spec/",
     "examples/",
     "LICENSE-CODE",
     "LICENSE-SPEC",
     "README.md",
+    "pyproject.toml",
 ]
