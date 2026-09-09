@@ -2,9 +2,10 @@
 
 ## Development setup
 
+From an authorized repository checkout, install the development dependencies.
+Contact `hello@marqov.ai` for contribution access.
+
 ```bash
-git clone https://github.com/marqov-dev/marqov-capsule
-cd marqov-capsule
 pip install -e ".[dev]"
 pytest tests/
 ```

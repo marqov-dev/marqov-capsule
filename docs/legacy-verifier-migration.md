@@ -60,9 +60,8 @@ Do not translate `INCONCLUSIVE` into proof of difference or use a p-value to
 override it. The sampling assumptions and decision procedure are in spec §6.
 The `calibration_drift` tolerance regime does not inspect calibration data.
 
-## Platform integration
+## Application integration
 
-The platform currently uses its own vendored verifier. Retiring these methods
-in this package does not patch that copy. An eventual un-vendor change must
-replace its call sites with explicit supported operations and make the trusted
-ID and policy ownership visible. A mechanical import swap is insufficient.
+Replace legacy verdict calls with explicit supported operations and make trusted
+ID and policy ownership visible. An import change alone cannot establish these
+contracts; test creation, delivery, retries and rejection paths in the application.

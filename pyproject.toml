@@ -43,10 +43,7 @@ dev = [
 marqov-capsule = "marqov_capsule.cli.main:cli"
 
 [project.urls]
-Homepage = "https://github.com/marqov-dev/marqov-capsule"
-Repository = "https://github.com/marqov-dev/marqov-capsule"
-Issues = "https://github.com/marqov-dev/marqov-capsule/issues"
-Changelog = "https://github.com/marqov-dev/marqov-capsule/blob/main/CHANGELOG.md"
+Homepage = "https://marqov.ai"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/marqov_capsule"]
