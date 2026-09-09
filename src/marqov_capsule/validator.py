@@ -122,6 +122,8 @@ class CapsuleValidator:
             return {"valid": False, "errors": [{"path": "/", "message": f"Expected a capsule.yaml file, got a directory: {filepath}"}]}
         except UnicodeDecodeError:
             return {"valid": False, "errors": [{"path": "/", "message": "capsule.yaml must be UTF-8 text"}]}
+        except OSError as e:
+            return {"valid": False, "errors": [{"path": "/", "message": f"capsule.yaml could not be read: {type(e).__name__}"}]}
         except yaml.YAMLError as e:
             return {"valid": False, "errors": [{"path": "/", "message": f"YAML parse error: {e}"}]}
 

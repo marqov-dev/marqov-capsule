@@ -573,8 +573,8 @@ class CapsuleVerifier:
             # The manifest is untrusted input: a corrupt or hostile one must fail
             # verification, never raise out of the verifier.
             try:
-                parsed = load_manifest_yaml(manifest_path.read_text())
-            except (yaml.YAMLError, UnicodeDecodeError) as exc:
+                parsed = load_manifest_yaml(manifest_path.read_text(encoding="utf-8"))
+            except (yaml.YAMLError, UnicodeDecodeError, OSError) as exc:
                 errors.append(f"capsule.yaml could not be parsed: {exc.__class__.__name__}")
             else:
                 if isinstance(parsed, dict):
@@ -592,13 +592,18 @@ class CapsuleVerifier:
                 checksums_digest_match = False
                 errors.append(".checksums missing or not a regular file but manifest declares checksums_digest")
             else:
-                actual = "sha256:" + hashlib.sha256(checksums_file.read_bytes()).hexdigest()
-                checksums_digest_match = actual == declared
-                if not checksums_digest_match:
-                    errors.append(
-                        f"checksums_digest mismatch: manifest declares {declared}, "
-                        f".checksums hashes to {actual}"
-                    )
+                try:
+                    actual = "sha256:" + hashlib.sha256(checksums_file.read_bytes()).hexdigest()
+                except OSError:
+                    checksums_digest_match = False
+                    errors.append(".checksums could not be read to verify checksums_digest")
+                else:
+                    checksums_digest_match = actual == declared
+                    if not checksums_digest_match:
+                        errors.append(
+                            f"checksums_digest mismatch: manifest declares {declared}, "
+                            f".checksums hashes to {actual}"
+                        )
 
             # Layer 3 — manifest identity. The manifest is untrusted: a value
             # that cannot be RFC 8785 canonicalised (NaN, non-string keys, …)

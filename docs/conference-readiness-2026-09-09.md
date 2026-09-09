@@ -1,5 +1,22 @@
 # Capsule conference readiness — 2026-09-09
 
+## Bundle review checkpoint
+
+Archive extraction now requires one unambiguous top-level capsule directory,
+a regular manifest, unique member names (including Unicode normalization), and
+a fresh destination capsule directory. Layout checks run before extraction on
+both modern and fallback paths. Manifest/checksum read errors become failed
+verification results. Fourteen new regressions cover these cases.
+
+The reviewed build passes **430 tests with 1 skip** on Python 3.12 and Python
+3.10 with minimum direct dependencies; its base
+wheel passes **405 with 26 skips**. The isolated wheel CLI acceptance, metadata
+checks, and 18 independent Node vectors pass. The offline kit has been refreshed
+with this wheel, its requirement hash and file checksums updated, and the
+SDK-export packaging/tamper rehearsal repeated successfully under
+`dist/quantum-week-rehearsal/reviewed-bell-demo/`. This is local evidence;
+the complete bundle still needs remote CI when submitted together.
+
 ## Offline rehearsal
 
 `tools/prepare_conference_kit.py` now prepares a host-specific wheel collection,

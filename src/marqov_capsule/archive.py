@@ -19,6 +19,7 @@ import hashlib
 import io
 import os
 import tarfile
+import unicodedata
 import warnings
 from pathlib import Path, PurePosixPath
 from typing import Optional, Union
@@ -133,7 +134,8 @@ def unpack_capsule(
 
     Raises:
         FileNotFoundError: If the archive does not exist.
-        ValueError: If the archive does not contain ``capsule.yaml``.
+        ValueError: If the archive layout is ambiguous, lacks a regular
+            ``capsule.yaml``, or its destination capsule directory exists.
     """
     archive_path = Path(archive_path)
     if not archive_path.exists():
@@ -156,6 +158,38 @@ def unpack_capsule(
                 f"Archive does not contain capsule.yaml: {archive_path}"
             )
 
+        # Validate the complete layout before writing any files. One archive
+        # represents one capsule; duplicate names would otherwise overwrite
+        # earlier members, and multiple roots leave the return value ambiguous.
+        roots = set()
+        seen = set()
+        normalized_names = set()
+        members_by_name = {}
+        for member in tf.getmembers():
+            name = member.name.rstrip("/")
+            parts = PurePosixPath(name)
+            if (not name or parts.is_absolute() or ".." in parts.parts
+                    or parts.as_posix() != name):
+                raise ValueError(f"Refusing unsafe archive member: {member.name!r}")
+            if name in seen:
+                raise ValueError(f"Duplicate archive member: {name!r}")
+            normalized = unicodedata.normalize("NFC", name)
+            if normalized in normalized_names:
+                raise ValueError(f"Archive members collide after Unicode normalization: {name!r}")
+            normalized_names.add(normalized)
+            seen.add(name)
+            members_by_name[name] = member
+            roots.add(parts.parts[0])
+        if len(roots) != 1:
+            raise ValueError("Archive must contain a single top-level capsule directory")
+        capsule_dir_name = roots.pop()
+        manifest_name = f"{capsule_dir_name}/capsule.yaml"
+        if manifest_name not in seen or not members_by_name[manifest_name].isfile():
+            raise ValueError("Archive must contain a regular capsule.yaml under its top-level directory")
+        destination = output_dir / capsule_dir_name
+        if destination.exists() or destination.is_symlink():
+            raise ValueError(f"Capsule destination already exists: {destination}")
+
         # Safe extraction.  ``extractall(filter="data")`` (PEP 706) is the
         # right tool, but the ``filter`` keyword only exists on 3.12+ and the
         # 3.9.17+/3.10.12+/3.11.4+ backports — the ``requires-python`` floor
@@ -166,16 +200,6 @@ def unpack_capsule(
             tf.extractall(path=str(output_dir), filter="data")
         else:
             _safe_extractall(tf, output_dir)
-
-        # Determine the top-level directory in the archive
-        top_dirs = {name.split("/")[0] for name in member_names if "/" in name}
-        if len(top_dirs) == 1:
-            capsule_dir_name = top_dirs.pop()
-        else:
-            # Fallback: derive from archive filename
-            capsule_dir_name = archive_path.stem
-            if not capsule_dir_name.endswith(".capsule"):
-                capsule_dir_name += ".capsule"
 
     return output_dir / capsule_dir_name
 

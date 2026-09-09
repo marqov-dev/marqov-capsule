@@ -115,6 +115,7 @@ because what a project looked for says as much as what it shipped.
 
 ### Bundled release hardening
 
+- Reject ambiguous archive layouts, duplicate/Unicode-colliding members, and existing capsule extraction destinations. Convert manifest and checksum read failures into failed verification results.
 - Keep CLI digest reporting from reading rejected checksum metadata; report incomplete archives and non-archives as verification failures in JSON mode. Require a fresh child destination for `open` so existing files or destination symlinks cannot alter the delivered record.
 - Gate release uploads on distribution metadata checks and isolated, base-wheel CLI acceptance, including trusted-ID round-trip and tamper failures. Provide the same check for local and TestPyPI-installed artifacts.
 - Validate UUID fields, UTF-8 input, and the canonical JSON data model; reject recursive values, normalized key collisions, non-string keys, non-finite numbers, and unsafe integers.
