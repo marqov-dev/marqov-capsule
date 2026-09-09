@@ -175,3 +175,24 @@ feature-guarded extraction on older Python patches, deterministic tar metadata,
 and annealing support are already implemented. Legacy verifier methods remain
 in the package, including the old statistical path, and still need a separate
 API/behavior disposition. This follow-up does not close the grouped issue.
+
+## Legacy verifier disposition after #77 merged
+
+PR #77 merged as `055ca2e`. The legacy API audit reproduced successful verdicts
+from (1) no recognized statistical tests, (2) digest claims without evidence,
+and (3) calibration records with missing fidelity values. Code inspection also
+confirmed `compare_capsules` treated equal names as overall consistency.
+
+Before the first release, retire these legacy verdict APIs. Public method names
+remain only as explicit `NotImplementedError` migration guards; the private
+legacy statistical, metadata, and tier-dispatch implementation is removed.
+Supported `verify_integrity`, `verify_deterministic`, and `verify_statistical`
+remain intact. `load_capsule` now uses the canonical YAML profile and explicitly
+requires a mapping. See [migration guidance](legacy-verifier-migration.md).
+No existing tests were deleted to make this change pass.
+
+Validation: 388 full-suite tests pass; the NumPy-free suite passes 363 with
+25 skips, including all legacy regression cases. The independent Node checker
+still passes 18 vectors. This addresses #61's legacy-verifier disposition and
+#48's request to test or retire the old tier API. The platform's vendored copy
+is unchanged and must be addressed separately in #2/#50.
