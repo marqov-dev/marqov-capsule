@@ -10,13 +10,15 @@ The format is an open standard (`spec/v1/`, CC-BY-4.0). The Python tooling is Ap
 
 ## Install
 
-Requires Python 3.10+. Install a supplied release wheel:
+Requires Python 3.10+:
 
 ```bash
-python -m pip install ./marqov_capsule-0.1.0-py3-none-any.whl
+python -m pip install marqov-capsule==0.1.0
 ```
 
-The first PyPI release is being prepared. The source distribution includes
+For offline installation, install a supplied release wheel with
+`python -m pip install ./marqov_capsule-0.1.0-py3-none-any.whl`.
+The source distribution includes
 `spec/v1/` and `examples/`; from its extracted directory, install with
 `python -m pip install .`.
 
