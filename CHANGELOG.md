@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.0] — Unreleased
+## [0.1.0] — 2026-09-10
 
 First public release of the capsule format and Python tooling.
 
