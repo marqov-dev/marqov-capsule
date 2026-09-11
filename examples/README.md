@@ -31,14 +31,14 @@ From a repository checkout or the extracted source distribution, using Python 3.
 
 ```bash
 python3.12 -m venv /tmp/marqov-capsule-demo-env
-/tmp/marqov-capsule-demo-env/bin/python -m pip install . marqov==0.5.1
+/tmp/marqov-capsule-demo-env/bin/python -m pip install marqov-capsule==0.1.0 marqov==0.5.1
 /tmp/marqov-capsule-demo-env/bin/python examples/run_bell.py /tmp/bell-export
 /tmp/marqov-capsule-demo-env/bin/python examples/seal_bell.py /tmp/bell-export /tmp/bell-demo
 ```
 
 Use new output directories on each run; scripts refuse to overwrite existing
-ones. Capsule is installed from the local source directory because its first PyPI release
-is pending. The SDK and capsule steps may also run in separate environments.
+ones. Both packages are installed from PyPI. The SDK and capsule steps may also
+run in separate environments.
 
 The second script checks schema validity, seals and packs the export twice,
 checks byte-identical archives, extracts and verifies against the recorded ID,
