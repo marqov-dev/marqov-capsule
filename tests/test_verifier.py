@@ -3,10 +3,21 @@ from pathlib import Path
 import pytest
 from marqov_capsule.verifier import CapsuleVerifier
 
-pytest.importorskip("numpy")
-pytest.importorskip("scipy")
-
 FIXTURE_DIR = Path(__file__).parent.parent / "spec/v1/conformance"
+
+
+def _require_stats_deps():
+    """Skip only the bootstrap-CI statistical tests when numpy/scipy are absent.
+
+    A module-level `importorskip` here used to skip the *whole file* on a base
+    install — including the checksum, deterministic-verification, and
+    path-traversal/symlink security tests below, none of which import numpy or
+    scipy. That silently widened every time a numpy-free test was appended
+    (#39). Guarding per-test, at the point of actual use, is the only form
+    that stays honest as the file grows.
+    """
+    pytest.importorskip("numpy")
+    pytest.importorskip("scipy")
 
 
 def test_identical_distributions_verified():
@@ -16,6 +27,7 @@ def test_identical_distributions_verified():
     With 1,000 shots and a 2-outcome distribution the 97.5th-percentile CI upper
     bound is ~0.0502, which sits exactly on the threshold and flakes ~50% of runs.
     """
+    _require_stats_deps()
     counts = {"00": 5000, "11": 5000}  # 10,000 shots
     verifier = CapsuleVerifier()
     result = verifier.verify_statistical(
@@ -29,6 +41,7 @@ def test_identical_distributions_verified():
 
 
 def test_completely_different_distributions_rejected():
+    _require_stats_deps()
     ref = {"00": 1000}
     new = {"11": 1000}
     verifier = CapsuleVerifier()
@@ -58,6 +71,7 @@ def test_calibration_drift_uses_epsilon_drift():
     Invariant: calibration_drift must never be stricter than strict mode for the
     same distribution pair. Verified by rank comparison on the verdict ordering.
     """
+    _require_stats_deps()
     ref = {"00": 500, "11": 490, "01": 10}
     new = {"00": 480, "11": 510, "01": 10}
     verifier = CapsuleVerifier()
@@ -84,6 +98,7 @@ def test_calibration_drift_uses_epsilon_drift():
 
 
 def test_epsilon_drift_defaults_to_0_08_when_absent():
+    _require_stats_deps()
     counts = {"00": 500, "11": 500}
     verifier = CapsuleVerifier()
     result = verifier.verify_statistical(
@@ -100,6 +115,7 @@ def test_epsilon_drift_defaults_to_0_08_when_absent():
 
 
 def test_metrics_include_diagnostics_not_verdict():
+    _require_stats_deps()
     ref = {"00": 500, "11": 500}
     new = {"00": 495, "11": 505}
     verifier = CapsuleVerifier()
@@ -122,6 +138,7 @@ def test_metrics_include_diagnostics_not_verdict():
 
 def test_energy_distance_uses_hamming_metric():
     """Energy distance must use Hamming distance on bitstrings, not index proximity."""
+    _require_stats_deps()
     # "00" and "11" are Hamming-distance 2; "00" and "01" are Hamming-distance 1.
     verifier = CapsuleVerifier()
     far = verifier.verify_statistical(

@@ -184,6 +184,47 @@ def test_injected_file_fails_full_integrity_check(tmp_path):
     assert result["capsule_id_match"] is True  # untouched
 
 
+# --- File-deletion tamper vector: a payload listed in .checksums goes missing -
+
+
+def test_deleted_payload_file_fails_verify_checksums(tmp_path):
+    """Deleting a payload file after seal must fail verification, not pass
+    silently because there's simply nothing left to hash-mismatch against."""
+    capsule_dir = tmp_path / "bell.capsule"
+    _seal(capsule_dir)
+    (capsule_dir / "payload" / "results.json").unlink()
+
+    result = CapsuleVerifier.verify_checksums(capsule_dir)
+    assert result["status"] == "fail", result
+    assert "payload/results.json" in result["missing"]
+
+
+def test_deleted_payload_file_fails_full_integrity_check(tmp_path):
+    """Deletion leaves checksums_digest and the capsule ID untouched — layer 1
+    (payload vs .checksums) is the only layer that can catch it."""
+    capsule_dir = tmp_path / "bell.capsule"
+    sealed_id = _seal(capsule_dir)
+    (capsule_dir / "source" / "circuit.qasm").unlink()
+
+    result = CapsuleVerifier.verify_integrity(capsule_dir, expected_id=sealed_id)
+    assert result["status"] == "fail", result
+    assert result["checksums_digest_match"] is True  # untouched
+    assert result["capsule_id_match"] is True  # untouched
+    assert "source/circuit.qasm" in result["checksums"]["missing"]
+
+
+def test_cli_verify_rejects_deleted_payload_file(tmp_path):
+    from click.testing import CliRunner
+    from marqov_capsule.cli.main import cli
+
+    capsule_dir = tmp_path / "bell.capsule"
+    _seal(capsule_dir)
+    (capsule_dir / "payload" / "results.json").unlink()
+
+    result = CliRunner().invoke(cli, ["verify", str(capsule_dir)])
+    assert result.exit_code == 1, result.output
+
+
 # --- CLI wiring: consumers must gate on all three layers --------------------
 
 
@@ -393,4 +434,57 @@ def test_cli_open_id_mismatch_refuses(tmp_path):
     dest = tmp_path / "out"
     result = CliRunner().invoke(cli, ["open", str(capsule_dir), "--id", "0" * 64, "--dest", str(dest)])
     assert result.exit_code == 1, result.output
+
+
+# --- CLI failure exit codes on bad input -------------------------------------
+#
+# `seal`, `verify`, and `open` each exit non-zero on their own class of bad
+# input, but nothing pinned the exit code — only click's own argument-parsing
+# exit codes (2, for a missing path argument) were incidentally covered.
+
+
+def test_cli_seal_missing_manifest_exits_1(tmp_path):
+    """`seal` on a directory with no capsule.yaml must exit 1, not raise."""
+    from click.testing import CliRunner
+    from marqov_capsule.cli.main import cli
+
+    result = CliRunner().invoke(cli, ["seal", str(tmp_path)])
+    assert result.exit_code == 1, result.output
+    assert "capsule.yaml" in result.output
+
+
+def test_cli_verify_never_sealed_directory_exits_1(tmp_path):
+    """`verify` on a directory that was never sealed (no manifest, no
+    .checksums) must fail cleanly rather than reporting a vacuous pass."""
+    from click.testing import CliRunner
+    from marqov_capsule.cli.main import cli
+
+    (tmp_path / "some_file.txt").write_text("not a capsule\n")
+    result = CliRunner().invoke(cli, ["verify", str(tmp_path)])
+    assert result.exit_code == 1, result.output
+
+
+def test_cli_verify_non_archive_file_exits_1(tmp_path):
+    """`verify` given a file that is neither a capsule directory nor a tar
+    archive must exit 1 rather than crash inside tarfile."""
+    from click.testing import CliRunner
+    from marqov_capsule.cli.main import cli
+
+    bogus = tmp_path / "not-a-capsule.capsule"
+    bogus.write_text("this is plain text, not a gzipped tarball\n")
+
+    result = CliRunner().invoke(cli, ["verify", str(bogus)])
+    assert result.exit_code == 1, result.output
+
+
+def test_cli_open_never_sealed_directory_exits_1(tmp_path):
+    """`open` on a directory that was never sealed must refuse to extract."""
+    from click.testing import CliRunner
+    from marqov_capsule.cli.main import cli
+
+    (tmp_path / "some_file.txt").write_text("not a capsule\n")
+    dest = tmp_path.parent / "out"
+    result = CliRunner().invoke(cli, ["open", str(tmp_path), "--dest", str(dest)])
+    assert result.exit_code == 1, result.output
+    assert not dest.exists() or not any(dest.iterdir())
     assert not (dest / "bell.capsule").exists()
