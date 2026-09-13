@@ -176,6 +176,35 @@ def test_init_multiple_paradigms(tmp_path):
     assert "analog" in manifest["requirements"]["paradigm"]
 
 
+@pytest.mark.parametrize("paradigm", ["gate-based", "analog", "classical"])
+def test_init_each_advertised_paradigm_yields_a_schema_valid_capsule(tmp_path, paradigm):
+    """README §3 / the schema enum define paradigm as gate-based, analog, or
+    classical — every value the CLI advertises must actually produce a
+    capsule the schema accepts."""
+    new_dir = tmp_path / f"cap-{paradigm}"
+    runner = CliRunner()
+    result = runner.invoke(cli, ["init", "--paradigm", paradigm, str(new_dir)])
+    assert result.exit_code == 0, result.output
+
+    from marqov_capsule._canonical import load_manifest_yaml
+    from marqov_capsule.validator import CapsuleValidator
+    manifest = load_manifest_yaml((new_dir / "capsule.yaml").read_text())
+    assert manifest["requirements"]["paradigm"] == [paradigm]
+    validation = CapsuleValidator.validate(manifest)
+    assert validation["valid"] is True, validation["errors"]
+
+
+def test_init_rejects_unsupported_paradigm(tmp_path):
+    """`annealing` is not in the schema's paradigm enum (gate-based, analog,
+    classical) — the CLI must reject it outright rather than silently write a
+    capsule the schema will later reject."""
+    new_dir = tmp_path / "cap"
+    runner = CliRunner()
+    result = runner.invoke(cli, ["init", "--paradigm", "annealing", str(new_dir)])
+    assert result.exit_code != 0
+    assert not (new_dir / "capsule.yaml").exists()
+
+
 def test_open_rejects_capsule_with_symlink(tmp_path):
     """`open` must refuse a capsule containing a symlink and must not materialize
     the symlink target's content into the destination (#32)."""

@@ -20,7 +20,8 @@ _DRAFT_MANIFEST = {
 @click.argument("directory", type=click.Path(file_okay=False))
 @click.option("--name", default=None, help="Capsule name (defaults to directory name)")
 @click.option("--paradigm", "paradigms", multiple=True,
-              help="Paradigm (gate-based, analog, annealing). Repeatable.")
+              type=click.Choice(["gate-based", "analog", "classical"]),
+              help="Paradigm (gate-based, analog, classical). Repeatable.")
 @click.option("--qubits", default=None, type=int, help="Maximum qubit count")
 @click.option("--force", is_flag=True, help="Overwrite existing capsule.yaml")
 def init(directory, name, paradigms, qubits, force):

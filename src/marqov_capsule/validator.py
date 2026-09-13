@@ -1,6 +1,7 @@
 """CapsuleValidator — validates capsule.yaml against spec/v1/capsule-schema.json."""
 from __future__ import annotations
 
+import datetime
 import importlib.resources as _pkg_resources
 import json
 from pathlib import Path
@@ -10,12 +11,44 @@ import yaml
 
 try:
     import jsonschema
-    from jsonschema import Draft202012Validator
+    from jsonschema import Draft202012Validator, FormatChecker
     _JSONSCHEMA_AVAILABLE = True
 except ImportError:
     _JSONSCHEMA_AVAILABLE = False
 
 _schema_cache: dict | None = None
+_format_checker_cache: "FormatChecker | None" = None
+
+
+def _build_format_checker() -> "FormatChecker":
+    """Build a FormatChecker that enforces ``format: date-time``.
+
+    jsonschema's built-in "date-time" checker only registers itself if the
+    optional ``rfc3339-validator`` package is installed; without it, no
+    checker exists for "date-time" and — per JSON Schema semantics, where
+    ``format`` is merely an annotation unless a checker understands it — the
+    schema's ``format: date-time`` on created_at/sealed_at/start_time/end_time
+    is silently unenforced. Registering our own stdlib-only checker here
+    avoids adding a new dependency for a single format.
+    """
+    checker = FormatChecker()
+
+    @checker.checks("date-time", raises=ValueError)
+    def _check_date_time(value: object) -> bool:
+        if not isinstance(value, str):
+            return True  # format applies only to strings; type is checked separately
+        text = value[:-1] + "+00:00" if value[-1:] in ("Z", "z") else value
+        datetime.datetime.fromisoformat(text)
+        return True
+
+    return checker
+
+
+def _get_format_checker() -> "FormatChecker":
+    global _format_checker_cache
+    if _format_checker_cache is None:
+        _format_checker_cache = _build_format_checker()
+    return _format_checker_cache
 
 
 def _load_schema() -> dict:
@@ -47,7 +80,7 @@ class CapsuleValidator:
             raise ImportError("jsonschema>=4.0 required: pip install marqov-capsule")
 
         schema = _load_schema()
-        validator = Draft202012Validator(schema)
+        validator = Draft202012Validator(schema, format_checker=_get_format_checker())
         errors = []
         for err in validator.iter_errors(capsule):
             parts = [str(p) for p in err.absolute_path]

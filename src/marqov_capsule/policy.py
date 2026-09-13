@@ -35,10 +35,17 @@ def _usable_threshold(value: Any) -> Optional[float]:
     subclass and ``True`` would otherwise read as 1.0), NaN, and non-positive
     numbers. A malformed declaration falls back to policy rather than raising:
     the capsule is untrusted, so bad input is expected and must not be a crash.
+    An int too large to represent as a float (beyond ~1.8e308) raises
+    ``OverflowError`` from ``float()`` rather than returning ``inf`` — caught
+    here for the same reason: an oversized declaration is still just a value
+    that fails to clear the ceiling, not a crash.
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    v = float(value)
+    try:
+        v = float(value)
+    except OverflowError:
+        return None
     if v != v or v <= 0.0:  # NaN, zero, negative
         return None
     return v

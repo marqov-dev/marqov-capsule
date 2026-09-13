@@ -109,3 +109,41 @@ def test_sealed_capsule_with_required_fields_passes():
         "requirements": {"paradigm": ["gate-based"], "max_qubit_count": 2},
     })
     assert result["valid"] is True
+
+
+def test_malformed_date_time_is_rejected():
+    """format: date-time is declared on created_at/sealed_at but jsonschema
+    only enforces `format` when a FormatChecker is supplied. Without one, a
+    nonsense timestamp like month 13 / hour 99 validates as "Valid"."""
+    result = CapsuleValidator.validate({
+        "version": "1.0.0",
+        "name": "test",
+        "lifecycle_state": "draft",
+        "created_at": "2026-13-45T99:99:99",
+    })
+    assert result["valid"] is False
+    assert any("created_at" in e["path"] for e in result["errors"])
+
+
+def test_valid_iso8601_date_time_passes():
+    result = CapsuleValidator.validate({
+        "version": "1.0.0",
+        "name": "test",
+        "lifecycle_state": "draft",
+        "created_at": "2026-06-11T00:00:00Z",
+    })
+    assert result["valid"] is True
+
+
+def test_malformed_sealed_at_is_rejected():
+    result = CapsuleValidator.validate({
+        "version": "1.0.0",
+        "name": "test",
+        "lifecycle_state": "sealed",
+        "sealed_at": "not-a-timestamp",
+        "sealed_by": "test",
+        "checksums_digest": "sha256:" + "a" * 64,
+        "requirements": {"paradigm": ["gate-based"], "max_qubit_count": 2},
+    })
+    assert result["valid"] is False
+    assert any("sealed_at" in e["path"] for e in result["errors"])

@@ -67,6 +67,17 @@ def test_resolution_rejects_non_numeric_declarations():
         assert p.resolve(bad)["epsilon"] == 0.02
 
 
+def test_resolution_does_not_raise_on_a_huge_declared_integer():
+    """`float(value)` on an int too large to represent as a float raises
+    OverflowError, which would let a malicious capsule crash the verifier —
+    contradicting this module's own "must not be a crash" contract for
+    untrusted, malformed declarations."""
+    p = VerificationPolicy(epsilon=0.02)
+    huge = 10 ** 400  # far beyond float range (~1.8e308)
+    r = p.resolve({"epsilon": huge})
+    assert r["epsilon"] == 0.02
+
+
 def test_resolution_reports_what_was_clamped():
     p = VerificationPolicy(epsilon=0.02)
     r = p.resolve({"epsilon": 1.0})
