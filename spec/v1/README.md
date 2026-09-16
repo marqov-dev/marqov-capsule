@@ -300,7 +300,7 @@ A conformant capsule implementation must:
 - Compute `.checksums` and `checksums_digest` using the scheme in §5, and serialise `.checksums` using the byte-exact grammar in §5, Layer 1 (two-space separator, lowercase hex, NFC and percent-encoded paths, byte-wise sort, LF framing).
 - Refuse to seal a capsule that contains credentials (API keys, tokens, high-entropy secrets). See the reference implementation's `CapsuleRedactor` for the normative pattern list.
 - Compute capsule IDs using JCS canonical JSON (RFC 8785), enforcing the parse-time canonicalisation constraints in §5, Layer 3 (JSON-aligned YAML typing, the 2⁵³ integer bound, NFC, unique string keys) before hashing.
-- If statistical equivalence is implemented, use the policy boundary and decision procedure in §6.
+- If statistical equivalence is implemented, use the policy boundary and decision procedure in §6, and match the published [section 6 vectors](conformance/golden/statistical-cases.json). Those vectors carry an absolute tolerance for float comparison; exact bit equality is not required, since `ln` and `sqrt` differ in their last bits across languages and platforms.
 - Match the published [golden vectors](conformance/README.md). These are fixed expected outputs, not outputs regenerated during tests.
 
 ---

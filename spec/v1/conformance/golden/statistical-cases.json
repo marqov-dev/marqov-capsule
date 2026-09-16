@@ -1,0 +1,380 @@
+{
+  "description": "Golden vectors for spec v1 section 6 (count-equivalence decision procedure). Expected values are derived from the normative formula in the specification, not produced by the reference implementation.",
+  "formula": {
+    "tvd_point": "0.5 * sum(abs(p_hat[i] - q_hat[i])) over the union of outcomes, zero for absent counts",
+    "slack": "sqrt(0.5 * ln(1 / alpha) * (1 / n + 1 / m))",
+    "tvd_ucb": "min(1, tvd_point + slack)"
+  },
+  "tolerance": 1e-09,
+  "tolerance_note": "Compare floats within this absolute tolerance; libm differences across languages and platforms make exact bit equality an unreasonable conformance requirement.",
+  "cases": [
+    {
+      "name": "identical-two-outcome-1024",
+      "note": "Identical inputs at 1024 shots. TVD is exactly 0; the bound is pure slack (~0.054), which exceeds any usable epsilon. Must be INCONCLUSIVE, never REJECTED.",
+      "ref_counts": {
+        "00": 512,
+        "11": 512
+      },
+      "new_counts": {
+        "00": 512,
+        "11": 512
+      },
+      "settings": {
+        "alpha": 0.05,
+        "epsilon": 0.02,
+        "min_shots": 100
+      },
+      "expected": {
+        "verdict": "INCONCLUSIVE",
+        "stage": "bound-computed",
+        "total_variation_distance": 0.0,
+        "tvd_ucb": 0.05408807445632142
+      }
+    },
+    {
+      "name": "identical-64-outcome",
+      "note": "The #15 regression: the retired bootstrap rejected byte-identical inputs from roughly four qubits upward. A conformant implementation must not.",
+      "ref_counts": {
+        "000000": 1000,
+        "000001": 1000,
+        "000010": 1000,
+        "000011": 1000,
+        "000100": 1000,
+        "000101": 1000,
+        "000110": 1000,
+        "000111": 1000,
+        "001000": 1000,
+        "001001": 1000,
+        "001010": 1000,
+        "001011": 1000,
+        "001100": 1000,
+        "001101": 1000,
+        "001110": 1000,
+        "001111": 1000,
+        "010000": 1000,
+        "010001": 1000,
+        "010010": 1000,
+        "010011": 1000,
+        "010100": 1000,
+        "010101": 1000,
+        "010110": 1000,
+        "010111": 1000,
+        "011000": 1000,
+        "011001": 1000,
+        "011010": 1000,
+        "011011": 1000,
+        "011100": 1000,
+        "011101": 1000,
+        "011110": 1000,
+        "011111": 1000,
+        "100000": 1000,
+        "100001": 1000,
+        "100010": 1000,
+        "100011": 1000,
+        "100100": 1000,
+        "100101": 1000,
+        "100110": 1000,
+        "100111": 1000,
+        "101000": 1000,
+        "101001": 1000,
+        "101010": 1000,
+        "101011": 1000,
+        "101100": 1000,
+        "101101": 1000,
+        "101110": 1000,
+        "101111": 1000,
+        "110000": 1000,
+        "110001": 1000,
+        "110010": 1000,
+        "110011": 1000,
+        "110100": 1000,
+        "110101": 1000,
+        "110110": 1000,
+        "110111": 1000,
+        "111000": 1000,
+        "111001": 1000,
+        "111010": 1000,
+        "111011": 1000,
+        "111100": 1000,
+        "111101": 1000,
+        "111110": 1000,
+        "111111": 1000
+      },
+      "new_counts": {
+        "000000": 1000,
+        "000001": 1000,
+        "000010": 1000,
+        "000011": 1000,
+        "000100": 1000,
+        "000101": 1000,
+        "000110": 1000,
+        "000111": 1000,
+        "001000": 1000,
+        "001001": 1000,
+        "001010": 1000,
+        "001011": 1000,
+        "001100": 1000,
+        "001101": 1000,
+        "001110": 1000,
+        "001111": 1000,
+        "010000": 1000,
+        "010001": 1000,
+        "010010": 1000,
+        "010011": 1000,
+        "010100": 1000,
+        "010101": 1000,
+        "010110": 1000,
+        "010111": 1000,
+        "011000": 1000,
+        "011001": 1000,
+        "011010": 1000,
+        "011011": 1000,
+        "011100": 1000,
+        "011101": 1000,
+        "011110": 1000,
+        "011111": 1000,
+        "100000": 1000,
+        "100001": 1000,
+        "100010": 1000,
+        "100011": 1000,
+        "100100": 1000,
+        "100101": 1000,
+        "100110": 1000,
+        "100111": 1000,
+        "101000": 1000,
+        "101001": 1000,
+        "101010": 1000,
+        "101011": 1000,
+        "101100": 1000,
+        "101101": 1000,
+        "101110": 1000,
+        "101111": 1000,
+        "110000": 1000,
+        "110001": 1000,
+        "110010": 1000,
+        "110011": 1000,
+        "110100": 1000,
+        "110101": 1000,
+        "110110": 1000,
+        "110111": 1000,
+        "111000": 1000,
+        "111001": 1000,
+        "111010": 1000,
+        "111011": 1000,
+        "111100": 1000,
+        "111101": 1000,
+        "111110": 1000,
+        "111111": 1000
+      },
+      "settings": {
+        "alpha": 0.05,
+        "epsilon": 0.02,
+        "min_shots": 100
+      },
+      "expected": {
+        "verdict": "VERIFIED",
+        "stage": "bound-computed",
+        "total_variation_distance": 0.0,
+        "tvd_ucb": 0.006841660381389967
+      }
+    },
+    {
+      "name": "identical-50k-verified",
+      "note": "Identical inputs at 50k shots clear the default 0.02 ceiling.",
+      "ref_counts": {
+        "00": 25000,
+        "11": 25000
+      },
+      "new_counts": {
+        "00": 25000,
+        "11": 25000
+      },
+      "settings": {
+        "alpha": 0.05,
+        "epsilon": 0.02,
+        "min_shots": 100
+      },
+      "expected": {
+        "verdict": "VERIFIED",
+        "stage": "bound-computed",
+        "total_variation_distance": 0.0,
+        "tvd_ucb": 0.0077404551204098984
+      }
+    },
+    {
+      "name": "identical-5k-inconclusive",
+      "note": "At 5k shots the slack alone (~0.0245) exceeds 0.02. Straddles the boundary with the case below.",
+      "ref_counts": {
+        "00": 2500,
+        "11": 2500
+      },
+      "new_counts": {
+        "00": 2500,
+        "11": 2500
+      },
+      "settings": {
+        "alpha": 0.05,
+        "epsilon": 0.02,
+        "min_shots": 100
+      },
+      "expected": {
+        "verdict": "INCONCLUSIVE",
+        "stage": "bound-computed",
+        "total_variation_distance": 0.0,
+        "tvd_ucb": 0.024477468306808164
+      }
+    },
+    {
+      "name": "identical-5k-verified-at-wider-epsilon",
+      "note": "Same sample as above at epsilon 0.05: VERIFIED. Isolates epsilon as the deciding term.",
+      "ref_counts": {
+        "00": 2500,
+        "11": 2500
+      },
+      "new_counts": {
+        "00": 2500,
+        "11": 2500
+      },
+      "settings": {
+        "alpha": 0.05,
+        "epsilon": 0.05,
+        "min_shots": 100
+      },
+      "expected": {
+        "verdict": "VERIFIED",
+        "stage": "bound-computed",
+        "total_variation_distance": 0.0,
+        "tvd_ucb": 0.024477468306808164
+      }
+    },
+    {
+      "name": "sampling-noise-50k",
+      "note": "Independent runs of the same experiment, with realistic noise.",
+      "ref_counts": {
+        "00": 25012,
+        "11": 24988
+      },
+      "new_counts": {
+        "00": 24900,
+        "11": 25100
+      },
+      "settings": {
+        "alpha": 0.05,
+        "epsilon": 0.02,
+        "min_shots": 100
+      },
+      "expected": {
+        "verdict": "VERIFIED",
+        "stage": "bound-computed",
+        "total_variation_distance": 0.0022400000000000198,
+        "tvd_ucb": 0.009980455120409917
+      }
+    },
+    {
+      "name": "zero-shots-reference",
+      "note": "An empty arm: TVD is undefined and must not be computed.",
+      "ref_counts": {},
+      "new_counts": {
+        "00": 500,
+        "11": 500
+      },
+      "settings": {
+        "alpha": 0.05,
+        "epsilon": 0.02,
+        "min_shots": 100
+      },
+      "expected": {
+        "verdict": "INCONCLUSIVE",
+        "stage": "zero-shots"
+      }
+    },
+    {
+      "name": "below-min-shots",
+      "note": "Under the shot floor, no bound is computed at all.",
+      "ref_counts": {
+        "00": 5,
+        "11": 5
+      },
+      "new_counts": {
+        "00": 5,
+        "11": 5
+      },
+      "settings": {
+        "alpha": 0.05,
+        "epsilon": 0.02,
+        "min_shots": 100
+      },
+      "expected": {
+        "verdict": "INCONCLUSIVE",
+        "stage": "below-min-shots"
+      }
+    },
+    {
+      "name": "disjoint-supports-clamped",
+      "note": "Disjoint supports give TVD 1.0; point + slack exceeds 1 and must clamp to exactly 1.0.",
+      "ref_counts": {
+        "00": 500
+      },
+      "new_counts": {
+        "11": 500
+      },
+      "settings": {
+        "alpha": 0.05,
+        "epsilon": 0.02,
+        "min_shots": 1
+      },
+      "expected": {
+        "verdict": "INCONCLUSIVE",
+        "stage": "bound-computed",
+        "total_variation_distance": 1.0,
+        "tvd_ucb": 1.0
+      }
+    },
+    {
+      "name": "asymmetric-shot-counts",
+      "note": "Unequal arms: the slack term must use 1/n + 1/m, not a pooled total.",
+      "ref_counts": {
+        "00": 20000,
+        "11": 20000
+      },
+      "new_counts": {
+        "00": 5000,
+        "11": 5000
+      },
+      "settings": {
+        "alpha": 0.05,
+        "epsilon": 0.02,
+        "min_shots": 100
+      },
+      "expected": {
+        "verdict": "VERIFIED",
+        "stage": "bound-computed",
+        "total_variation_distance": 0.0,
+        "tvd_ucb": 0.013683320762779934
+      }
+    },
+    {
+      "name": "alpha-widens-the-bound",
+      "note": "A smaller alpha demands more confidence and widens the slack.",
+      "ref_counts": {
+        "00": 25000,
+        "11": 25000
+      },
+      "new_counts": {
+        "00": 25000,
+        "11": 25000
+      },
+      "settings": {
+        "alpha": 0.01,
+        "epsilon": 0.02,
+        "min_shots": 100
+      },
+      "expected": {
+        "verdict": "VERIFIED",
+        "stage": "bound-computed",
+        "total_variation_distance": 0.0,
+        "tvd_ucb": 0.009597051824376163
+      }
+    }
+  ]
+}
