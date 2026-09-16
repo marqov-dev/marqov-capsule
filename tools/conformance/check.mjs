@@ -101,4 +101,51 @@ for (const vector of readJSON(resolve(golden, 'checksum-path-cases.json'))) {
   assert.equal('sha256:' + digest(actual), vector.checksums_digest, vector.name);
   checked++;
 }
-console.log(`PASS: ${checked} independent Node/YAML canonicalization and checksum vectors`);
+// Section 6: the count-equivalence decision procedure, implemented here
+// straight from the normative text so the vectors are checked by something
+// other than the Python reference.
+function tvdPoint(ref, candidate) {
+  const n = Object.values(ref).reduce((a, b) => a + b, 0);
+  const m = Object.values(candidate).reduce((a, b) => a + b, 0);
+  const keys = new Set([...Object.keys(ref), ...Object.keys(candidate)]);
+  let total = 0;
+  for (const key of keys) total += Math.abs((ref[key] ?? 0) / n - (candidate[key] ?? 0) / m);
+  return 0.5 * total;
+}
+
+function decide(ref, candidate, { alpha, epsilon, min_shots: minShots }) {
+  const n = Object.values(ref).reduce((a, b) => a + b, 0);
+  const m = Object.values(candidate).reduce((a, b) => a + b, 0);
+  if (n === 0 || m === 0) return { verdict: 'INCONCLUSIVE', stage: 'zero-shots' };
+  if (Math.min(n, m) < minShots) return { verdict: 'INCONCLUSIVE', stage: 'below-min-shots' };
+  const point = tvdPoint(ref, candidate);
+  const slack = Math.sqrt(0.5 * Math.log(1 / alpha) * (1 / n + 1 / m));
+  const ucb = Math.min(1, point + slack);
+  return {
+    verdict: ucb <= epsilon ? 'VERIFIED' : 'INCONCLUSIVE',
+    stage: 'bound-computed',
+    total_variation_distance: point,
+    tvd_ucb: ucb,
+  };
+}
+
+const statistical = readJSON(resolve(golden, 'statistical-cases.json'));
+for (const vector of statistical.cases) {
+  const actual = decide(vector.ref_counts, vector.new_counts, vector.settings);
+  const expected = vector.expected;
+  assert.equal(actual.verdict, expected.verdict, vector.name);
+  assert.equal(actual.stage, expected.stage, vector.name);
+  if (expected.tvd_ucb !== undefined) {
+    assert.ok(Math.abs(actual.tvd_ucb - expected.tvd_ucb) <= statistical.tolerance,
+      `${vector.name}: tvd_ucb ${actual.tvd_ucb} vs ${expected.tvd_ucb}`);
+    assert.ok(
+      Math.abs(actual.total_variation_distance - expected.total_variation_distance) <= statistical.tolerance,
+      `${vector.name}: tvd ${actual.total_variation_distance} vs ${expected.total_variation_distance}`);
+  } else {
+    assert.equal(actual.tvd_ucb, undefined, `${vector.name}: early return must compute no bound`);
+  }
+  assert.notEqual(actual.verdict, 'REJECTED', vector.name);
+  checked++;
+}
+
+console.log(`PASS: ${checked} independent Node vectors (canonicalization, checksums, section 6)`);

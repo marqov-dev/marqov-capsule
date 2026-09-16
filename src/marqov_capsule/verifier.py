@@ -115,11 +115,21 @@ def _compute_chi_squared_p(ref_counts: dict, new_counts: dict):
     all_keys = sorted(set(ref_counts) | set(new_counts))
     n_ref = sum(ref_counts.values())
     n_new = sum(new_counts.values())
+    # Scale the candidate to the reference total BEFORE the continuity
+    # correction. Correcting first and scaling after inflates the candidate's
+    # total by 0.5*K*(n_ref/n_new - 1), so for unequal shot counts the two
+    # totals disagree and scipy rejects the input outright — taking a
+    # verdict-irrelevant diagnostic down with it.
     ref_obs = np.array([ref_counts.get(k, 0) for k in all_keys], dtype=float) + 0.5
-    new_obs = np.array([new_counts.get(k, 0) for k in all_keys], dtype=float) + 0.5
-    new_scaled = new_obs * (n_ref / n_new)
+    new_raw = np.array([new_counts.get(k, 0) for k in all_keys], dtype=float)
+    new_scaled = new_raw * (n_ref / n_new) + 0.5
     if np.all(ref_obs >= 5) and np.all(new_scaled >= 5):
-        _, p_value = ss.chisquare(new_scaled, f_exp=ref_obs)
+        try:
+            _, p_value = ss.chisquare(new_scaled, f_exp=ref_obs)
+        except ValueError:
+            # This is a diagnostic hint that never changes the verdict; it must
+            # never be the reason a verification fails to return one.
+            return None
         return float(p_value)
     return None
 

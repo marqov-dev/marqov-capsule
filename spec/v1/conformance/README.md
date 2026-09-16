@@ -58,8 +58,9 @@ npm test --prefix tools/conformance
 This checker uses a pinned independent YAML parser and its own canonical JSON
 serializer, path encoder, SHA-256 hashing, and corpus walk. It reads the original
 YAML and payload files, not Python-produced intermediate objects. It matches all
-six manifest IDs and checksum bytes, nine canonicalization cases, and three path
-vectors. The required `conformance-node` CI job runs it independently of Python.
+six manifest IDs and checksum bytes, nine canonicalization cases, three path
+vectors, and the eleven §6 decision-procedure cases. The required
+`conformance-node` CI job runs it independently of Python.
 
 `golden/checksum-path-cases.json` publishes exact checksum bytes for an empty
 payload and filenames containing whitespace (including a trailing space), a
@@ -72,9 +73,21 @@ represent all of these filenames and is not covered by the filesystem tests.
 
 The Node tool is a corpus checker, not a production reader or a complete second
 implementation. It does not validate the JSON Schema, run credential detection,
-implement statistical verification, or extract archives. It rejects aliases and
+or extract archives. It implements the §6 decision procedure only as far as the
+published vectors require — the point estimate, the slack term, the clamp, and
+the four-step verdict — and computes none of the diagnostics (chi-squared,
+energy distance), which never affect a verdict. It rejects aliases and
 non-string keys, whereas the Python API has some legacy permissive behavior.
 External review and broader interoperability testing remain release work.
+
+`golden/statistical-cases.json` publishes inputs and expected outputs for §6.
+Expected values were derived from the normative formula in §6 with
+standard-library math, not generated from the reference implementation, so the
+vectors test conformance rather than self-consistency. The cases cover identical
+distributions at several shot counts (including the 64-outcome case that the
+retired bootstrap misreported), the VERIFIED/INCONCLUSIVE boundary either side
+of a shared sample, both early returns, unequal arms, the clamp at disjoint
+supports, and alpha's effect on the bound.
 
 A single-file colon-space case also ensures a valid checksum line is not
 misclassified as a legacy YAML mapping.
