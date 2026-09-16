@@ -201,11 +201,15 @@ def test_open_rejects_capsule_with_symlink(tmp_path):
 
 
 
-# --- Statistical equivalence is not in 0.1.0 (#15) --------------------------
+# --- Integrity and equivalence stay separate verbs (#15) --------------------
 
 def test_verify_has_no_against_option():
-    """`--against` is cut from 0.1.0: the estimator itself is fixed, but the
-    comparison CLI surface to go with it isn't built yet. Tracked in #15."""
+    """`verify` checks integrity only; equivalence lives in `compare`.
+
+    The comparison surface shipped in 0.1.1, but deliberately as its own
+    command rather than a flag here: `compare` evaluates supplied result data
+    and does not verify the capsule it came from, so folding it into `verify`
+    would imply a verdict that covers the artifact."""
     runner = CliRunner()
     result = runner.invoke(cli, ["verify", "--against", ".", "."])
     assert result.exit_code != 0
