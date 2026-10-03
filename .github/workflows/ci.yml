@@ -90,13 +90,8 @@ jobs:
   # with the default encoding in a few hundred places; the package's own
   # text I/O is held to explicit encodings by tests/test_os_independence.py
   # on every OS (#103).
-  #
-  # continue-on-error: the suite has never run on Windows, so this job reports
-  # without blocking a merge. Remove that line once the leg is green — until
-  # then a failure here shows as a warning annotation, not a red check.
   test-windows:
     runs-on: windows-latest
-    continue-on-error: true
     timeout-minutes: 15
     env:
       PYTHONUTF8: "1"
