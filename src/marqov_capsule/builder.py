@@ -1,15 +1,21 @@
 """CapsuleBuilder — constructs and seals capsule.yaml manifests."""
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import os
+import tempfile
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-import yaml
-
-from marqov_capsule._canonical import coerce_for_canonical, compute_capsule_id
+from marqov_capsule._canonical import (
+    coerce_for_canonical,
+    compute_capsule_id,
+    dump_manifest_yaml,
+    load_manifest_yaml,
+)
 from marqov_capsule.redactor import CapsuleRedactor
 
 # Root-level files deliberately left out of .checksums: .checksums cannot hash
@@ -50,6 +56,29 @@ def _checksum_path(rel: str) -> str:
     return rel
 
 
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` via a same-directory temp file and ``os.replace``.
+
+    Either the complete new content lands at ``path`` or the previous bytes are
+    left untouched. A plain ``open(path, "w")`` truncates first and writes
+    second, so any failure in between — serialisation raising, disk full — left
+    a zero-byte manifest where the user's draft used to be (#121).
+    """
+    fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+        # mkstemp creates 0600; give the manifest the ordinary umask-derived mode.
+        umask = os.umask(0)
+        os.umask(umask)
+        os.chmod(tmp_name, 0o666 & ~umask)
+        os.replace(tmp_name, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_name)
+        raise
+
+
 class CapsuleStateError(RuntimeError):
     """Raised when an operation is illegal for the capsule's lifecycle state.
 
@@ -66,6 +95,11 @@ class CapsuleBuilder:
         self._capsule: dict[str, Any] = {}
         self._task_executions: list[dict[str, Any]] = []
         self._sealed = False
+        #: The credential scan result from the most recent ``seal_capsule``
+        #: (``findings``, ``skipped``, ``capsuleignore_patterns``). ``seal()``
+        #: returns only the ID, so this is how a caller — the CLI in
+        #: particular — learns what a ``warn_only`` seal let through (#105).
+        self.scan_result: Optional[dict[str, Any]] = None
 
     @classmethod
     def from_manifest(cls, manifest: dict[str, Any]) -> "CapsuleBuilder":
@@ -76,22 +110,43 @@ class CapsuleBuilder:
         alias the caller's data.
         """
         import copy
+        if not isinstance(manifest, dict):
+            raise ValueError("manifest must be a mapping")
         b = cls()
         b._capsule = copy.deepcopy(manifest)
-        b._task_executions = list(b._capsule.get("task_executions", []))
+        # A hand-edited draft may leave a container key empty (YAML null) or
+        # give it the wrong shape. Null reads as "none yet"; a wrong type is
+        # an error the CLI turns into a clean exit, not a traceback (#95).
+        for key, kind in (("task_executions", list), ("digests", dict), ("extensions", dict),
+                          ("parameters", dict), ("requirements", dict)):
+            value = b._capsule.get(key)
+            if value is None:
+                if key in b._capsule and key != "requirements":
+                    b._capsule[key] = kind()
+            elif not isinstance(value, kind):
+                raise ValueError(
+                    f"'{key}' must be a {'list' if kind is list else 'mapping'}, "
+                    f"got {type(value).__name__}"
+                )
+        b._task_executions = list(b._capsule.get("task_executions") or [])
         return b
 
     def seal(self, capsule_dir: str | Path, sealed_by: Optional[str] = None,
              warn_only: bool = False, derived_from: Optional[str] = None) -> str:
         """Full sealing sequence: credential scan → checksums → transition → save → ID.
 
-        This is the one-call path for the CLI. Returns the versioned capsule ID (mqc:1:<64 lowercase hex chars>).
+        This is the one-call path for the CLI. Returns the versioned capsule ID
+        (mqc:1:<64 lowercase hex chars>), recomputed from the manifest bytes
+        actually written to disk — so it is by construction the ID any verifier
+        will recompute from the file, not an in-memory value that might
+        serialise differently (#92).
         Raises RedactorError if secrets are found and warn_only is False.
         """
         self.seal_capsule(capsule_dir, sealed_by=sealed_by, warn_only=warn_only,
                           derived_from=derived_from)
-        self.save_capsule(Path(capsule_dir) / "capsule.yaml")
-        return compute_capsule_id(self._capsule)
+        path = self.save_capsule(Path(capsule_dir) / "capsule.yaml")
+        written = load_manifest_yaml(path.read_text(encoding="utf-8"))
+        return compute_capsule_id(written)
 
     def start_capsule(
         self,
@@ -227,18 +282,23 @@ class CapsuleBuilder:
 
         capsule_path = Path(capsule_dir)
 
-        # Step 0: materialise the in-memory manifest so the credential scan below
-        # covers secrets that live ONLY in the manifest (e.g. a token passed as a
-        # parameter). The CLI path scans capsule.yaml by accident of ordering
-        # (init wrote it first); the from_manifest().seal() API path did not, so a
-        # manifest-borne secret sealed unscanned. Writing it here closes that gap
-        # on both entry points. save_capsule (called after this) rewrites it with
-        # the final sealed fields; save_checksums excludes it either way. (#57)
-        self.save_capsule(capsule_path / "capsule.yaml")
+        # Step 0: serialise the in-memory manifest. Two reasons it happens here,
+        # in memory, rather than as a write to disk:
+        #   * the credential scan below must cover secrets that live ONLY in the
+        #     manifest (a token passed as a parameter) on every entry point, not
+        #     just the CLI path where init happened to write capsule.yaml first
+        #     (#57) — so the text is handed to the redactor directly;
+        #   * a manifest that cannot be canonicalised (integer past 2^53, NFC
+        #     key collision) must fail *before* anything on disk is touched. The
+        #     old step 0 wrote the draft first and raised second, leaving a
+        #     zero-byte capsule.yaml, and even a blocked seal rewrote a
+        #     hand-edited draft without its comments (#121).
+        # Nothing is written until save_capsule, after the scan has passed.
+        manifest_text = self._serialise()
 
-        # Step 1: credential scan
+        # Step 1: credential scan (payload files on disk + the manifest text)
         redactor = CapsuleRedactor(capsule_path, mode="warn_only" if warn_only else "block")
-        scan_result = redactor.scan_and_raise()
+        scan_result = redactor.scan_and_raise(overrides={"capsule.yaml": manifest_text})
 
         # Step 2: checksums (excludes .checksums and capsule.yaml)
         self.save_checksums(capsule_path)
@@ -260,6 +320,7 @@ class CapsuleBuilder:
             self._capsule["seal_notes"] = notes
 
         self._sealed = True
+        self.scan_result = scan_result
         return scan_result
 
     def save_capsule(self, filepath: str | Path) -> Path:
@@ -277,10 +338,19 @@ class CapsuleBuilder:
         if path.is_dir() or not path.suffix:
             path = path / "capsule.yaml"
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
-            yaml.dump(coerce_for_canonical(self._capsule), f,
-                      default_flow_style=False, sort_keys=False)
+        # Serialise fully before touching the file, then replace atomically, so
+        # a failure anywhere leaves the previous bytes in place (#121).
+        _atomic_write_text(path, self._serialise())
         return path
+
+    def _serialise(self) -> str:
+        """The manifest as the YAML text ``save_capsule`` writes.
+
+        Uses the coerced (ID-computing) form and the profile-aware dumper, so
+        what ``load_manifest_yaml`` reads back is the value the ID was computed
+        from (#20, #92).
+        """
+        return dump_manifest_yaml(coerce_for_canonical(self._capsule))
 
     def save_checksums(self, capsule_dir: str | Path) -> Path:
         """Compute and write .checksums for all files except .checksums and capsule.yaml.
@@ -331,7 +401,7 @@ class CapsuleBuilder:
         return checksums_path
 
     def to_yaml(self) -> str:
-        return yaml.dump(self._capsule, default_flow_style=False, sort_keys=False)
+        return self._serialise()
 
     def to_dict(self) -> dict[str, Any]:
         return dict(self._capsule)

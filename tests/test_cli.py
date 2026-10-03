@@ -22,8 +22,9 @@ def test_validate_json_output():
     runner = CliRunner()
     result = runner.invoke(cli, ["validate", "--json", str(FIXTURE_DIR / "valid_capsule/capsule.yaml")])
     import json
+    assert result.exit_code == 0, result.output
     data = json.loads(result.output)
-    assert "valid" in data
+    assert data["valid"] is True
 
 
 def test_validate_accepts_directory():
@@ -85,7 +86,10 @@ def test_seal_dry_run_detects_secrets_exits_0(tmp_path):
     runner = CliRunner()
     result = runner.invoke(cli, ["seal", "--dry-run", str(tmp_path)])
     assert result.exit_code == 0, f"dry-run must not exit 1; got: {result.output}"
-    assert "credential" in result.output.lower() or "warning" in result.output.lower() or "credential pattern" in result.output.lower()
+    # The finding itself must be reported — not merely a scope note that also
+    # happens to contain the word "warning" (#118).
+    assert "credential pattern(s) found" in result.output
+    assert "run.py:1" in result.output
 
 
 def test_seal_blocks_secrets_exits_1(tmp_path):
@@ -178,26 +182,34 @@ def test_init_multiple_paradigms(tmp_path):
 
 def test_open_rejects_capsule_with_symlink(tmp_path):
     """`open` must refuse a capsule containing a symlink and must not materialize
-    the symlink target's content into the destination (#32)."""
-    import hashlib, yaml
+    the symlink target's content into the destination (#32).
+
+    The capsule is genuinely sealed and would pass `open` as-is; the symlink is
+    injected afterwards so the symlink path is the only reason for refusal
+    (the old fixture had no capsule.yaml and failed on that instead — #118).
+    """
+    from marqov_capsule.builder import CapsuleBuilder
     secret = tmp_path / "id_rsa"
     secret.write_text("PRIVATE KEY CONTENT")
 
     capsule_dir = tmp_path / "evil.capsule"
     (capsule_dir / "payload").mkdir(parents=True)
-    real = capsule_dir / "payload" / "results.json"
-    real.write_text('{"counts": {"00": 1}}')
-    digest = "sha256:" + hashlib.sha256(real.read_bytes()).hexdigest()
-    (capsule_dir / "payload" / "link.txt").symlink_to(secret)
-    (capsule_dir / ".checksums").write_text(yaml.dump({"payload/results.json": digest}, sort_keys=True))
-
+    (capsule_dir / "payload" / "results.json").write_text('{"counts": {"00": 1}}')
+    CapsuleBuilder().start_capsule(
+        name="evil", requirements={"paradigm": ["gate-based"], "max_qubit_count": 1}
+    ).seal(capsule_dir)
     dest = tmp_path / "out"
-    runner = CliRunner()
-    result = runner.invoke(cli, ["open", str(capsule_dir), "--dest", str(dest)])
+    assert CliRunner().invoke(cli, ["open", str(capsule_dir), "--dest", str(dest)]).exit_code == 0
+    import shutil
+    shutil.rmtree(dest)
+
+    (capsule_dir / "payload" / "link.txt").symlink_to(secret)
+
+    result = CliRunner().invoke(cli, ["open", str(capsule_dir), "--dest", str(dest)])
     assert result.exit_code == 1, result.output
+    assert "integrity verification failed" in result.output
     copied = dest / "evil.capsule" / "payload" / "link.txt"
-    if copied.exists() and not copied.is_symlink():
-        assert copied.read_text() != "PRIVATE KEY CONTENT"
+    assert not copied.exists() and not copied.is_symlink()
 
 
 

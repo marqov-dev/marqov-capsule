@@ -33,7 +33,18 @@ def open_cmd(capsule, dest, expected_id, as_json):
 
     if dest:
         dest_path = Path(dest)
-        opened_to = dest_path / capsule_path.name
+        # ``Path(".").name`` is "" and ``Path("..").name`` is "..": resolve
+        # first, as pack_capsule does for the archive name, so ``open .
+        # --dest X`` lands in X/<real directory name> (#97).
+        name = capsule_path.resolve().name
+        if not name or name in (".", ".."):
+            message = f"cannot derive a destination name from {capsule}"
+            if as_json:
+                click.echo(json.dumps({"status": "error", "message": message}, indent=2))
+            else:
+                click.echo(f"Error: {message}", err=True)
+            sys.exit(1)
+        opened_to = dest_path / name
         # symlinks=True copies links as links rather than materialising their target
         # content into the destination (defence-in-depth; verify_checksums already
         # rejects capsules containing symlinks). A non-regular member (FIFO/socket/

@@ -218,10 +218,14 @@ def test_cli_verify_id_mismatch_exits_1(tmp_path):
     from marqov_capsule.cli.main import cli
 
     capsule_dir = tmp_path / "bell.capsule"
-    _seal(capsule_dir)
+    sealed_id = _seal(capsule_dir)
+    # A well-formed mqc:1: ID that is not this capsule's — not a malformed
+    # string, which is a different failure (#114, #118).
+    wrong_id = "mqc:1:" + ("0" if sealed_id[6] != "0" else "1") + sealed_id[7:]
 
-    result = CliRunner().invoke(cli, ["verify", "--id", "0" * 64, str(capsule_dir)])
+    result = CliRunner().invoke(cli, ["verify", "--id", wrong_id, str(capsule_dir)])
     assert result.exit_code == 1, result.output
+    assert "capsule ID mismatch" in result.output
 
 
 def test_cli_verify_reports_capsule_id(tmp_path):

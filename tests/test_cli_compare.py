@@ -11,8 +11,14 @@ from click.testing import CliRunner
 
 from marqov_capsule.cli.main import cli
 
-pytest.importorskip("numpy")
-pytest.importorskip("scipy")
+
+@pytest.fixture
+def statistical_dependencies():
+    """Only the verdict tests need numpy/scipy. The input-shape and error
+    tests must still run on a base install — that job exists to catch exactly
+    the regressions they cover (#116)."""
+    pytest.importorskip("numpy")
+    pytest.importorskip("scipy")
 
 
 # Exit codes are part of the contract: INCONCLUSIVE is deliberately NOT 1,
@@ -41,6 +47,7 @@ def _run(*args):
 
 # --- input shapes ---------------------------------------------------------
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_reads_bare_counts_mapping(tmp_path):
     ref = _write(tmp_path / "ref.json", _balanced(50_000))
     new = _write(tmp_path / "new.json", _balanced(50_000))
@@ -48,6 +55,7 @@ def test_reads_bare_counts_mapping(tmp_path):
     assert result.exit_code == EXIT_VERIFIED, result.output
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_reads_wrapped_counts_key(tmp_path):
     ref = _write(tmp_path / "ref.json", {"counts": _balanced(50_000), "shots": 50_000})
     new = _write(tmp_path / "new.json", {"counts": _balanced(50_000), "shots": 50_000})
@@ -55,6 +63,7 @@ def test_reads_wrapped_counts_key(tmp_path):
     assert result.exit_code == EXIT_VERIFIED, result.output
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_counts_key_override(tmp_path):
     ref = _write(tmp_path / "ref.json", {"histogram": _balanced(50_000)})
     new = _write(tmp_path / "new.json", {"histogram": _balanced(50_000)})
@@ -73,6 +82,7 @@ def test_missing_counts_key_errors_cleanly(tmp_path):
 
 # --- verdicts -------------------------------------------------------------
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_high_shot_equivalence_is_verified(tmp_path):
     ref = _write(tmp_path / "ref.json", _balanced(50_000))
     new = _write(tmp_path / "new.json", {"00": 24_900, "11": 25_100})
@@ -81,6 +91,7 @@ def test_high_shot_equivalence_is_verified(tmp_path):
     assert "VERIFIED" in result.output
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_low_shots_are_inconclusive_not_rejected(tmp_path):
     # 1024 shots cannot clear any usable epsilon: the McDiarmid slack alone
     # is ~0.054. This must read as INCONCLUSIVE, never as a failed check.
@@ -92,6 +103,7 @@ def test_low_shots_are_inconclusive_not_rejected(tmp_path):
     assert "REJECTED" not in result.output
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_identical_distributions_are_never_rejected(tmp_path):
     # The #15 regression: the retired bootstrap rejected byte-identical
     # inputs from roughly four qubits upward.
@@ -111,6 +123,7 @@ def test_below_min_shots_is_inconclusive_and_says_so(tmp_path):
     assert "min_shots" in result.output or "shots" in result.output
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_inconclusive_explains_that_more_shots_may_help(tmp_path):
     # #85: a bare INCONCLUSIVE leaves users unable to tell "not reproducible"
     # from "you did not take enough shots".
@@ -129,6 +142,7 @@ def test_zero_shots_is_inconclusive(tmp_path):
 
 # --- policy flags ---------------------------------------------------------
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_epsilon_flag_changes_the_verdict(tmp_path):
     # For identical inputs the bound is pure slack, ~sqrt(ln(1/alpha)/2 * 2/n).
     # At 5k shots that is ~0.0245, which straddles the two epsilons: too wide
@@ -139,6 +153,7 @@ def test_epsilon_flag_changes_the_verdict(tmp_path):
     assert _run(ref, new, "--epsilon", "0.05").exit_code == EXIT_VERIFIED
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_reports_the_epsilon_actually_used(tmp_path):
     ref = _write(tmp_path / "ref.json", _balanced(50_000))
     new = _write(tmp_path / "new.json", _balanced(50_000))
@@ -182,6 +197,7 @@ def test_missing_file_errors_cleanly(tmp_path):
 
 # --- json output ----------------------------------------------------------
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_json_output_carries_verdict_and_metrics(tmp_path):
     ref = _write(tmp_path / "ref.json", _balanced(50_000))
     new = _write(tmp_path / "new.json", _balanced(50_000))

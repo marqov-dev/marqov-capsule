@@ -57,12 +57,26 @@ def test_pack_is_deterministic_through_the_cli(tmp_path):
 
 
 def test_pack_refuses_an_unsealed_directory(tmp_path):
+    # A draft: manifest present, never sealed, so no .checksums. (The fixture
+    # used to have no capsule.yaml either, which made the test pass on the
+    # manifest check alone once that moved first — #118.)
     d = tmp_path / "draft.capsule"
     (d / "payload").mkdir(parents=True)
     (d / "payload" / "results.json").write_text("{}")
+    (d / "capsule.yaml").write_text("version: '1.0.0'\nname: draft\nlifecycle_state: draft\n")
     result = CliRunner().invoke(cli, ["pack", str(d), "-o", str(tmp_path / "x.capsule")])
     assert result.exit_code != 0
     assert ".checksums" in result.output
+    assert not (tmp_path / "x.capsule").exists()
+
+
+def test_pack_refuses_a_directory_without_a_manifest(tmp_path):
+    d = tmp_path / "nothing.capsule"
+    (d / "payload").mkdir(parents=True)
+    result = CliRunner().invoke(cli, ["pack", str(d), "-o", str(tmp_path / "x.capsule")])
+    assert result.exit_code == 1
+    assert "capsule.yaml" in result.output
+    assert not (tmp_path / "x.capsule").exists()
 
 
 # --- unpack -----------------------------------------------------------------

@@ -72,6 +72,7 @@ The `marqov-capsule` command provides these subcommands:
 | `marqov-capsule pack` | Pack a sealed capsule directory into a deterministic `.capsule` archive |
 | `marqov-capsule unpack` | Restore a capsule directory from an archive |
 | `marqov-capsule validate` | Validate a capsule against the JSON Schema without sealing — accepts a capsule directory or a `capsule.yaml` path |
+| `marqov-capsule compare` | Test whether two count samples are equivalent within a tolerance (one-sided TVD bound) — exits 0 VERIFIED, 3 INCONCLUSIVE, 1 on a data error, 2 on a usage error |
 
 ```bash
 marqov-capsule init ./bell-state --name bell-state-v1 --paradigm gate-based --qubits 2

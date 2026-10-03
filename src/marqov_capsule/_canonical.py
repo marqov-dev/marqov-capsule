@@ -8,6 +8,7 @@ from typing import Any
 
 import jcs
 import yaml
+from yaml.composer import ComposerError
 from yaml.constructor import ConstructorError
 
 
@@ -16,6 +17,20 @@ from yaml.constructor import ConstructorError
 # integer with a larger magnitude is rejected — fail closed rather than mint an
 # ID over a value that cannot be reproduced.
 _MAX_SAFE_INT = 2 ** 53 - 1  # 9007199254740991
+
+# Deepest nesting a manifest may have. A real manifest is ~5 levels deep; the
+# cap exists so a hostile document is rejected by the composer with a clean
+# error rather than by the interpreter with RecursionError (#122).
+_MAX_NESTING_DEPTH = 64
+
+
+class ManifestError(yaml.YAMLError):
+    """A capsule manifest could not be loaded.
+
+    Raised for anything the loader rejects that is not already a structured
+    PyYAML error, so every ``except yaml.YAMLError`` in the verifier, the
+    validator and the CLI catches the whole family (#122).
+    """
 
 
 # ---------------------------------------------------------------------------
@@ -49,8 +64,44 @@ class _ManifestLoader(yaml.SafeLoader):
         decimal, never octal — ``0755`` -> 755, ``007`` -> 7, ``08540`` -> 8540)
         and rejects any integer whose magnitude exceeds ``_MAX_SAFE_INT``;
       * rejects duplicate mapping keys, which SafeLoader silently collapses to
-        the last value — a tamper/ambiguity hazard for a content-addressed ID.
+        the last value — a tamper/ambiguity hazard for a content-addressed ID;
+      * rejects anchors used through aliases. Aliases have no JSON
+        representation, and an aliased manifest of a few hundred bytes expands
+        to a tree that takes hours to canonicalise (billion laughs, #110);
+      * rejects explicit tags outside the core set (``!!timestamp``,
+        ``!!binary``, ``!!set``, ``!!omap``, ``!!pairs``, local tags) and
+        applies the 1.2 grammar to explicitly tagged ``!!int``/``!!float``/
+        ``!!bool`` scalars, so a tagged scalar can never raise a bare Python
+        exception out of a SafeConstructor constructor (#122);
+      * caps nesting depth at ``_MAX_NESTING_DEPTH``.
     """
+
+    def __init__(self, stream):
+        super().__init__(stream)
+        self._depth = 0
+
+    def compose_node(self, parent, index):
+        if self.check_event(yaml.AliasEvent):
+            event = self.peek_event()
+            raise ComposerError(
+                None, None,
+                f"found alias *{event.anchor}: aliases are not permitted in a "
+                "capsule manifest (they have no JSON representation and are a "
+                "denial-of-service vector)",
+                event.start_mark,
+            )
+        self._depth += 1
+        try:
+            if self._depth > _MAX_NESTING_DEPTH:
+                event = self.peek_event()
+                raise ComposerError(
+                    None, None,
+                    f"nesting depth exceeds {_MAX_NESTING_DEPTH}",
+                    event.start_mark,
+                )
+            return super().compose_node(parent, index)
+        finally:
+            self._depth -= 1
 
     def construct_mapping(self, node, deep=False):
         """Like SafeConstructor.construct_mapping but rejects duplicate keys.
@@ -82,29 +133,95 @@ class _ManifestLoader(yaml.SafeLoader):
         return mapping
 
 
+# The YAML 1.2 core / JSON-shaped scalar grammars. Shared by the implicit
+# resolver table below and by the explicit-tag constructors, so ``!!int 0x10``
+# is rejected by exactly the rule that makes a bare ``0x10`` a string.
+_BOOL_RE = re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$")
+_NULL_RE = re.compile(r"^(?:~|null|Null|NULL|)$")
+_INT_RE = re.compile(r"^[-+]?[0-9]+$")
+_FLOAT_RE = re.compile(
+    r"^[-+]?(?:(?:[0-9]+\.[0-9]*|\.[0-9]+)(?:[eE][-+]?[0-9]+)?"
+    r"|[0-9]+[eE][-+]?[0-9]+)$"
+)
+# Any decimal literal longer than this is outside the safe range regardless
+# of its digits; checking length first keeps a 5000-digit literal from
+# reaching int(), which refuses (ValueError) above 4300 digits (#93).
+_MAX_INT_LITERAL_LEN = len(str(_MAX_SAFE_INT)) + 1  # sign + 16 digits
+
+
 def _construct_int_base10(loader: _ManifestLoader, node: yaml.Node) -> int:
     """Construct integers as base-10 with a magnitude guard.
 
-    The implicit resolver only tags ``^[-+]?[0-9]+$`` scalars as ints, so the
-    value is always plain (optionally signed) digits. ``int(value)`` reads it as
-    decimal — the inherited ``construct_yaml_int`` would instead treat a leading
-    zero as octal (``0755`` -> 493, ``08540`` -> crash), which is a YAML-1.1
-    behaviour the spec forbids.
+    The implicit resolver only tags ``^[-+]?[0-9]+$`` scalars as ints, so an
+    implicitly typed value is always plain (optionally signed) digits; an
+    explicitly tagged ``!!int`` scalar is held to the same grammar, so hex,
+    octal, underscores and garbage are rejected rather than crashing
+    ``int()``. ``int(value)`` reads it as decimal — the inherited
+    ``construct_yaml_int`` would instead treat a leading zero as octal
+    (``0755`` -> 493, ``08540`` -> crash), which is a YAML-1.1 behaviour the
+    spec forbids.
     """
     value = loader.construct_scalar(node)
-    result = int(value, 10)
-    if abs(result) > _MAX_SAFE_INT:
+    if not _INT_RE.match(value):
         raise ConstructorError(
             None, None,
-            f"integer {result} exceeds the RFC 8785 safe range "
-            f"(|n| <= {_MAX_SAFE_INT}); it cannot be canonicalised without "
-            "precision loss",
+            f"found {value!r}: not a decimal integer in the YAML 1.2 / JSON profile",
+            node.start_mark,
+        )
+    if len(value) > _MAX_INT_LITERAL_LEN or abs(result := int(value, 10)) > _MAX_SAFE_INT:
+        raise ConstructorError(
+            None, None,
+            f"integer {value[:20]}{'…' if len(value) > 20 else ''} exceeds the "
+            f"RFC 8785 safe range (|n| <= {_MAX_SAFE_INT}); it cannot be "
+            "canonicalised without precision loss",
             node.start_mark,
         )
     return result
 
 
+def _construct_float_strict(loader: _ManifestLoader, node: yaml.Node) -> float:
+    """``!!float`` held to the JSON-shaped grammar: no ``.inf``/``.nan``, no
+    sexagesimal, no underscores — and never a bare ``ValueError`` from
+    ``float()`` (#122)."""
+    value = loader.construct_scalar(node)
+    if not _FLOAT_RE.match(value) and not _INT_RE.match(value):
+        raise ConstructorError(
+            None, None,
+            f"found {value!r}: not a finite decimal float in the YAML 1.2 / JSON profile",
+            node.start_mark,
+        )
+    return float(value)
+
+
+def _construct_bool_strict(loader: _ManifestLoader, node: yaml.Node) -> bool:
+    """``!!bool`` held to the YAML 1.2 core set: ``true``/``false`` and their
+    capitalised forms only — never ``yes``/``no``, never a ``KeyError``."""
+    value = loader.construct_scalar(node)
+    if not _BOOL_RE.match(value):
+        raise ConstructorError(
+            None, None,
+            f"found {value!r}: not a boolean in the YAML 1.2 / JSON profile",
+            node.start_mark,
+        )
+    return value.lower() == "true"
+
+
+def _reject_tag(tag: str):
+    def construct(loader: _ManifestLoader, node: yaml.Node):
+        raise ConstructorError(
+            None, None,
+            f"found tag {tag}: only the YAML core tags (str, int, float, bool, "
+            "null, seq, map) are permitted in a capsule manifest",
+            node.start_mark,
+        )
+    return construct
+
+
 _ManifestLoader.add_constructor("tag:yaml.org,2002:int", _construct_int_base10)
+_ManifestLoader.add_constructor("tag:yaml.org,2002:float", _construct_float_strict)
+_ManifestLoader.add_constructor("tag:yaml.org,2002:bool", _construct_bool_strict)
+for _non_core in ("timestamp", "binary", "set", "omap", "pairs"):
+    _ManifestLoader.add_constructor(f"tag:yaml.org,2002:{_non_core}", _reject_tag(f"!!{_non_core}"))
 
 
 # Rebuild the implicit-resolver table from scratch rather than surgically
@@ -114,37 +231,18 @@ _ManifestLoader.add_constructor("tag:yaml.org,2002:int", _construct_int_base10)
 _ManifestLoader.yaml_implicit_resolvers = {}
 
 # bool — YAML 1.2 core (true/false and their capitalised forms only; NOT yes/no)
-_ManifestLoader.add_implicit_resolver(
-    "tag:yaml.org,2002:bool",
-    re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$"),
-    list("tTfF"),
-)
+_ManifestLoader.add_implicit_resolver("tag:yaml.org,2002:bool", _BOOL_RE, list("tTfF"))
 
 # null — matches PyYAML's own null resolver, including the empty scalar
-_ManifestLoader.add_implicit_resolver(
-    "tag:yaml.org,2002:null",
-    re.compile(r"^(?:~|null|Null|NULL|)$"),
-    ["~", "n", "N", ""],
-)
+_ManifestLoader.add_implicit_resolver("tag:yaml.org,2002:null", _NULL_RE, ["~", "n", "N", ""])
 
 # int — decimal only. No hex (0x), octal (0o/0NN), binary, underscores, or
 # sexagesimal. Registered before float so a bare integer resolves as int.
-_ManifestLoader.add_implicit_resolver(
-    "tag:yaml.org,2002:int",
-    re.compile(r"^[-+]?[0-9]+$"),
-    list("-+0123456789"),
-)
+_ManifestLoader.add_implicit_resolver("tag:yaml.org,2002:int", _INT_RE, list("-+0123456789"))
 
 # float — JSON-shaped: must carry a decimal point or an exponent, so a plain
 # integer never falls through to here. No sexagesimal, no underscores, no .inf.
-_ManifestLoader.add_implicit_resolver(
-    "tag:yaml.org,2002:float",
-    re.compile(
-        r"^[-+]?(?:(?:[0-9]+\.[0-9]*|\.[0-9]+)(?:[eE][-+]?[0-9]+)?"
-        r"|[0-9]+[eE][-+]?[0-9]+)$"
-    ),
-    list("-+0123456789."),
-)
+_ManifestLoader.add_implicit_resolver("tag:yaml.org,2002:float", _FLOAT_RE, list("-+0123456789."))
 
 
 def load_manifest_yaml(text: str) -> Any:
@@ -154,7 +252,65 @@ def load_manifest_yaml(text: str) -> Any:
     yaml.safe_load on capsule manifests directly — its YAML 1.1 coercions break
     cross-emitter ID determinism.
     """
-    return yaml.load(text, Loader=_ManifestLoader)  # noqa: S506
+    try:
+        return yaml.load(text, Loader=_ManifestLoader)  # noqa: S506
+    except yaml.YAMLError:
+        raise
+    except (ValueError, TypeError, KeyError, AttributeError, OverflowError,
+            RecursionError) as exc:
+        # Belt and braces: the strict constructors above should leave nothing
+        # for this clause, but the loader is a trust boundary and a bare
+        # Python exception must never escape it (#122).
+        raise ManifestError(
+            f"manifest could not be loaded: {exc.__class__.__name__}: {exc}"
+        ) from exc
+
+
+# ---------------------------------------------------------------------------
+# Manifest writer
+# ---------------------------------------------------------------------------
+
+class _ManifestDumper(yaml.SafeDumper):
+    """SafeDumper whose quoting decisions match ``_ManifestLoader``.
+
+    PyYAML's emitter writes a string as a plain (unquoted) scalar unless one of
+    the *dumper's* implicit resolvers would type it as something else — and
+    ``SafeDumper`` carries only the YAML 1.1 resolvers. The loader above types
+    with the 1.2 / JSON profile, and the two disagree on exponent-shaped strings
+    (``1e5``, ``1e-3``): 1.1's float regex requires a decimal point, so the
+    string is emitted bare, and the 1.2 loader reads it back as a float. The ID
+    the sealer publishes is then computed from a string while every verifier
+    recomputes it from a float, so an untouched capsule fails layer 3 (#92).
+
+    This dumper's resolver table is the *union* of SafeDumper's 1.1 rules and
+    the loader's 1.2 rules, so a string is quoted whenever either profile would
+    type it. ``yes``/``007``/``1e5``/``1.0.0`` all come out quoted; what the
+    loader reads back is exactly what was written.
+    """
+
+
+for _first, _rules in _ManifestLoader.yaml_implicit_resolvers.items():
+    for _tag, _regexp in _rules:
+        # add_implicit_resolver copies SafeDumper's table into this subclass on
+        # first use and appends — so SafeDumper itself is left untouched.
+        _ManifestDumper.add_implicit_resolver(_tag, _regexp, [_first])
+
+
+def dump_manifest_yaml(obj: Any) -> str:
+    """Serialise a manifest dict so that ``load_manifest_yaml`` reads it back
+    as the identical Python value.
+
+    Use this everywhere a capsule manifest is written — ``yaml.dump`` and
+    ``yaml.safe_dump`` quote for YAML 1.1 and silently change the type of
+    exponent-shaped strings under this project's loader (#92).
+    """
+    return yaml.dump(
+        obj,
+        Dumper=_ManifestDumper,
+        default_flow_style=False,
+        sort_keys=False,
+        allow_unicode=True,
+    )
 
 
 # ---------------------------------------------------------------------------

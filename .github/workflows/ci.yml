@@ -8,6 +8,11 @@ on:
   pull_request:
     branches: [main]
 
+# Default token scope for every job in this workflow: read-only. No job here
+# needs to write to the repo, comment on a PR, or touch packages (#91, #115).
+permissions:
+  contents: read
+
 # Cancel superseded in-progress runs on a PR branch when new commits land,
 # but NEVER on main — a post-merge run on the default branch should always
 # finish (that's what the github.ref exclusion guards).
@@ -156,7 +161,13 @@ jobs:
       - name: Run tests on base install (numpy-dependent tests must skip)
         run: |
           pip install pytest
-          python -m pytest tests/ -q
+          python -m pytest tests/ -q -rs
+      # A module-level importorskip silently removes a whole file from
+      # collection on this job (#39, #116). tests/test_suite_hygiene.py fails
+      # on that pattern; this step shows the collected count so a drop is
+      # visible in the log as well.
+      - name: Show collected test count on base install
+        run: python -m pytest tests/ --collect-only -q | tail -1
 
   # Prove the lower bounds declared in pyproject.toml are real. Every other job
   # resolves to the NEWEST compatible release, so a floor like `jsonschema>=4.0`

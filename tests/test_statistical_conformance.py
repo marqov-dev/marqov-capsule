@@ -13,10 +13,7 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("numpy")
-pytest.importorskip("scipy")
-
-from marqov_capsule.verifier import CapsuleVerifier  # noqa: E402
+from marqov_capsule.verifier import CapsuleVerifier
 
 VECTORS = json.loads(
     (Path(__file__).parent.parent
@@ -25,6 +22,17 @@ VECTORS = json.loads(
 CASES = VECTORS["cases"]
 TOLERANCE = VECTORS["tolerance"]
 IDS = [c["name"] for c in CASES]
+# Parametrise over pre-filtered lists rather than skipping inside the test:
+# a skip should mean "environment cannot run this", not "vector not
+# applicable", or a real environment skip is lost in the noise (#116).
+BOUND_CASES = [c for c in CASES if "tvd_ucb" in c["expected"]]
+EARLY_CASES = [c for c in CASES if c["expected"].get("stage") in ("zero-shots", "below-min-shots")]
+
+
+@pytest.fixture
+def statistical_dependencies():
+    pytest.importorskip("numpy")
+    pytest.importorskip("scipy")
 
 
 def _run(case):
@@ -35,16 +43,16 @@ def _run(case):
     )
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 @pytest.mark.parametrize("case", CASES, ids=IDS)
 def test_verdict_matches_specification(case):
     assert _run(case)["verdict"] == case["expected"]["verdict"], case["note"]
 
 
-@pytest.mark.parametrize("case", CASES, ids=IDS)
+@pytest.mark.usefixtures("statistical_dependencies")
+@pytest.mark.parametrize("case", BOUND_CASES, ids=[c["name"] for c in BOUND_CASES])
 def test_bound_matches_specification(case):
     expected = case["expected"]
-    if "tvd_ucb" not in expected:
-        pytest.skip("early return: no bound is computed for this case")
     metrics = _run(case)["metrics"]
     assert metrics["tvd_ucb"] == pytest.approx(expected["tvd_ucb"], abs=TOLERANCE)
     assert metrics["total_variation_distance"] == pytest.approx(
@@ -52,18 +60,17 @@ def test_bound_matches_specification(case):
     )
 
 
-@pytest.mark.parametrize("case", CASES, ids=IDS)
+@pytest.mark.parametrize("case", EARLY_CASES, ids=[c["name"] for c in EARLY_CASES])
 def test_early_returns_compute_no_bound(case):
     # Sections 6.1 and 6.2 are explicit that these decline *without* computing
     # TVD or a bound. Reporting one anyway would imply a measurement the
-    # procedure never made.
-    if case["expected"].get("stage") not in ("zero-shots", "below-min-shots"):
-        pytest.skip("this case computes a bound")
+    # procedure never made. No numpy needed: the early returns happen first.
     metrics = _run(case)["metrics"]
     assert "tvd_ucb" not in metrics
     assert "total_variation_distance" not in metrics
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_no_case_ever_yields_a_rejected_verdict():
     # The verdict space is VERIFIED / INCONCLUSIVE. A conformant implementation
     # never asserts that two distributions differ, including for the disjoint
@@ -71,6 +78,7 @@ def test_no_case_ever_yields_a_rejected_verdict():
     assert all(_run(c)["verdict"] in ("VERIFIED", "INCONCLUSIVE") for c in CASES)
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_identical_distributions_are_never_rejected():
     # The #15 regression, pinned: the retired bootstrap rejected byte-identical
     # inputs from roughly four qubits upward.
@@ -80,11 +88,13 @@ def test_identical_distributions_are_never_rejected():
         assert _run(case)["verdict"] != "REJECTED"
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_bound_is_clamped_to_one():
     clamped = next(c for c in CASES if c["name"] == "disjoint-supports-clamped")
     assert _run(clamped)["metrics"]["tvd_ucb"] == 1.0
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_unequal_shot_counts_do_not_crash():
     # Regression: the chi-squared diagnostic applied its continuity correction
     # before rescaling, so the two totals disagreed whenever the arms differed
@@ -100,6 +110,7 @@ def test_unequal_shot_counts_do_not_crash():
     assert report["verdict"] in ("VERIFIED", "INCONCLUSIVE")
 
 
+@pytest.mark.usefixtures("statistical_dependencies")
 def test_chi_squared_diagnostic_survives_unequal_arms():
     from marqov_capsule.verifier import _compute_chi_squared_p
 

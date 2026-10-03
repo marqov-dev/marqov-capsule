@@ -33,6 +33,14 @@ def _is_within_root(rel_path: str, root: Path) -> bool:
     return full == root_str or full.startswith(root_str + os.sep)
 
 
+# Upper bound on a .checksums path, in bytes. Longer than any real filesystem
+# allows (PATH_MAX is 4096 on Linux, 1024 on macOS), so a legitimate capsule
+# never hits it; it exists so a hostile entry is rejected at parse time rather
+# than by the OS mid-check (#123).
+_MAX_CHECKSUM_PATH_BYTES = 4096
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
 def _require_numpy():
     try:
         import numpy as np
@@ -171,6 +179,56 @@ def _compute_energy_distance(ref_counts: dict, new_counts: dict):
     e_pp = float(ref_probs @ d @ ref_probs)
     e_qq = float(new_probs @ d @ new_probs)
     return 2.0 * e_pq - e_pp - e_qq
+
+
+def _check_entry(rel_path, expected_digest, capsule_path, resolved_root,
+                 actual_paths, colliding_paths):
+    """Check one ``.checksums`` entry against the filesystem.
+
+    Returns ``(kind, record)`` where ``kind`` is one of ``match``,
+    ``mismatch``, ``missing``, ``symlink``, ``invalid`` or ``colliding`` and
+    ``record`` is the per-file detail dict (``None`` for ``colliding``).
+    Raises ``OSError``/``ValueError`` for a path the OS refuses outright (an
+    embedded NUL, a component past NAME_MAX); the caller records that as an
+    ``invalid`` entry (#123).
+    """
+    def record(error=None, actual=None, match=False):
+        detail = {"expected": expected_digest, "actual": actual, "match": match}
+        if error:
+            detail["error"] = error
+        return detail
+
+    # Reject keys that escape the capsule root (absolute or ``..``) before
+    # touching the filesystem — a crafted .checksums must not read outside.
+    if not _is_within_root(rel_path, capsule_path):
+        return "invalid", record("path escapes capsule root")
+    normalized = unicodedata.normalize("NFC", rel_path)
+    if normalized in colliding_paths:
+        return "colliding", None
+    file_path = actual_paths.get(normalized, capsule_path / rel_path)
+    # Never dereference symlinks — the target may live outside the capsule.
+    if file_path.is_symlink():
+        return "symlink", record("symlink not permitted")
+    # The lexical check above is symlink-blind: a *parent* directory that
+    # is itself a symlink pointing outside the capsule would let a crafted
+    # key read an arbitrary file (#54). Resolve real paths and confirm
+    # containment against the resolved root BEFORE any read.
+    try:
+        resolved = file_path.resolve()
+    except (OSError, RuntimeError):
+        resolved = None
+    if resolved is None or not resolved.is_relative_to(resolved_root):
+        return "invalid", record("path escapes capsule root")
+    if not file_path.exists():
+        return "missing", record()
+    if not file_path.is_file():
+        return "invalid", record("not a regular file")
+    try:
+        actual = "sha256:" + hashlib.sha256(file_path.read_bytes()).hexdigest()
+    except OSError:
+        return "invalid", record("payload could not be read")
+    match = actual == expected_digest
+    return ("match" if match else "mismatch"), record(actual=actual, match=match)
 
 
 class CapsuleVerifier:
@@ -387,6 +445,13 @@ class CapsuleVerifier:
                     if not line:
                         continue
                     digest, name = line.split("  ", 1)
+                    # The writer percent-encodes LF/CR and never emits any
+                    # other control character; a raw one here is a file the
+                    # reference writer did not produce. Reject at parse time,
+                    # before the path reaches any filesystem call — a NUL
+                    # byte makes lstat() raise rather than fail (#123).
+                    if _CONTROL_CHAR_RE.search(name) or len(name.encode("utf-8")) > _MAX_CHECKSUM_PATH_BYTES:
+                        raise ValueError("control character or overlong checksum path")
                     escapes = {"%25": "%", "%5C": "\\", "%0A": "\n", "%0D": "\r"}
                     decoded = re.sub(r"%[0-9A-Fa-f]{2}", lambda m: escapes.get(m[0], m[0]), name)
                     # Re-encoding rejects unknown/lowercase escapes and NFC
@@ -448,64 +513,37 @@ class CapsuleVerifier:
                 invalid.append(str(rel_path))
                 all_match = False
                 continue
-            # Reject keys that escape the capsule root (absolute or ``..``) before
-            # touching the filesystem — a crafted .checksums must not read outside.
-            if not _is_within_root(rel_path, capsule_path):
-                files[rel_path] = {"expected": expected_digest, "actual": None,
-                                   "match": False, "error": "path escapes capsule root"}
-                invalid.append(rel_path)
-                all_match = False
-                continue
-            normalized = unicodedata.normalize("NFC", rel_path)
-            if normalized in colliding_paths:
-                all_match = False
-                continue
-            file_path = actual_paths.get(normalized, capsule_path / rel_path)
-            # Never dereference symlinks — the target may live outside the capsule.
-            if file_path.is_symlink():
-                files[rel_path] = {"expected": expected_digest, "actual": None,
-                                   "match": False, "error": "symlink not permitted"}
-                symlinks.append(rel_path)
-                all_match = False
-                continue
-            # The lexical check above is symlink-blind: a *parent* directory that
-            # is itself a symlink pointing outside the capsule would let a crafted
-            # key read an arbitrary file (#54). Resolve real paths and confirm
-            # containment against the resolved root BEFORE any read.
+            # Every filesystem call below can raise on a hostile path — an
+            # embedded NUL (ValueError from lstat), a component past NAME_MAX
+            # or a total past PATH_MAX (OSError from resolve). The legacy YAML
+            # branch has no parse-time path check, so guard here as well:
+            # any such entry is invalid, never a traceback (#123).
             try:
-                resolved = file_path.resolve()
-            except (OSError, RuntimeError):
-                resolved = None
-            if resolved is None or not resolved.is_relative_to(resolved_root):
+                outcome = _check_entry(
+                    rel_path, expected_digest, capsule_path, resolved_root,
+                    actual_paths, colliding_paths,
+                )
+            except (OSError, ValueError):
                 files[rel_path] = {"expected": expected_digest, "actual": None,
-                                   "match": False, "error": "path escapes capsule root"}
+                                   "match": False, "error": "path could not be checked"}
                 invalid.append(rel_path)
                 all_match = False
                 continue
-            if not file_path.exists():
-                files[rel_path] = {"expected": expected_digest, "actual": None, "match": False}
-                missing.append(rel_path)
-                all_match = False
+            kind, record = outcome
+            if record is not None:
+                files[rel_path] = record
+            if kind == "match":
                 continue
-            if not file_path.is_file():
-                invalid.append(rel_path)
-                files[rel_path] = {"expected": expected_digest, "actual": None,
-                                   "match": False, "error": "not a regular file"}
-                all_match = False
-                continue
-            try:
-                actual = "sha256:" + hashlib.sha256(file_path.read_bytes()).hexdigest()
-            except OSError:
-                invalid.append(rel_path)
-                files[rel_path] = {"expected": expected_digest, "actual": None,
-                                   "match": False, "error": "payload could not be read"}
-                all_match = False
-                continue
-            match = actual == expected_digest
-            files[rel_path] = {"expected": expected_digest, "actual": actual, "match": match}
-            if not match:
+            all_match = False
+            if kind == "mismatch":
                 mismatched.append(rel_path)
-                all_match = False
+            elif kind == "missing":
+                missing.append(rel_path)
+            elif kind == "symlink":
+                symlinks.append(rel_path)
+            elif kind == "invalid":
+                invalid.append(rel_path)
+            # kind == "colliding": already reported via colliding_paths above
 
         # Walk the tree once: collect every on-disk entry (for "extra") and flag
         # any symlink anywhere in the capsule — symlinks are an exfiltration

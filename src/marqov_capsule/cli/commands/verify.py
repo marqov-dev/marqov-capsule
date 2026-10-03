@@ -42,7 +42,7 @@ def verify(capsule, expected_id, as_json):
     with tempfile.TemporaryDirectory() as tmp:
         try:
             unpacked = unpack_capsule(path, output_dir=tmp)
-        except (ValueError, OSError, tarfile.TarError) as e:
+        except (ValueError, OSError, tarfile.TarError, EOFError) as e:
             if as_json:
                 click.echo(json.dumps({"status": "fail", "errors": [f"could not unpack archive: {e}"]}))
             else:
