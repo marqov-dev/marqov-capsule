@@ -3,13 +3,14 @@ import shutil
 import sys
 from pathlib import Path
 import click
+from marqov_capsule.cli._manifest import check_expected_id
 from marqov_capsule.verifier import CapsuleVerifier
 
 
 @click.command()
 @click.argument("capsule", type=click.Path(exists=True, file_okay=False))
 @click.option("--dest", "-d", default=None, help="Destination directory")
-@click.option("--id", "expected_id", default=None,
+@click.option("--id", "expected_id", default=None, callback=check_expected_id,
               help="Trusted capsule ID to verify the manifest against (spec §6 layer 3)")
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
 def open_cmd(capsule, dest, expected_id, as_json):

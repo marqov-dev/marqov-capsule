@@ -15,7 +15,7 @@ from typing import Any, NoReturn
 import click
 import yaml
 
-from marqov_capsule._canonical import load_manifest_yaml
+from marqov_capsule._canonical import load_manifest_yaml, parse_capsule_id
 
 
 def fail(message: str, as_json: bool, **extra: Any) -> NoReturn:
@@ -25,6 +25,19 @@ def fail(message: str, as_json: bool, **extra: Any) -> NoReturn:
     else:
         click.echo(f"Error: {message}", err=True)
     sys.exit(1)
+
+
+def check_expected_id(ctx, param, value):
+    """Click callback for ``--id``: a string that is not a capsule ID is a
+    usage error (exit 2), not a tamper verdict (#114)."""
+    if value is None:
+        return value
+    try:
+        parse_capsule_id(value)
+    except ValueError:
+        raise click.BadParameter(
+            f"{value!r} is not a capsule ID (expected mqc:<version>:<64 lowercase hex>)")
+    return value
 
 
 def load_manifest_or_exit(manifest_path: Path, as_json: bool) -> dict[str, Any]:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import copy
 import hashlib
 import os
 import tempfile
@@ -17,6 +18,7 @@ from marqov_capsule._canonical import (
     load_manifest_yaml,
 )
 from marqov_capsule.redactor import CapsuleRedactor
+from marqov_capsule.validator import CapsuleValidator
 
 # Root-level files deliberately left out of .checksums: .checksums cannot hash
 # itself, and capsule.yaml embeds the digest of .checksums (it is covered by the
@@ -31,6 +33,15 @@ UNCHECKSUMMED_ROOT_FILES = frozenset({".checksums", "capsule.yaml"})
 # backward moves); re-sealing one of these would mint a fresh ID over mutated
 # content while presenting the result as an original seal.
 _TERMINAL_STATES = frozenset({"sealed", "archived"})
+
+# Manifest fields that describe one particular seal or one particular run. A
+# capsule derived from a sealed parent starts without them: it has not been
+# sealed, and it has not run.
+_NOT_INHERITED = frozenset({
+    "checksums_digest", "sealed_at", "sealed_by", "seal_notes", "derived_from",
+    "num_tasks", "wall_time_seconds", "actual_cost_usd", "total_shots",
+    "exit_code", "exit_message",
+})
 
 
 def _checksum_path(rel: str) -> str:
@@ -88,6 +99,35 @@ class CapsuleStateError(RuntimeError):
     """
 
 
+class CapsuleValidationError(ValueError):
+    """Raised when a manifest about to be sealed does not validate against the schema.
+
+    Spec §8: a conformant implementation produces a ``capsule.yaml`` that
+    validates against ``capsule-schema.json``. A subclass of ValueError so
+    callers already handling "this draft cannot be sealed" keep working;
+    ``errors`` carries the validator's ``{"path", "message"}`` list (#111).
+    """
+
+    def __init__(self, errors: list[dict[str, str]]):
+        self.errors = errors
+        detail = "; ".join(f"{e['path']}: {e['message']}" for e in errors)
+        super().__init__(f"manifest does not validate against the capsule schema: {detail}")
+
+
+class _ClassOrInstanceMethod:
+    """Bind ``derive`` so both ``CapsuleBuilder.derive(manifest)`` and
+    ``builder.derive()`` (deriving from the builder's own manifest) work."""
+
+    def __init__(self, func):
+        self._func = func
+        self.__doc__ = func.__doc__
+
+    def __get__(self, obj, cls):
+        if obj is None:
+            return lambda manifest: self._func(cls, manifest)
+        return lambda: self._func(cls, obj._capsule)
+
+
 class CapsuleBuilder:
     """Build reproducible capsule YAML manifests following the Marqov Capsule v1 standard."""
 
@@ -109,7 +149,6 @@ class CapsuleBuilder:
         `init` or by hand. Deep-copies the dict so subsequent mutations don't
         alias the caller's data.
         """
-        import copy
         if not isinstance(manifest, dict):
             raise ValueError("manifest must be a mapping")
         b = cls()
@@ -131,8 +170,42 @@ class CapsuleBuilder:
         b._task_executions = list(b._capsule.get("task_executions") or [])
         return b
 
+    @_ClassOrInstanceMethod
+    def derive(cls, manifest: dict[str, Any]) -> "CapsuleBuilder":
+        """Start a new draft from a sealed (or archived) capsule.
+
+        A sealed capsule rejects modification (spec §4); this is the way to
+        continue from one. The draft keeps the parent's descriptive fields
+        (name, parameters, requirements, tags, …), starts with no task
+        executions or digests, and records the parent's capsule ID in
+        ``derived_from``. Raises ValueError if the parent is not sealed: a
+        draft has no stable ID to point at.
+        """
+        if not isinstance(manifest, dict):
+            raise ValueError("manifest must be a mapping")
+        if manifest.get("lifecycle_state") not in _TERMINAL_STATES:
+            raise ValueError("derive() needs a sealed or archived parent capsule")
+        parent_id = compute_capsule_id(manifest)
+        draft = {k: copy.deepcopy(v) for k, v in manifest.items() if k not in _NOT_INHERITED}
+        draft["lifecycle_state"] = "draft"
+        draft["created_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        draft["task_executions"] = []
+        draft["digests"] = {}
+        draft["derived_from"] = parent_id
+        return cls.from_manifest(draft)
+
+    def _require_mutable(self) -> None:
+        """Refuse to modify a sealed or archived capsule (spec §4, #107)."""
+        state = self._capsule.get("lifecycle_state")
+        if state in _TERMINAL_STATES:
+            raise CapsuleStateError(
+                f"Cannot modify a capsule in '{state}' state. Use "
+                "CapsuleBuilder.derive() to start a new draft from it."
+            )
+
     def seal(self, capsule_dir: str | Path, sealed_by: Optional[str] = None,
-             warn_only: bool = False, derived_from: Optional[str] = None) -> str:
+             warn_only: bool = False, derived_from: Optional[str] = None,
+             validate: bool = True) -> str:
         """Full sealing sequence: credential scan → checksums → transition → save → ID.
 
         This is the one-call path for the CLI. Returns the versioned capsule ID
@@ -141,9 +214,11 @@ class CapsuleBuilder:
         will recompute from the file, not an in-memory value that might
         serialise differently (#92).
         Raises RedactorError if secrets are found and warn_only is False.
+        Raises CapsuleValidationError if the sealed manifest would not validate
+        against the schema, unless ``validate=False``.
         """
         self.seal_capsule(capsule_dir, sealed_by=sealed_by, warn_only=warn_only,
-                          derived_from=derived_from)
+                          derived_from=derived_from, validate=validate)
         path = self.save_capsule(Path(capsule_dir) / "capsule.yaml")
         written = load_manifest_yaml(path.read_text(encoding="utf-8"))
         return compute_capsule_id(written)
@@ -198,6 +273,7 @@ class CapsuleBuilder:
         job_id: Optional[str] = None,
     ) -> "CapsuleBuilder":
         """Record a task execution."""
+        self._require_mutable()
         execution: dict[str, Any] = {
             "task_id": task_id,
             "status": status,
@@ -227,13 +303,14 @@ class CapsuleBuilder:
         digest_name: str = "results",
     ) -> "CapsuleBuilder":
         """Add a SHA-256 digest of result data to the digests block."""
+        self._require_mutable()
         import json as _json
         if isinstance(data, dict):
             data_str = _json.dumps(data, sort_keys=True, default=str)
         else:
             data_str = str(data)
         digest = hashlib.sha256(data_str.encode()).hexdigest()
-        self._capsule["digests"][digest_name] = f"sha256:{digest}"
+        self._capsule.setdefault("digests", {})[digest_name] = f"sha256:{digest}"
         return self
 
     def seal_capsule(
@@ -243,6 +320,7 @@ class CapsuleBuilder:
         notes: str = "",
         warn_only: bool = False,
         derived_from: Optional[str] = None,
+        validate: bool = True,
     ) -> dict[str, Any]:
         """Seal the capsule following spec §5 sealing order.
 
@@ -257,6 +335,8 @@ class CapsuleBuilder:
         Returns redactor scan result dict.
         Raises CapsuleStateError if the capsule is already sealed or archived.
         Raises ValueError if requirements not set.
+        Raises CapsuleValidationError if the manifest, as it would be sealed,
+        does not validate against the schema (spec §8) and ``validate`` is True.
         Raises RedactorError if secrets found and not warn_only.
         """
         # Lifecycle gate: sealing is one-way. Refuse to re-seal a capsule that is
@@ -296,6 +376,23 @@ class CapsuleBuilder:
         # Nothing is written until save_capsule, after the scan has passed.
         manifest_text = self._serialise()
 
+        sealed_by = sealed_by or "marqov-capsule"
+        sealed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        if validate:
+            # Validate the manifest as it will be sealed, before the scan and
+            # before anything is written: the seal fields are filled in with
+            # their real values, the digest with a well-formed stand-in (#111).
+            candidate = coerce_for_canonical(self._capsule)
+            candidate.update(lifecycle_state="sealed", sealed_at=sealed_at, sealed_by=sealed_by,
+                             checksums_digest="sha256:" + "0" * 64)
+            if derived_from is not None:
+                candidate["derived_from"] = derived_from
+            if notes:
+                candidate["seal_notes"] = notes
+            result = CapsuleValidator.validate(candidate)
+            if not result["valid"]:
+                raise CapsuleValidationError(result["errors"])
+
         # Step 1: credential scan (payload files on disk + the manifest text)
         redactor = CapsuleRedactor(capsule_path, mode="warn_only" if warn_only else "block")
         scan_result = redactor.scan_and_raise(overrides={"capsule.yaml": manifest_text})
@@ -314,8 +411,8 @@ class CapsuleBuilder:
 
         # Step 5: lifecycle transition
         self._capsule["lifecycle_state"] = "sealed"
-        self._capsule["sealed_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        self._capsule["sealed_by"] = sealed_by or "marqov-capsule"
+        self._capsule["sealed_at"] = sealed_at
+        self._capsule["sealed_by"] = sealed_by
         if notes:
             self._capsule["seal_notes"] = notes
 
@@ -334,6 +431,11 @@ class CapsuleBuilder:
         separator), so a verifier recomputing the ID from the file would never
         match the ID the sealer published. (#20)
         """
+        # The builder that performed the seal writes the sealed manifest; a
+        # builder holding a manifest that was already sealed when it was loaded
+        # has nothing it may write (#107).
+        if not self._sealed:
+            self._require_mutable()
         path = Path(filepath)
         if path.is_dir() or not path.suffix:
             path = path / "capsule.yaml"
@@ -363,14 +465,16 @@ class CapsuleBuilder:
         YAML-mapping form produced a different digest, hence a different capsule
         ID, for the identical payload set. (#20)
 
-        Raises RuntimeError if called after seal_capsule() — rewriting .checksums would
-        make the embedded checksums_digest stale and silently break the Merkle chain.
+        Raises CapsuleStateError (a RuntimeError) if called after seal_capsule(), or on
+        a loaded sealed manifest — rewriting .checksums would make the embedded
+        checksums_digest stale and silently break the Merkle chain.
         """
         if self._sealed:
-            raise RuntimeError(
+            raise CapsuleStateError(
                 "Cannot rewrite .checksums after sealed state: checksums_digest would become stale. "
                 "Call seal_capsule() again if payload files have changed."
             )
+        self._require_mutable()
         capsule_path = Path(capsule_dir)
         entries: list[tuple[str, str]] = []
         encoded_paths: set[str] = set()
@@ -397,7 +501,9 @@ class CapsuleBuilder:
         entries.sort(key=lambda e: e[0].encode("utf-8"))
         lines = [f"{digest}  {path}\n" for path, digest in entries]
         checksums_path = capsule_path / ".checksums"
-        checksums_path.write_text("".join(lines), encoding="utf-8")
+        # Bytes, not text mode: text mode would turn each LF into CRLF on
+        # Windows, which is neither the normative framing nor the same digest.
+        checksums_path.write_bytes("".join(lines).encode("utf-8"))
         return checksums_path
 
     def to_yaml(self) -> str:

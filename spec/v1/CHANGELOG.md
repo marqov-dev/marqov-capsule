@@ -17,6 +17,9 @@ Clarifications to the digest scheme and manifest canonicalization ahead of the f
 
 ### Schema
 
+- `requirements.max_qubit_count` minimum is now `0`, matching §3 ("Zero supports classical-only workloads"); the schema previously required `1` and rejected the classical capsules the prose allows.
+- The sealed-field requirement (`requirements`, `checksums_digest`, `sealed_at`, `sealed_by`) now applies to `archived` manifests as well as `sealed` ones; an archived manifest previously escaped it.
+- Added the optional `seal_notes` string, which the reference implementation has always been able to write.
 - Added `annealing` to the `requirements.paradigm` enum (now `gate-based`, `analog`, `classical`, `annealing`) so quantum-annealing workloads (e.g. D-Wave) can produce schema-valid capsules. The CLI already advertised `annealing`; this resolves the mismatch by extending the schema (the value the product needs) rather than dropping it from the CLI.
 
 ### Digest scheme

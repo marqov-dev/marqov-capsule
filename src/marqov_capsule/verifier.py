@@ -6,12 +6,13 @@ import json
 import os
 import re
 import unicodedata
+import warnings
 from pathlib import Path
 from typing import Any, NoReturn, Optional, Union
 
 import yaml
 
-from marqov_capsule._canonical import compute_capsule_id, load_manifest_yaml
+from marqov_capsule._canonical import compute_capsule_id, load_manifest_yaml, parse_capsule_id
 from marqov_capsule.builder import UNCHECKSUMMED_ROOT_FILES, _checksum_path
 from marqov_capsule.policy import resolve_alpha
 
@@ -39,6 +40,81 @@ def _is_within_root(rel_path: str, root: Path) -> bool:
 # than by the OS mid-check (#123).
 _MAX_CHECKSUM_PATH_BYTES = 4096
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+# Spec §5 Layer 1: one "sha256:<64 lowercase hex>  <path>" line per payload file.
+_CHECKSUM_LINE_RE = re.compile(r"sha256:[0-9a-f]{64}  (.+)")
+# What an attempt at the normative form looks like, however badly framed: an
+# algorithm-prefixed hex token at the start (after a BOM or blank lines). Such
+# a file is held to the grammar, never handed to the legacy YAML reader.
+_NORMATIVE_ATTEMPT_RE = re.compile(r"\ufeff?\s*[A-Za-z0-9]+:[0-9A-Fa-f]{8,}\s")
+_PATH_ESCAPES = {"%25": "%", "%5C": "\\", "%0A": "\n", "%0D": "\r"}
+
+# The capsule ID format version this implementation computes and can compare.
+_SUPPORTED_ID_VERSION = 1
+
+
+class _ChecksumsGrammarError(ValueError):
+    """A ``.checksums`` line that is not in the normative grammar (#108)."""
+
+    def __init__(self, line_no: int, reason: str):
+        super().__init__(f"line {line_no}: {reason}")
+
+
+def _parse_normative_checksums(raw: str) -> dict[str, str]:
+    """Parse the normative ``.checksums`` text into ``{decoded path: digest}``.
+
+    Byte-exact per spec §5: no BOM, every line LF-terminated, no blank lines,
+    a ``sha256:`` prefix with 64 lowercase hex characters, exactly two spaces,
+    then the canonically percent-encoded path. An empty payload is the
+    zero-byte file. Raises ``_ChecksumsGrammarError`` naming the first
+    offending line.
+    """
+    expected: dict[str, str] = {}
+    if raw == "":
+        return expected
+    if raw.startswith("\ufeff"):
+        raise _ChecksumsGrammarError(1, "byte order mark is not permitted")
+    lines = raw.split("\n")
+    terminated = lines[-1] == ""
+    if terminated:
+        lines.pop()
+    for line_no, line in enumerate(lines, start=1):
+        if not line:
+            raise _ChecksumsGrammarError(line_no, "blank line")
+        m = _CHECKSUM_LINE_RE.fullmatch(line)
+        if m is None:
+            token = line.split(" ", 1)[0]
+            algorithm, sep, digest = token.partition(":")
+            if not sep or algorithm != "sha256":
+                raise _ChecksumsGrammarError(
+                    line_no, f"unrecognised digest algorithm prefix {algorithm[:20]!r} (expected 'sha256')")
+            if not re.fullmatch(r"[0-9a-f]{64}", digest):
+                raise _ChecksumsGrammarError(line_no, "digest must be 64 lowercase hex characters")
+            # A CR or other control character also lands here: '.' does not
+            # match a line break, and the path check below would reject it.
+            if _CONTROL_CHAR_RE.search(line):
+                raise _ChecksumsGrammarError(line_no, "control character (lines end with a single LF)")
+            raise _ChecksumsGrammarError(line_no, "digest and path must be separated by exactly two spaces")
+        name = m.group(1)
+        # The writer percent-encodes LF/CR and never emits any other control
+        # character; a raw one here is a file the reference writer did not
+        # produce. Reject at parse time, before the path reaches any
+        # filesystem call — a NUL byte makes lstat() raise rather than fail (#123).
+        if _CONTROL_CHAR_RE.search(name):
+            raise _ChecksumsGrammarError(line_no, "control character (lines end with a single LF)")
+        if len(name.encode("utf-8")) > _MAX_CHECKSUM_PATH_BYTES:
+            raise _ChecksumsGrammarError(line_no, "path is too long")
+        decoded = re.sub(r"%[0-9A-Fa-f]{2}", lambda m: _PATH_ESCAPES.get(m[0], m[0]), name)
+        # Re-encoding rejects unknown/lowercase escapes and NFC ambiguity
+        # without recursively decoding literal % sequences.
+        if _checksum_path(decoded) != name:
+            raise _ChecksumsGrammarError(line_no, "path is not in canonical encoded form")
+        if decoded in expected:
+            raise _ChecksumsGrammarError(line_no, "duplicate path")
+        expected[decoded] = line[:71]
+    if not terminated:
+        raise _ChecksumsGrammarError(len(lines), "missing the final LF")
+    return expected
 
 
 def _require_numpy():
@@ -236,17 +312,18 @@ class CapsuleVerifier:
 
     def __init__(self, schema_path: Optional[Path] = None):
         """
-        Initialize the verifier.
-
         Args:
-            schema_path: Path to capsule.schema.json for validation (optional)
+            schema_path: Deprecated and ignored. The verifier never validated
+                against it; schema validation is ``CapsuleValidator``'s job.
         """
-        self.schema_path = schema_path
-        self.schema = None
-
-        if schema_path and Path(schema_path).exists():
-            with open(schema_path) as f:
-                self.schema = json.load(f)
+        if schema_path is not None:
+            warnings.warn(
+                "CapsuleVerifier(schema_path=...) is ignored and will be removed: "
+                "the verifier does not validate against a schema; use "
+                "CapsuleValidator.validate().",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
     # -------------------------------------------------------------------------
     # New API (Task 7): closed-form upper confidence bound on TVD
@@ -415,7 +492,7 @@ class CapsuleVerifier:
         # .checksums is untrusted input: malformed bytes must produce a FAIL
         # verdict, never an uncaught traceback out of the verifier (#61).
         try:
-            raw = checksums_file.read_text()
+            raw = checksums_file.read_bytes().decode("utf-8")
         except (UnicodeDecodeError, OSError):
             return {
                 "status": "fail",
@@ -426,45 +503,33 @@ class CapsuleVerifier:
                 "missing": [],
                 "extra": [],
             }
-        # Legacy YAML mappings contain literal paths. Only the normative line
-        # format carries the narrow percent-encoding specified in §5.
-        try:
-            if re.match(r"^sha256:[0-9a-f]{64}  ", raw):
-                # A legal filename containing ': ' can make a checksum line
-                # look like a YAML mapping. Recognize the normative framing first.
-                raise ValueError("normative checksum lines")
-            expected = yaml.safe_load(raw) or {}
-            if not isinstance(expected, dict):
-                raise ValueError("not a mapping")
-        except Exception:
-            # Legacy parser: a line without the "  " separator would raise on
-            # unpacking, so any malformed line fails the whole capsule (#61).
+        # Two forms are readable. The normative line format (spec §5) is held
+        # to its grammar byte for byte, and a violation is reported as a
+        # grammar error naming the line — not as a payload mismatch, which
+        # sends the reader looking at the wrong file (#108). The pre-1.0 YAML
+        # mapping of literal paths to digests stays readable because
+        # marqov-platform's vendored builder still writes it.
+        checksums_format = "normative"
+        expected: Any = None
+        if raw != "" and not _NORMATIVE_ATTEMPT_RE.match(raw):
+            # A legal filename containing ': ' can make a checksum line look
+            # like a YAML mapping, hence the framing check before this branch.
             try:
-                expected = {}
-                for line in raw.split("\n"):
-                    if not line:
-                        continue
-                    digest, name = line.split("  ", 1)
-                    # The writer percent-encodes LF/CR and never emits any
-                    # other control character; a raw one here is a file the
-                    # reference writer did not produce. Reject at parse time,
-                    # before the path reaches any filesystem call — a NUL
-                    # byte makes lstat() raise rather than fail (#123).
-                    if _CONTROL_CHAR_RE.search(name) or len(name.encode("utf-8")) > _MAX_CHECKSUM_PATH_BYTES:
-                        raise ValueError("control character or overlong checksum path")
-                    escapes = {"%25": "%", "%5C": "\\", "%0A": "\n", "%0D": "\r"}
-                    decoded = re.sub(r"%[0-9A-Fa-f]{2}", lambda m: escapes.get(m[0], m[0]), name)
-                    # Re-encoding rejects unknown/lowercase escapes and NFC
-                    # ambiguity without recursively decoding literal % sequences.
-                    if _checksum_path(decoded) != name or decoded in expected:
-                        raise ValueError("noncanonical or duplicate checksum path")
-                    name = decoded
-                    expected[name] = digest
-            except ValueError:
+                legacy = yaml.safe_load(raw)
+            except Exception:
+                legacy = None
+            if isinstance(legacy, dict):
+                expected = legacy
+                checksums_format = "legacy-yaml"
+        if expected is None:
+            try:
+                expected = _parse_normative_checksums(raw)
+            except _ChecksumsGrammarError as exc:
                 return {
                     "status": "fail",
                     "passed": False,
-                    "error": ".checksums is malformed and could not be parsed",
+                    "error": f".checksums is malformed: grammar error at {exc}",
+                    "format": checksums_format,
                     "files": {},
                     "mismatched": [],
                     "missing": [],
@@ -552,7 +617,7 @@ class CapsuleVerifier:
         # must not slip past the check by failing ``is_file()`` (#56).
         actual_files = set()
         for fp in capsule_path.rglob("*"):
-            rel = str(fp.relative_to(capsule_path))
+            rel = fp.relative_to(capsule_path).as_posix()
             if fp.is_symlink():
                 if rel not in symlinks:
                     symlinks.append(rel)
@@ -573,6 +638,7 @@ class CapsuleVerifier:
         return {
             "status": "pass" if all_match else "fail",
             "passed": all_match,
+            "format": checksums_format,
             "files": files,
             "mismatched": mismatched,
             "missing": missing,
@@ -605,6 +671,27 @@ class CapsuleVerifier:
         capsule_path = Path(capsule_dir)
         errors: list[str] = []
 
+        # Layer 3 input. Spec §5: a reader parses the <scheme>:<version>: prefix
+        # and dispatches on the version; it never compares an ID it cannot
+        # parse, or one of a version it does not compute (#114).
+        expected_id_usable = expected_id is not None
+        if expected_id is not None:
+            try:
+                id_version, _ = parse_capsule_id(expected_id)
+            except (ValueError, TypeError):
+                expected_id_usable = False
+                errors.append(
+                    f"expected ID {expected_id!r} is not a capsule ID "
+                    "(expected mqc:<version>:<64 lowercase hex>)"
+                )
+            else:
+                if id_version != _SUPPORTED_ID_VERSION:
+                    expected_id_usable = False
+                    errors.append(
+                        f"capsule ID version {id_version} is not supported by this "
+                        f"implementation (it computes version {_SUPPORTED_ID_VERSION})"
+                    )
+
         checksums = CapsuleVerifier.verify_checksums(capsule_path)
         if checksums["status"] != "pass":
             errors.append("payload does not match .checksums")
@@ -612,6 +699,8 @@ class CapsuleVerifier:
         checksums_digest_match: Optional[bool] = None
         capsule_id: Optional[str] = None
         capsule_id_match: Optional[bool] = None
+        if expected_id is not None and not expected_id_usable:
+            capsule_id_match = False
 
         manifest_path = capsule_path / "capsule.yaml"
         manifest: Optional[dict] = None
@@ -663,7 +752,7 @@ class CapsuleVerifier:
                     f"capsule ID could not be computed: {exc.__class__.__name__}"
                 )
             else:
-                if expected_id is not None:
+                if expected_id_usable:
                     capsule_id_match = capsule_id == expected_id
                     if not capsule_id_match:
                         errors.append(

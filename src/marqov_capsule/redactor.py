@@ -501,33 +501,68 @@ def _scan_notebook(nb_path: str, content: str) -> list[dict]:
         return []
 
     findings = []
+
+    def scan(value, cell_index, location):
+        # ``line`` counts within the cell source or output being scanned, not
+        # within the .ipynb file (which is JSON); ``cell`` (0-based) and
+        # ``location`` are what let a reader find it (#100).
+        for finding in _scan_text(_joined(value), nb_path):
+            finding["cell"] = cell_index
+            finding["location"] = location
+            findings.append(finding)
+
     cells = nb.get("cells")
     if not isinstance(cells, list):
         # An int/bool raises on iteration; a string iterates per character.
         # Neither is a notebook (#125).
         return []
-    for cell in cells:
+    for cell_index, cell in enumerate(cells):
         if not isinstance(cell, dict):
             continue
-        findings.extend(_scan_text(_joined(cell.get("source")), nb_path))
+        scan(cell.get("source"), cell_index, "source")
 
         outputs = cell.get("outputs")
         if not isinstance(outputs, list):
             continue
-        for output in outputs:
+        for output_index, output in enumerate(outputs):
             if not isinstance(output, dict):
                 continue
+            location = f"output[{output_index}]"
             output_type = output.get("output_type", "")
             if output_type == "stream":
-                findings.extend(_scan_text(_joined(output.get("text")), nb_path))
+                scan(output.get("text"), cell_index, location)
             elif output_type in ("display_data", "execute_result"):
                 data = output.get("data")
                 if isinstance(data, dict) and "text/plain" in data:
-                    findings.extend(_scan_text(_joined(data["text/plain"]), nb_path))
+                    scan(data["text/plain"], cell_index, location)
             elif output_type == "error":
-                findings.extend(_scan_text(_joined(output.get("traceback")), nb_path))
-                findings.extend(_scan_text(_joined(output.get("evalue")), nb_path))
+                scan(output.get("traceback"), cell_index, location)
+                scan(output.get("evalue"), cell_index, location)
     return findings
+
+
+def finding_location(finding: dict) -> str:
+    """Where a finding is, for a message: ``file:line``, or for a notebook
+    ``file:cell N:line L`` / ``file:cell N:output[K]:line L``."""
+    if "cell" not in finding:
+        return f"{finding['file']}:{finding['line']}"
+    where = f"{finding['file']}:cell {finding['cell']}"
+    if finding.get("location", "source") != "source":
+        where += f":{finding['location']}"
+    return f"{where}:line {finding['line']}"
+
+
+# How much of a file is examined to decide it is binary: a NUL byte in the
+# first 8 KB, the heuristic git uses.
+_BINARY_SNIFF_BYTES = 8192
+
+
+def _looks_binary(path: Path) -> bool:
+    try:
+        with open(path, "rb") as f:
+            return b"\x00" in f.read(_BINARY_SNIFF_BYTES)
+    except OSError:
+        return False
 
 
 class CapsuleRedactor:
@@ -567,10 +602,14 @@ class CapsuleRedactor:
             asked for). The last two exist so that narrowing the scan scope is
             visible rather than silent — a .capsuleignore containing ``source``
             would otherwise disable scanning for that whole subtree with no
-            indication in the result (#34).
+            indication in the result (#34). ``skipped_binary`` lists files not
+            scanned because they are binary: regex-matching a 64 MB array dump
+            took 14 s and found nothing, and every scanner this module follows
+            skips them — but it is reported, for the same reason (#98).
         """
         all_findings: list[dict] = []
         skipped: list[str] = []
+        skipped_binary: list[str] = []
         pending = dict(overrides or {})
 
         # (relative path, source) where source is a Path to read or the text itself.
@@ -581,7 +620,7 @@ class CapsuleRedactor:
                 continue
             if not file_path.is_file():
                 continue
-            rel = str(file_path.relative_to(self.capsule_dir))
+            rel = file_path.relative_to(self.capsule_dir).as_posix()
             entries.append((rel, pending.pop(rel) if rel in pending else file_path))
         entries.extend(sorted(pending.items()))
 
@@ -605,6 +644,10 @@ class CapsuleRedactor:
                 continue
 
             if isinstance(source, Path):
+                # Notebooks are JSON text and are always scanned.
+                if not rel.endswith(".ipynb") and _looks_binary(source):
+                    skipped_binary.append(rel)
+                    continue
                 try:
                     content = source.read_text(encoding="utf-8", errors="replace")
                 except Exception:
@@ -621,6 +664,7 @@ class CapsuleRedactor:
             "has_secrets": len(all_findings) > 0,
             "findings": all_findings,
             "skipped": skipped,
+            "skipped_binary": skipped_binary,
             "capsuleignore_patterns": sorted(self._capsuleignore),
         }
 
@@ -636,7 +680,7 @@ class CapsuleRedactor:
         blocking = [f for f in result["findings"] if f.get("blocking")]
         if blocking and self.mode == "block":
             summary = "; ".join(
-                f"{f['file']}:{f['line']} ({f['reason']})" for f in blocking[:5]
+                f"{finding_location(f)} ({f['reason']})" for f in blocking[:5]
             )
             # Remediation has to match the finding. `# capsule:allow` is a
             # line annotation and cannot suppress a whole-file finding, so

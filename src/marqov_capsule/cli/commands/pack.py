@@ -17,8 +17,9 @@ _ARCHIVE_ERRORS = (FileNotFoundError, ValueError, OSError, tarfile.TarError, EOF
 @click.command()
 @click.argument("directory", type=click.Path(exists=True, file_okay=False))
 @click.option("--output", "-o", default=None, help="Archive path (default: <name>.capsule)")
+@click.option("--force", is_flag=True, help="Replace an existing archive at the output path")
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
-def pack(directory, output, as_json):
+def pack(directory, output, force, as_json):
     """Pack a sealed capsule directory into a deterministic archive.
 
     The archive is byte-reproducible: packing the same capsule twice yields
@@ -30,7 +31,7 @@ def pack(directory, output, as_json):
     manifest = load_manifest_or_exit(Path(directory) / "capsule.yaml", as_json)
 
     try:
-        archive_path = pack_capsule(directory, output_path=output)
+        archive_path = pack_capsule(directory, output_path=output, overwrite=force)
         # Identity is the capsule ID: it covers the manifest, which .checksums
         # deliberately does not. The payload digest is reported too, but
         # labelled as what it is rather than as a content identifier (#48).

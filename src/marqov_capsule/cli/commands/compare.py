@@ -38,7 +38,9 @@ def _load_counts(path, counts_key):
     and a wrapper carrying the mapping under a key (``counts`` by default).
     """
     try:
-        raw = json.loads(Path(path).read_text())
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    except UnicodeDecodeError as e:
+        raise _CountsError(f"{path} is not UTF-8 text") from e
     except json.JSONDecodeError as e:
         raise _CountsError(f"{path} is not valid JSON: {e}") from e
     except OSError as e:

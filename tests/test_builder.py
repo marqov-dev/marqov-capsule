@@ -143,7 +143,7 @@ def test_capsule_id_changes_when_payload_changes(tmp_path):
 
 
 def test_derived_from_embedded_when_provided(tmp_path):
-    parent_id = "a" * 64
+    parent_id = "mqc:1:" + "a" * 64
     b = _make_builder()
     capsule_dir = tmp_path / "child.capsule"
     capsule_dir.mkdir()

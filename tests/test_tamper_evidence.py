@@ -38,6 +38,7 @@ def _seal(capsule_dir: Path, counts=None) -> str:
         status="success",
         result_type="probabilistic",
         backend={"provider": "ibm", "name": "ibm_kyiv", "shots": 1024},
+        verification_settings={"epsilon": 0.02, "min_shots": 100, "tolerance_regime": "strict"},
     )
     return b.seal(capsule_dir=capsule_dir, sealed_by="test-runner")
 
@@ -397,6 +398,6 @@ def test_cli_open_id_mismatch_refuses(tmp_path):
     _seal(capsule_dir)
 
     dest = tmp_path / "out"
-    result = CliRunner().invoke(cli, ["open", str(capsule_dir), "--id", "0" * 64, "--dest", str(dest)])
+    result = CliRunner().invoke(cli, ["open", str(capsule_dir), "--id", "mqc:1:" + "0" * 64, "--dest", str(dest)])
     assert result.exit_code == 1, result.output
     assert not (dest / "bell.capsule").exists()

@@ -65,11 +65,11 @@ The `marqov-capsule` command provides these subcommands:
 | Command | Description |
 |---|---|
 | `marqov-capsule init` | Scaffold a new draft `capsule.yaml` in `DIRECTORY` |
-| `marqov-capsule seal` | Seal a draft capsule — scans for credentials, writes checksums, transitions state |
+| `marqov-capsule seal` | Seal a draft capsule — validates the manifest against the schema, scans for credentials, writes checksums, transitions state (`--no-validate` skips the schema check) |
 | `marqov-capsule verify` | Verify integrity of a sealed capsule directory **or archive** — all three digest-chain layers, `--id` for the trusted capsule ID |
 | `marqov-capsule inspect` | Print a human-readable summary of capsule metadata |
 | `marqov-capsule open` | Verify integrity and extract a capsule to a destination directory |
-| `marqov-capsule pack` | Pack a sealed capsule directory into a deterministic `.capsule` archive |
+| `marqov-capsule pack` | Pack a sealed capsule directory into a deterministic `.capsule` archive; refuses to replace an existing archive without `--force` |
 | `marqov-capsule unpack` | Restore a capsule directory from an archive |
 | `marqov-capsule validate` | Validate a capsule against the JSON Schema without sealing — accepts a capsule directory or a `capsule.yaml` path |
 | `marqov-capsule compare` | Test whether two count samples are equivalent within a tolerance (one-sided TVD bound) — exits 0 VERIFIED, 3 INCONCLUSIVE, 1 on a data error, 2 on a usage error |

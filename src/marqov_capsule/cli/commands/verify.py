@@ -7,12 +7,13 @@ from pathlib import Path
 import click
 
 from marqov_capsule.archive import payload_digest, unpack_capsule
+from marqov_capsule.cli._manifest import check_expected_id
 from marqov_capsule.verifier import CapsuleVerifier
 
 
 @click.command()
 @click.argument("capsule", type=click.Path(exists=True))
-@click.option("--id", "expected_id", default=None,
+@click.option("--id", "expected_id", default=None, callback=check_expected_id,
               help="Trusted capsule ID to verify the manifest against (spec §6 layer 3)")
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
 def verify(capsule, expected_id, as_json):

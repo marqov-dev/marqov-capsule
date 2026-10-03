@@ -80,6 +80,7 @@ the `mqc:1:` digest-procedure version.
 | `created_by` | string | Identity of the creator |
 | `sealed_at` | string (ISO 8601) | Set automatically at seal time |
 | `sealed_by` | string | Identity of the sealer |
+| `seal_notes` | string | Free-text note recorded by the sealer |
 | `derived_from` | string (versioned capsule ID) | Capsule ID of a parent capsule (`mqc:1:<hex>`), for provenance chains |
 
 **Important:** timestamps must be stored as ISO 8601 strings (not numeric epoch) so that canonical JSON serialisation is deterministic across implementations (see §5).

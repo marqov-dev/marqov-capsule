@@ -22,11 +22,17 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12"]
+        # macOS exercises a case-insensitive, NFD-normalising filesystem and
+        # un-skips the Unicode collision test (#113, #115).
+        include:
+          - os: macos-latest
+            python-version: "3.12"
 
     steps:
       - uses: actions/checkout@v4
@@ -77,6 +83,33 @@ jobs:
           marqov-capsule validate spec/v1/conformance/valid_capsule/capsule.yaml
           marqov-capsule inspect spec/v1/conformance/valid_capsule
           marqov-capsule verify spec/v1/conformance/valid_capsule
+
+  # The package is classified "OS Independent"; this is the leg that checks it
+  # on Windows: '\\' path separators, a cp1252 default encoding (PYTHONUTF8 is
+  # deliberately left unset) and CRLF text mode (#103, #113, #115).
+  #
+  # continue-on-error: the suite has never run on Windows, so this job reports
+  # without blocking a merge. Remove that line once the leg is green — until
+  # then a failure here shows as a warning annotation, not a red check.
+  test-windows:
+    runs-on: windows-latest
+    continue-on-error: true
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+          cache-dependency-path: pyproject.toml
+
+      - name: Install with dev extras
+        run: pip install -e ".[dev]"
+
+      - name: Run tests
+        run: python -m pytest tests/ -q --tb=short
 
   # Verify the built wheel (not editable install) ships the bundled schema
   # and that the package is importable from a wheel install.
@@ -238,7 +271,7 @@ jobs:
   ci-success:
     name: CI Success
     if: always()
-    needs: [test, wheel-smoke, base-install, minimum-versions, links, conformance-node]
+    needs: [test, test-windows, wheel-smoke, base-install, minimum-versions, links, conformance-node]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

@@ -40,6 +40,7 @@ def _seal(capsule_dir) -> str:
         status="success",
         result_type="probabilistic",
         backend={"provider": "ibm", "name": "ibm_kyiv", "shots": 1024},
+        verification_settings={"epsilon": 0.02, "min_shots": 100, "tolerance_regime": "strict"},
     )
     return b.seal(capsule_dir=capsule_dir, sealed_by="test-runner")
 
