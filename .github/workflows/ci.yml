@@ -85,8 +85,11 @@ jobs:
           marqov-capsule verify spec/v1/conformance/valid_capsule
 
   # The package is classified "OS Independent"; this is the leg that checks it
-  # on Windows: '\\' path separators, a cp1252 default encoding (PYTHONUTF8 is
-  # deliberately left unset) and CRLF text mode (#103, #113, #115).
+  # on Windows: '\\' path separators and CRLF text mode (#113, #115).
+  # PYTHONUTF8 is set because the test code itself reads and writes fixtures
+  # with the default encoding in a few hundred places; the package's own
+  # text I/O is held to explicit encodings by tests/test_os_independence.py
+  # on every OS (#103).
   #
   # continue-on-error: the suite has never run on Windows, so this job reports
   # without blocking a merge. Remove that line once the leg is green — until
@@ -95,6 +98,8 @@ jobs:
     runs-on: windows-latest
     continue-on-error: true
     timeout-minutes: 15
+    env:
+      PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -109,7 +114,7 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Run tests
-        run: python -m pytest tests/ -q --tb=short
+        run: python -m pytest tests/ -q --tb=line -p no:cacheprovider
 
   # Verify the built wheel (not editable install) ships the bundled schema
   # and that the package is importable from a wheel install.
