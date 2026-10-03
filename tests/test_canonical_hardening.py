@@ -4,6 +4,7 @@ Covers: base-10 leading-zero integers, the 2^53-1 integer-magnitude guard, NFC
 normalization of keys/values/paths, path percent-encoding in .checksums,
 duplicate-key rejection, and float-key canonical number formatting.
 """
+import os
 import unicodedata
 
 import jcs
@@ -89,6 +90,7 @@ def test_checksum_path_percent_encodes_specials():
     assert _checksum_path("dir/a b.json") == "dir/a b.json"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="filename cannot exist on this filesystem")
 def test_checksums_percent_encodes_special_filename(tmp_path):
     capsule_dir = tmp_path / "enc.capsule"
     payload = capsule_dir / "payload"

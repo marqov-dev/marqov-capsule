@@ -1,4 +1,6 @@
 """Fixed public vectors: never regenerate expected values during a test."""
+import re
+import os
 import hashlib
 import json
 import unicodedata
@@ -121,9 +123,19 @@ def test_normalized_collision_is_integrity_failure(tmp_path):
     assert result["capsule_id"] is None
 
 
+def _not_a_windows_filename(path: str) -> bool:
+    """On Windows: control characters, ``\\ : * ? " < > |`` and a trailing
+    space or dot cannot appear in a filename (``:`` silently names a stream)."""
+    return os.name == "nt" and any(
+        re.search(r'[\x00-\x1f\\:*?"<>|]', part) or part.endswith((" ", "."))
+        for part in path.split("/"))
+
+
 @pytest.mark.parametrize("vector", json.loads(
-    (GOLDEN / "checksum-path-cases.json").read_text()), ids=lambda v: v["name"])
+    (GOLDEN / "checksum-path-cases.json").read_text(encoding="utf-8")), ids=lambda v: v["name"])
 def test_checksum_path_vectors(vector, tmp_path):
+    if any(_not_a_windows_filename(file["path"]) for file in vector["files"]):
+        pytest.skip("vector uses a filename this filesystem cannot hold")
     for file in vector["files"]:
         # Materialize NFC names so these vectors are filesystem-independent;
         # the vector's NFD input is checked directly by the path encoder too.
@@ -163,6 +175,8 @@ def test_duplicate_line_paths_fail(tmp_path):
 
 
 def test_encoded_paths_survive_sealed_archive_roundtrip(tmp_path):
+    if os.name == "nt":
+        pytest.skip("these filenames cannot exist on this filesystem")
     from marqov_capsule.archive import pack_capsule, unpack_capsule
     capsule = tmp_path / "capsule"
     capsule.mkdir()

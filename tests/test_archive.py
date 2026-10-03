@@ -254,7 +254,9 @@ class TestSymlinkNoDereference:
             # A symlink member carries no data blocks; the target's bytes were
             # never read into the archive.
             assert member.size == 0, "symlink member carries file content"
-            assert member.linkname == str(secret)
+            # os.readlink is what the link says; on Windows that carries a
+            # \\?\ prefix that str(secret) does not.
+            assert member.linkname == os.readlink(link)
 
     def test_pack_symlink_member_names_the_target_not_its_content(self, tmp_path):
         """The stored symlink points at its original target (linkname), and the
@@ -263,13 +265,14 @@ class TestSymlinkNoDereference:
         secret.write_text("TOP-SECRET-PRIVATE-KEY-MATERIAL")
 
         capsule_dir = _make_sealed_capsule_dir(tmp_path, name="linky2")
-        (capsule_dir / "payload" / "link.txt").symlink_to(secret)
+        link = capsule_dir / "payload" / "link.txt"
+        link.symlink_to(secret)
 
         archive = pack_capsule(capsule_dir, output_path=tmp_path / "packed.capsule")
         with tarfile.open(str(archive), "r:gz") as tf:
             member = tf.getmember("linky2.capsule/payload/link.txt")
             assert member.issym()
-            assert member.linkname == str(secret)
+            assert member.linkname == os.readlink(link)
 
 
 class TestArcnameSafety:

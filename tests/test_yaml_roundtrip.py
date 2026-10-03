@@ -126,7 +126,8 @@ def _draft_with_secret(capsule_dir: Path) -> bytes:
         "  max_qubit_count: 2\n"
         "task_executions: []\n"
     )
-    (capsule_dir / "capsule.yaml").write_text(draft, encoding="utf-8")
+    # Bytes, so the draft is LF on disk on every OS and the comparison is exact.
+    (capsule_dir / "capsule.yaml").write_bytes(draft.encode("utf-8"))
     return draft.encode("utf-8")
 
 

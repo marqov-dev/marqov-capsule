@@ -48,7 +48,7 @@ def _rewrite_checksums(capsule_dir: Path) -> None:
     checksums = {}
     for fp in sorted(capsule_dir.rglob("*")):
         if fp.is_file() and fp.name not in {".checksums", "capsule.yaml"}:
-            rel = str(fp.relative_to(capsule_dir))
+            rel = fp.relative_to(capsule_dir).as_posix()
             checksums[rel] = "sha256:" + hashlib.sha256(fp.read_bytes()).hexdigest()
     (capsule_dir / ".checksums").write_text(yaml.dump(checksums, default_flow_style=False, sort_keys=True))
 

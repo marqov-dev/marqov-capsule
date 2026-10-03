@@ -34,6 +34,8 @@ def test_verify_does_not_read_rejected_checksum_metadata(tmp_path, monkeypatch, 
     elif kind == "directory":
         metadata.mkdir()
     else:
+        if not hasattr(os, "mkfifo"):
+            pytest.skip("this platform has no FIFOs")
         os.mkfifo(metadata)
     original = Path.read_bytes
     def guarded(path):

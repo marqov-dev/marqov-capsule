@@ -1,6 +1,7 @@
 """``.checksums`` is untrusted input: a hostile path must be a FAIL verdict,
 never an exception out of the verifier (#123).
 """
+import os
 import pytest
 from click.testing import CliRunner
 
@@ -57,6 +58,7 @@ def test_cli_exits_1_without_traceback_on_hostile_path(command, path, tmp_path):
     assert result.exception is None or isinstance(result.exception, SystemExit), repr(result.exception)
 
 
+@pytest.mark.skipif(os.name == "nt", reason="filename cannot exist on this filesystem")
 def test_control_character_in_path_is_noncanonical_even_when_file_exists(tmp_path):
     # A real file whose name carries a tab: the writer never emits a raw
     # control character, so a reader seeing one is looking at a file the
