@@ -72,7 +72,7 @@ def test_independent_fixture_digest_chain(vector):
         paths.append(path)
         assert "sha256:" + hashlib.sha256((directory / path).read_bytes()).hexdigest() == digest
     assert paths == sorted(paths, key=lambda p: p.encode())
-    assert set(paths) == {str(p.relative_to(directory)) for p in directory.rglob("*")
+    assert set(paths) == {p.relative_to(directory).as_posix() for p in directory.rglob("*")
                           if p.is_file() and p.name not in {"capsule.yaml", ".checksums"}}
 
 
