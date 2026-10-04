@@ -1,35 +1,46 @@
-"""The declared version must agree everywhere it is written down.
+"""The version is declared once, in ``src/marqov_capsule/__init__.py``.
 
-`__version__` is a hand-maintained duplicate of the version in pyproject.toml:
-nothing in the package reads it and, until this test existed, nothing checked
-it. Preparing 0.1.1 bumped pyproject.toml and left `__version__` at "0.1.0",
-which would have shipped a package whose metadata and attribute disagreed.
+Preparing 0.1.1 bumped pyproject.toml and left `__version__` at "0.1.0": two
+hand-maintained sources of truth. pyproject.toml now reads the version from the
+package (`dynamic = ["version"]`), so there is nothing left to keep in step
+(#104).
 """
 import re
 from importlib import metadata
 from pathlib import Path
+
+import pytest
 
 import marqov_capsule
 
 PYPROJECT = Path(__file__).parent.parent / "pyproject.toml"
 
 
-def _declared_version():
-    # Read the [project] version without taking a TOML parser dependency on
-    # Python 3.10, where tomllib does not exist.
-    text = PYPROJECT.read_text()
-    match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
-    assert match, "no version found in pyproject.toml"
-    return match.group(1)
+def _project_table():
+    text = PYPROJECT.read_text(encoding="utf-8")
+    start = text.index("[project]")
+    end = re.search(r"^\[", text[start + 1:], re.MULTILINE)
+    return text[start:start + 1 + end.start()] if end else text[start:]
 
 
-def test_dunder_version_matches_pyproject():
-    assert marqov_capsule.__version__ == _declared_version()
+def test_pyproject_does_not_declare_a_second_version():
+    project = _project_table()
+    assert not re.search(r"^version\s*=", project, re.MULTILINE)
+    assert re.search(r'^dynamic\s*=\s*\[\s*"version"\s*\]', project, re.MULTILINE)
+
+
+def test_dunder_version_is_a_release_version():
+    assert re.fullmatch(r"\d+\.\d+\.\d+([a-z]+\d+)?", marqov_capsule.__version__)
 
 
 def test_installed_metadata_matches_source():
-    # Catches a stale editable install as well as a mismatched bump.
-    assert metadata.version("marqov-capsule") == marqov_capsule.__version__
+    installed = metadata.version("marqov-capsule")
+    if installed != marqov_capsule.__version__:
+        pytest.fail(
+            f"installed metadata says {installed}, the source says "
+            f"{marqov_capsule.__version__}: reinstall the editable package "
+            "(`uv sync` or `pip install -e .`) after a version bump"
+        )
 
 
 def test_cli_reports_the_same_version():
@@ -38,4 +49,5 @@ def test_cli_reports_the_same_version():
     from marqov_capsule.cli.main import cli
 
     result = CliRunner().invoke(cli, ["--version"])
-    assert marqov_capsule.__version__ in result.output
+    assert result.exit_code == 0
+    assert result.output.strip().endswith(f"version {marqov_capsule.__version__}")

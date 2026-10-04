@@ -82,7 +82,8 @@ def test_unicode_collisions_are_rejected(tmp_path):
     second.write_text("second")
     with pytest.raises(ValueError, match="collide"):
         CapsuleBuilder().save_checksums(tmp_path)
-    (tmp_path / ".checksums").write_text("sha256:" + hashlib.sha256(b"first").hexdigest() + "  é\n")
+    (tmp_path / ".checksums").write_bytes(
+        ("sha256:" + hashlib.sha256(b"first").hexdigest() + "  é\n").encode("utf-8"))
     result = CapsuleVerifier.verify_checksums(tmp_path)
     assert result["status"] == "fail"
     assert "é" in result["invalid"]
@@ -113,8 +114,10 @@ def test_listed_nonregular_payload_fails_without_reading(tmp_path, monkeypatch, 
     if kind == "directory":
         target.mkdir()
     else:
+        if not hasattr(os, "mkfifo"):
+            pytest.skip("this platform has no FIFOs")
         os.mkfifo(target)
-    (tmp_path / ".checksums").write_text("sha256:" + "0" * 64 + "  payload\n")
+    (tmp_path / ".checksums").write_bytes(("sha256:" + "0" * 64 + "  payload\n").encode("utf-8"))
     original = Path.read_bytes
     def no_blocking_read(path):
         assert path != target, "must not read a nonregular file"

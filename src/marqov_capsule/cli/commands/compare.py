@@ -38,7 +38,9 @@ def _load_counts(path, counts_key):
     and a wrapper carrying the mapping under a key (``counts`` by default).
     """
     try:
-        raw = json.loads(Path(path).read_text())
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    except UnicodeDecodeError as e:
+        raise _CountsError(f"{path} is not UTF-8 text") from e
     except json.JSONDecodeError as e:
         raise _CountsError(f"{path} is not valid JSON: {e}") from e
     except OSError as e:
@@ -123,12 +125,17 @@ def _inconclusive_guidance(metrics):
 @click.command()
 @click.argument("ref", type=click.Path(exists=True, dir_okay=False))
 @click.argument("new", type=click.Path(exists=True, dir_okay=False))
-@click.option("--epsilon", type=float, default=None,
-              help="Equivalence tolerance owned by the verifier (default: policy default)")
-@click.option("--min-shots", type=int, default=None,
-              help="Shot floor below which no bound is computed")
-@click.option("--alpha", type=float, default=None,
-              help="Error rate for the one-sided confidence bound")
+# Ranges are enforced at the option, as usage errors (exit 2). TVD is bounded
+# by 1, so an epsilon >= 1 certifies everything; alpha outside (0, 1) is not
+# an error rate; and a non-positive shot floor is never applied. Silently
+# substituting a default — which the verifier does for a *capsule-declared*
+# alpha — would hide an operator's typo behind a plausible report (#99).
+@click.option("--epsilon", type=click.FloatRange(0.0, 1.0, min_open=True, max_open=True), default=None,
+              help="Equivalence tolerance owned by the verifier, in (0, 1) (default: policy default)")
+@click.option("--min-shots", type=click.IntRange(min=1), default=None,
+              help="Shot floor below which no bound is computed (>= 1)")
+@click.option("--alpha", type=click.FloatRange(0.0, 1.0, min_open=True, max_open=True), default=None,
+              help="Error rate for the one-sided confidence bound, in (0, 1)")
 @click.option("--counts-key", default=None,
               help="Key holding the counts mapping (default: 'counts', else the whole object)")
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")

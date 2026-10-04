@@ -7,12 +7,13 @@ from pathlib import Path
 import click
 
 from marqov_capsule.archive import payload_digest, unpack_capsule
+from marqov_capsule.cli._manifest import check_expected_id
 from marqov_capsule.verifier import CapsuleVerifier
 
 
 @click.command()
 @click.argument("capsule", type=click.Path(exists=True))
-@click.option("--id", "expected_id", default=None,
+@click.option("--id", "expected_id", default=None, callback=check_expected_id,
               help="Trusted capsule ID to verify the manifest against (spec §6 layer 3)")
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
 def verify(capsule, expected_id, as_json):
@@ -42,7 +43,7 @@ def verify(capsule, expected_id, as_json):
     with tempfile.TemporaryDirectory() as tmp:
         try:
             unpacked = unpack_capsule(path, output_dir=tmp)
-        except (ValueError, OSError, tarfile.TarError) as e:
+        except (ValueError, OSError, tarfile.TarError, EOFError) as e:
             if as_json:
                 click.echo(json.dumps({"status": "fail", "errors": [f"could not unpack archive: {e}"]}))
             else:

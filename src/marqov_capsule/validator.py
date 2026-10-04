@@ -10,12 +10,8 @@ from typing import Any
 
 import yaml
 
-try:
-    import jsonschema
-    from jsonschema import Draft202012Validator
-    _JSONSCHEMA_AVAILABLE = True
-except ImportError:
-    _JSONSCHEMA_AVAILABLE = False
+import jsonschema
+from jsonschema import Draft202012Validator
 
 _schema_cache: dict | None = None
 
@@ -75,9 +71,6 @@ class CapsuleValidator:
         Returns:
             {"valid": bool, "errors": [{"path": str, "message": str}]}
         """
-        if not _JSONSCHEMA_AVAILABLE:
-            raise ImportError("jsonschema>=4.0 required: pip install marqov-capsule")
-
         domain_errors = list(_json_domain_errors(capsule))
         if domain_errors:
             return {"valid": False, "errors": domain_errors}

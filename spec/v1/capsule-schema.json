@@ -36,6 +36,9 @@
     "sealed_by": {
       "type": "string"
     },
+    "seal_notes": {
+      "type": "string"
+    },
     "checksums_digest": {
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
@@ -59,7 +62,7 @@
         },
         "max_qubit_count": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 0
         },
         "gate_set": {
           "type": "array",
@@ -186,7 +189,7 @@
     "extensions": { "type": "object" }
   },
   "if": {
-    "properties": { "lifecycle_state": { "const": "sealed" } },
+    "properties": { "lifecycle_state": { "enum": ["sealed", "archived"] } },
     "required": ["lifecycle_state"]
   },
   "then": {

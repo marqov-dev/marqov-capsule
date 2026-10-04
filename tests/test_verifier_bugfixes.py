@@ -40,6 +40,7 @@ def _seal(capsule_dir) -> str:
         status="success",
         result_type="probabilistic",
         backend={"provider": "ibm", "name": "ibm_kyiv", "shots": 1024},
+        verification_settings={"epsilon": 0.02, "min_shots": 100, "tolerance_regime": "strict"},
     )
     return b.seal(capsule_dir=capsule_dir, sealed_by="test-runner")
 
@@ -88,6 +89,8 @@ def test_injected_fifo_fails_verification(tmp_path):
 
     assert CapsuleVerifier.verify_checksums(capsule_dir)["status"] == "pass"
 
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("this platform has no FIFOs")
     os.mkfifo(payload / "backdoor")
     result = CapsuleVerifier.verify_checksums(capsule_dir)
 
@@ -98,6 +101,8 @@ def test_injected_fifo_fails_verification(tmp_path):
 def test_injected_fifo_fails_full_integrity(tmp_path):
     capsule_dir = tmp_path / "bell.capsule"
     sealed_id = _seal(capsule_dir)
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("this platform has no FIFOs")
     os.mkfifo(capsule_dir / "payload" / "backdoor")
 
     result = CapsuleVerifier.verify_integrity(capsule_dir, expected_id=sealed_id)
@@ -184,6 +189,8 @@ def test_open_on_nonregular_capsule_fails_cleanly(tmp_path):
 
     capsule_dir = tmp_path / "bell.capsule"
     sealed_id = _seal(capsule_dir)
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("this platform has no FIFOs")
     os.mkfifo(capsule_dir / "payload" / "backdoor")
     dest = tmp_path / "out"
 

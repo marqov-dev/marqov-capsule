@@ -29,7 +29,7 @@ import math
 import re
 import string
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -58,10 +58,15 @@ _SHAPE_RULES: list[tuple[str, re.Pattern[str]]] = [
 # rather than line by line (a line-oriented scan never sees BEGIN and END on the
 # same line). ``-----BEGIN CERTIFICATE-----`` is not a private key and is left
 # to the credential-file filename rule.
-_PRIVATE_KEY_BLOCK_RE = re.compile(
-    r"-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----"
-    r"[\s\S]{16,}?-----END[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----"
-)
+#
+# BEGIN and END are matched separately and paired by position (see
+# ``_iter_private_key_blocks``). A single regex with a lazy ``[\s\S]{16,}?``
+# between them re-scanned to end-of-file from every BEGIN that had no END, so
+# a file of BEGIN markers cost O(n²): 7 s per 200 KB, hours per 10 MB (#126).
+_PEM_BEGIN_RE = re.compile(r"-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----")
+_PEM_END_RE = re.compile(r"-----END[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----")
+_PEM_MIN_BODY = 16
+_PEM_MAX_BLOCK = 64 * 1024  # a PEM body is never more than a few KB
 
 # IBM Quantum token: keyword proximity to a 64-char hex value. There is no
 # upstream rule for this shape; expressed as proximity precisely because a bare
@@ -82,11 +87,20 @@ _KNOWN_NAME_RE = re.compile(
 
 # Inline SDK constructors handed a *quoted literal* token. ``Service(token=var)``
 # (passing a variable read from the environment) is safe and does not match.
-_CONSTRUCTOR_RE = re.compile(
-    r"(?:QiskitRuntimeService|IBMProvider|IBMQ|AWSSession)\s*\([^)]*?"
+#
+# Matched in two linear steps (see ``_iter_constructor_literals``): the keyword
+# literal is found first, then the text immediately before it is checked for
+# an open ``Name(`` within a bounded window. The old single regex,
+# ``Name\s*\([^)]*?keyword=``, scanned to end of line from every ``Name(`` that
+# had no closing paren — 27 s per 100 KB line of ``IBMQ(`` (#126).
+_CONSTRUCTOR_KW_RE = re.compile(
     r"(?:token|credentials?|api_?key|secret)\s*=\s*['\"](?P<val>[^'\"\n]{3,200})['\"]",
     re.IGNORECASE,
 )
+_CONSTRUCTOR_NAME_RE = re.compile(
+    r"(?:QiskitRuntimeService|IBMProvider|IBMQ|AWSSession)\s*$", re.IGNORECASE,
+)
+_CONSTRUCTOR_WINDOW = 300  # chars of argument list allowed before the keyword
 
 # ---------------------------------------------------------------------------
 # Tier B — keyword proximity + charset-split entropy (warn, never block).
@@ -317,6 +331,44 @@ def _iter_entropy_candidates(line: str):
             yield tok, m.start(), m.end(), reason
 
 
+def _iter_private_key_blocks(text: str):
+    """Yield ``(start, end)`` spans of PEM private-key blocks, in linear time.
+
+    END markers are located once; each BEGIN is paired with the first END that
+    follows it (``bisect``), accepted when the body is at least
+    ``_PEM_MIN_BODY`` chars and the whole block at most ``_PEM_MAX_BLOCK``.
+    BEGIN markers that fall inside an accepted block are skipped.
+    """
+    import bisect
+    ends = [(m.start(), m.end()) for m in _PEM_END_RE.finditer(text)]
+    end_starts = [s for s, _ in ends]
+    resume = 0
+    for begin in _PEM_BEGIN_RE.finditer(text):
+        if begin.start() < resume:
+            continue
+        i = bisect.bisect_left(end_starts, begin.end() + _PEM_MIN_BODY)
+        if i == len(ends):
+            return  # no END after this BEGIN: nothing later can match either
+        end_start, end_end = ends[i]
+        if end_end - begin.start() > _PEM_MAX_BLOCK:
+            continue
+        yield begin.start(), end_end
+        resume = end_end
+
+
+def _iter_constructor_literals(line: str):
+    """Yield keyword matches whose literal sits inside an open SDK constructor
+    call: ``Name(`` with no ``)`` between it and the keyword, within
+    ``_CONSTRUCTOR_WINDOW`` chars. Linear in the line length."""
+    for kw in _CONSTRUCTOR_KW_RE.finditer(line):
+        window = line[max(0, kw.start() - _CONSTRUCTOR_WINDOW):kw.start()]
+        open_paren = window.rfind("(")
+        if open_paren == -1 or ")" in window[open_paren:]:
+            continue
+        if _CONSTRUCTOR_NAME_RE.search(window[:open_paren]):
+            yield kw
+
+
 def _finding_allowed(line: str, match_end: int) -> bool:
     """True if a ``# capsule:allow`` annotation suppresses the finding that ends
     at ``match_end``. Scoped to a trailing comment on the same statement: the
@@ -332,15 +384,16 @@ def _scan_text(text: str, filepath: str) -> list[dict]:
     findings: list[dict] = []
 
     # Multi-line shape: PEM private-key blocks, scanned across the whole file.
-    for m in _PRIVATE_KEY_BLOCK_RE.finditer(text):
-        line_no = text.count("\n", 0, m.start()) + 1
-        begin_line = text[m.start():text.find("\n", m.start())]
+    for start, end in _iter_private_key_blocks(text):
+        line_no = text.count("\n", 0, start) + 1
+        newline = text.find("\n", start)
+        begin_line = text[start:newline if newline != -1 else len(text)]
         if _ALLOW_RE.search(begin_line):
             continue
         findings.append({
             "file": filepath,
             "line": line_no,
-            "match": _redact_value(m.group(0)),
+            "match": _redact_value(text[start:end]),
             "reason": "private_key_block",
             "blocking": True,
             "tier": "A",
@@ -387,7 +440,7 @@ def _scan_text(text: str, filepath: str) -> list[dict]:
                 add(m.start("val"), m.end("val"), "name_pattern", val, True, "A")
 
         # --- Tier A: SDK constructor handed a literal token (block) ---
-        for m in _CONSTRUCTOR_RE.finditer(line):
+        for m in _iter_constructor_literals(line):
             add(m.start("val"), m.end("val"), "constructor_pattern",
                 m.group("val"), True, "A")
 
@@ -448,25 +501,68 @@ def _scan_notebook(nb_path: str, content: str) -> list[dict]:
         return []
 
     findings = []
-    for cell in nb.get("cells") or []:
+
+    def scan(value, cell_index, location):
+        # ``line`` counts within the cell source or output being scanned, not
+        # within the .ipynb file (which is JSON); ``cell`` (0-based) and
+        # ``location`` are what let a reader find it (#100).
+        for finding in _scan_text(_joined(value), nb_path):
+            finding["cell"] = cell_index
+            finding["location"] = location
+            findings.append(finding)
+
+    cells = nb.get("cells")
+    if not isinstance(cells, list):
+        # An int/bool raises on iteration; a string iterates per character.
+        # Neither is a notebook (#125).
+        return []
+    for cell_index, cell in enumerate(cells):
         if not isinstance(cell, dict):
             continue
-        findings.extend(_scan_text(_joined(cell.get("source")), nb_path))
+        scan(cell.get("source"), cell_index, "source")
 
-        for output in cell.get("outputs") or []:
+        outputs = cell.get("outputs")
+        if not isinstance(outputs, list):
+            continue
+        for output_index, output in enumerate(outputs):
             if not isinstance(output, dict):
                 continue
+            location = f"output[{output_index}]"
             output_type = output.get("output_type", "")
             if output_type == "stream":
-                findings.extend(_scan_text(_joined(output.get("text")), nb_path))
+                scan(output.get("text"), cell_index, location)
             elif output_type in ("display_data", "execute_result"):
                 data = output.get("data")
                 if isinstance(data, dict) and "text/plain" in data:
-                    findings.extend(_scan_text(_joined(data["text/plain"]), nb_path))
+                    scan(data["text/plain"], cell_index, location)
             elif output_type == "error":
-                findings.extend(_scan_text(_joined(output.get("traceback")), nb_path))
-                findings.extend(_scan_text(_joined(output.get("evalue")), nb_path))
+                scan(output.get("traceback"), cell_index, location)
+                scan(output.get("evalue"), cell_index, location)
     return findings
+
+
+def finding_location(finding: dict) -> str:
+    """Where a finding is, for a message: ``file:line``, or for a notebook
+    ``file:cell N:line L`` / ``file:cell N:output[K]:line L``."""
+    if "cell" not in finding:
+        return f"{finding['file']}:{finding['line']}"
+    where = f"{finding['file']}:cell {finding['cell']}"
+    if finding.get("location", "source") != "source":
+        where += f":{finding['location']}"
+    return f"{where}:line {finding['line']}"
+
+
+# How much of a file is examined to decide it is binary: a NUL byte in the
+# first 8 KB, the heuristic git uses.
+_BINARY_SNIFF_BYTES = 8192
+
+
+def _looks_binary(path: Path) -> bool:
+    try:
+        with open(path, "rb") as f:
+            return b"\x00" in f.read(_BINARY_SNIFF_BYTES)
+    except OSError:
+        return False
 
 
 class CapsuleRedactor:
@@ -492,8 +588,13 @@ class CapsuleRedactor:
         #: caller can report narrowed scope without paying for a full scan.
         self.capsuleignore_patterns = sorted(self._capsuleignore)
 
-    def scan(self) -> dict[str, Any]:
+    def scan(self, overrides: Optional[dict[str, str]] = None) -> dict[str, Any]:
         """Scan all files in capsule_dir for credentials.
+
+        ``overrides`` maps a capsule-relative path to text that is scanned *in
+        place of* the on-disk file of that name (or in addition to the tree, if
+        no such file exists). The builder uses it to scan the manifest it is
+        about to write without first writing it (#57, #121).
 
         Returns:
             ``has_secrets``, ``findings``, plus ``skipped`` (paths not scanned)
@@ -501,19 +602,29 @@ class CapsuleRedactor:
             asked for). The last two exist so that narrowing the scan scope is
             visible rather than silent — a .capsuleignore containing ``source``
             would otherwise disable scanning for that whole subtree with no
-            indication in the result (#34).
+            indication in the result (#34). ``skipped_binary`` lists files not
+            scanned because they are binary: regex-matching a 64 MB array dump
+            took 14 s and found nothing, and every scanner this module follows
+            skips them — but it is reported, for the same reason (#98).
         """
         all_findings: list[dict] = []
         skipped: list[str] = []
+        skipped_binary: list[str] = []
+        pending = dict(overrides or {})
 
+        # (relative path, source) where source is a Path to read or the text itself.
+        entries: list[tuple[str, Any]] = []
         for file_path in sorted(self.capsule_dir.rglob("*")):
             # Do not follow symlinks — their target may live outside the capsule tree.
             if file_path.is_symlink():
                 continue
             if not file_path.is_file():
                 continue
-            rel = str(file_path.relative_to(self.capsule_dir))
+            rel = file_path.relative_to(self.capsule_dir).as_posix()
+            entries.append((rel, pending.pop(rel) if rel in pending else file_path))
+        entries.extend(sorted(pending.items()))
 
+        for rel, source in entries:
             # Credential-shaped filenames are a packaging problem, not a scanning
             # one: the file is going into the capsule whether or not it is read.
             # Checked before the ignore test so .capsuleignore cannot suppress it.
@@ -532,12 +643,19 @@ class CapsuleRedactor:
                 skipped.append(rel)
                 continue
 
-            try:
-                content = file_path.read_text(encoding="utf-8", errors="replace")
-            except Exception:
-                continue
+            if isinstance(source, Path):
+                # Notebooks are JSON text and are always scanned.
+                if not rel.endswith(".ipynb") and _looks_binary(source):
+                    skipped_binary.append(rel)
+                    continue
+                try:
+                    content = source.read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    continue
+            else:
+                content = source
 
-            if file_path.suffix == ".ipynb":
+            if rel.endswith(".ipynb"):
                 all_findings.extend(_scan_notebook(rel, content))
             else:
                 all_findings.extend(_scan_text(content, rel))
@@ -546,21 +664,23 @@ class CapsuleRedactor:
             "has_secrets": len(all_findings) > 0,
             "findings": all_findings,
             "skipped": skipped,
+            "skipped_binary": skipped_binary,
             "capsuleignore_patterns": sorted(self._capsuleignore),
         }
 
-    def scan_and_raise(self) -> dict[str, Any]:
+    def scan_and_raise(self, overrides: Optional[dict[str, str]] = None) -> dict[str, Any]:
         """Scan and raise RedactorError if *blocking* secrets are found.
 
         Only Tier A (distinctive shape) and credential-file findings block the
         seal. Tier B (entropy) findings are returned as warnings but never raise
         — entropy cannot reliably tell a secret from a numerical payload.
+        ``overrides`` is passed through to :meth:`scan`.
         """
-        result = self.scan()
+        result = self.scan(overrides=overrides)
         blocking = [f for f in result["findings"] if f.get("blocking")]
         if blocking and self.mode == "block":
             summary = "; ".join(
-                f"{f['file']}:{f['line']} ({f['reason']})" for f in blocking[:5]
+                f"{finding_location(f)} ({f['reason']})" for f in blocking[:5]
             )
             # Remediation has to match the finding. `# capsule:allow` is a
             # line annotation and cannot suppress a whole-file finding, so

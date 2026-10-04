@@ -1,7 +1,8 @@
 import sys
 from pathlib import Path
 import click
-import yaml
+
+from marqov_capsule._canonical import dump_manifest_yaml
 
 
 _DRAFT_MANIFEST = {
@@ -20,8 +21,10 @@ _DRAFT_MANIFEST = {
 @click.argument("directory", type=click.Path(file_okay=False))
 @click.option("--name", default=None, help="Capsule name (defaults to directory name)")
 @click.option("--paradigm", "paradigms", multiple=True,
-              help="Paradigm (gate-based, analog, annealing). Repeatable.")
-@click.option("--qubits", default=None, type=int, help="Maximum qubit count")
+              type=click.Choice(["gate-based", "analog", "annealing", "classical"]),
+              help="Paradigm (gate-based, analog, annealing, classical). Repeatable.")
+@click.option("--qubits", default=None, type=click.IntRange(min=0),
+              help="Maximum qubit count (0 for a classical-only capsule)")
 @click.option("--force", is_flag=True, help="Overwrite existing capsule.yaml")
 def init(directory, name, paradigms, qubits, force):
     """Create a draft capsule.yaml in DIRECTORY."""
@@ -41,6 +44,8 @@ def init(directory, name, paradigms, qubits, force):
     if qubits is not None:
         manifest["requirements"]["max_qubit_count"] = qubits
 
-    manifest_path.write_text(yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True))
+    # The profile-aware dumper quotes what the loader would otherwise type, so
+    # ``--name 1e-3`` stays the string the user typed (#92).
+    manifest_path.write_text(dump_manifest_yaml(manifest), encoding="utf-8", newline="\n")
     click.echo(f"Initialised: {manifest_path}")
-    click.echo("Edit capsule.yaml, add payload files, then run: marqov-capsule seal .")
+    click.echo(f"Edit capsule.yaml, add payload files, then run: marqov-capsule seal {directory}")

@@ -1,0 +1,4 @@
+# Check text files out with LF on every OS. Conformance fixtures and test
+# payloads are hashed byte for byte; a CRLF checkout on Windows changes every
+# digest and fails verification of capsules that are intact.
+* text=auto eol=lf

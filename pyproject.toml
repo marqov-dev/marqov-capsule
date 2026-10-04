@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "marqov-capsule"
-version = "0.1.1"
+dynamic = ["version"]
 description = "Open standard and tooling for reproducible, portable quantum experiments"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -37,6 +37,7 @@ dev = [
     "pytest>=7.0",
     "numpy>=1.24",
     "scipy>=1.10",
+    "hypothesis>=6.0",
 ]
 
 [project.scripts]
@@ -44,6 +45,9 @@ marqov-capsule = "marqov_capsule.cli.main:cli"
 
 [project.urls]
 Homepage = "https://marqov.ai"
+
+[tool.hatch.version]
+path = "src/marqov_capsule/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/marqov_capsule"]

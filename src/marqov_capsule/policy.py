@@ -100,6 +100,19 @@ class VerificationPolicy:
     alpha: float = DEFAULT_ALPHA
     honor_calibration_drift: bool = False
 
+    def __post_init__(self):
+        """The policy is the verifier's own; a value outside the meaningful
+        range is a caller bug, raised at construction rather than silently
+        producing an always-VERIFIED or never-VERIFIED comparison (#99)."""
+        for name in ("epsilon", "epsilon_drift"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not (0.0 < value < 1.0):
+                raise ValueError(f"{name} must be in (0, 1), got {value!r}")
+        if isinstance(self.alpha, bool) or not isinstance(self.alpha, (int, float)) or not (0.0 < self.alpha < 1.0):
+            raise ValueError(f"alpha must be in (0, 1), got {self.alpha!r}")
+        if isinstance(self.min_shots, bool) or not isinstance(self.min_shots, int) or self.min_shots < 1:
+            raise ValueError(f"min_shots must be an integer >= 1, got {self.min_shots!r}")
+
     def resolve(self, declared: Optional[dict]) -> dict[str, Any]:
         """Resolve effective settings from this policy and a capsule's declaration.
 

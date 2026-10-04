@@ -3,7 +3,9 @@
 Release through `.github/workflows/release.yml` using OIDC trusted publishing.
 Manual workflow dispatch publishes to TestPyPI. A pushed `v*` tag publishes to
 PyPI; a manual dispatch against a tag cannot select production publishing.
-The package version is declared in `pyproject.toml` and must match the tag.
+The package version is declared once, as `__version__` in
+`src/marqov_capsule/__init__.py` (`pyproject.toml` reads it from there), and
+must match the tag.
 
 ## 1. Prepare the candidate
 

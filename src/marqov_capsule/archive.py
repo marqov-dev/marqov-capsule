@@ -24,12 +24,30 @@ import warnings
 from pathlib import Path, PurePosixPath
 from typing import Optional, Union
 
+import yaml
+
+from marqov_capsule._canonical import load_manifest_yaml
+
+# Upper bound on what one archive may inflate to when unpacked, in bytes. A
+# gzip stream compresses zeros about 1000:1, so without a bound a few-kilobyte
+# .capsule fills the destination disk. 1 GiB is far above any capsule this
+# tool has produced; pass ``max_bytes`` to ``unpack_capsule`` to raise it, or
+# ``None`` to remove it for an archive you trust.
+MAX_UNPACK_BYTES = 1024 ** 3
+
+# Upper bound on the ``.checksums`` member, which is read fully into memory.
+# At roughly 100 bytes a line, 16 MiB is over a hundred thousand payload files.
+MAX_CHECKSUMS_BYTES = 16 * 1024 ** 2
+
+_PACKABLE_STATES = ("sealed", "archived")
+
 
 def pack_capsule(
     capsule_dir: Union[str, Path],
     output_path: Optional[Union[str, Path]] = None,
+    overwrite: bool = False,
 ) -> Path:
-    """Create a deterministic gzipped tarball from a capsule directory.
+    """Create a deterministic gzipped tarball from a sealed capsule directory.
 
     The archive is byte-reproducible: packing the same directory twice
     always yields identical bytes.
@@ -41,6 +59,10 @@ def pack_capsule(
             ``{name}.capsule``, where *name* is the (resolved) capsule
             directory's own name.  The output path is resolved relative to
             the cwd — never the capsule directory's parent or grandparent.
+        overwrite: Replace an existing file at the output path. Off by
+            default: an archive is a record distributed under an ID, and
+            replacing one in place with another capsule's bytes is the
+            mistake this refuses to make silently.
 
     Returns:
         Path to the created archive file.
@@ -48,7 +70,10 @@ def pack_capsule(
     Raises:
         FileNotFoundError: If the capsule directory or its ``.checksums``
             file does not exist.
-        ValueError: If a safe top-level archive name cannot be derived from
+        FileExistsError: If the output path exists and ``overwrite`` is false.
+        ValueError: If the directory is not a sealed capsule (its manifest is
+            missing, unreadable, or not in the ``sealed``/``archived`` state),
+            if a safe top-level archive name cannot be derived from
             the directory (e.g. the filesystem root), or if the resolved
             output path would overwrite the capsule directory itself.
     """
@@ -62,6 +87,15 @@ def pack_capsule(
         raise FileNotFoundError(
             f".checksums not found in {capsule_dir}. "
             "Seal the capsule first (save_capsule generates .checksums)."
+        )
+
+    # A draft with a leftover .checksums is not a capsule to ship: its manifest
+    # has no checksums_digest, so nothing binds the payload to it.
+    state = _lifecycle_state(capsule_dir)
+    if state not in _PACKABLE_STATES:
+        raise ValueError(
+            f"{capsule_dir} is not sealed (lifecycle_state: {state!r}). "
+            "Seal the capsule before packing it."
         )
 
     # Derive the archive's single top-level member name from the *resolved*
@@ -96,6 +130,12 @@ def pack_capsule(
             f"{output_path}. Pass an explicit output path (-o)."
         )
 
+    if not overwrite and (output_path.exists() or output_path.is_symlink()):
+        raise FileExistsError(
+            f"Archive already exists: {output_path}. "
+            "Pass overwrite=True (CLI: --force) to replace it."
+        )
+
     # Build a deterministic tar into an in-memory buffer, then gzip with
     # mtime=0 so the gzip header is also deterministic.
     tar_buf = io.BytesIO()
@@ -107,7 +147,9 @@ def pack_capsule(
     # GzipFile embeds the filename in the header by default when given
     # a file object; passing filename="" suppresses it so archives
     # written to different paths are still byte-identical.
-    with open(output_path, "wb") as fout:
+    # "xb" makes the existence check above atomic: a file that appeared in
+    # between is still not replaced.
+    with open(output_path, "wb" if overwrite else "xb") as fout:
         with gzip.GzipFile(
             filename="", fileobj=fout, mode="wb", mtime=0
         ) as gz:
@@ -119,6 +161,7 @@ def pack_capsule(
 def unpack_capsule(
     archive_path: Union[str, Path],
     output_dir: Optional[Union[str, Path]] = None,
+    max_bytes: Optional[int] = MAX_UNPACK_BYTES,
 ) -> Path:
     """Extract a capsule archive to a directory.
 
@@ -128,6 +171,9 @@ def unpack_capsule(
             working directory.  The archive's top-level directory is
             preserved, so ``foo.capsule`` extracts to
             ``<output_dir>/foo.capsule/``.
+        max_bytes: Refuse an archive whose members inflate to more than this
+            many bytes in total (default ``MAX_UNPACK_BYTES``). ``None``
+            disables the limit.
 
     Returns:
         Path to the extracted capsule directory.
@@ -135,7 +181,8 @@ def unpack_capsule(
     Raises:
         FileNotFoundError: If the archive does not exist.
         ValueError: If the archive layout is ambiguous, lacks a regular
-            ``capsule.yaml``, or its destination capsule directory exists.
+            ``capsule.yaml``, its destination capsule directory exists, or it
+            would inflate past ``max_bytes``.
     """
     archive_path = Path(archive_path)
     if not archive_path.exists():
@@ -146,46 +193,31 @@ def unpack_capsule(
     else:
         output_dir = Path(output_dir)
 
-    with tarfile.open(str(archive_path), "r:gz") as tf:
-        # Validate that the archive contains capsule.yaml
-        member_names = tf.getnames()
-        has_capsule_yaml = any(
-            name.endswith("/capsule.yaml") or name == "capsule.yaml"
-            for name in member_names
-        )
-        if not has_capsule_yaml:
-            raise ValueError(
-                f"Archive does not contain capsule.yaml: {archive_path}"
-            )
-
+    with _open_archive(archive_path) as tf:
         # Validate the complete layout before writing any files. One archive
         # represents one capsule; duplicate names would otherwise overwrite
         # earlier members, and multiple roots leave the return value ambiguous.
-        roots = set()
-        seen = set()
-        normalized_names = set()
-        members_by_name = {}
-        for member in tf.getmembers():
-            name = member.name.rstrip("/")
-            parts = PurePosixPath(name)
-            if (not name or parts.is_absolute() or ".." in parts.parts
-                    or parts.as_posix() != name):
-                raise ValueError(f"Refusing unsafe archive member: {member.name!r}")
-            if name in seen:
-                raise ValueError(f"Duplicate archive member: {name!r}")
-            normalized = unicodedata.normalize("NFC", name)
-            if normalized in normalized_names:
-                raise ValueError(f"Archive members collide after Unicode normalization: {name!r}")
-            normalized_names.add(normalized)
-            seen.add(name)
-            members_by_name[name] = member
-            roots.add(parts.parts[0])
-        if len(roots) != 1:
-            raise ValueError("Archive must contain a single top-level capsule directory")
-        capsule_dir_name = roots.pop()
+        capsule_dir_name, members_by_name = _single_root_layout(tf)
         manifest_name = f"{capsule_dir_name}/capsule.yaml"
-        if manifest_name not in seen or not members_by_name[manifest_name].isfile():
+        if manifest_name not in members_by_name or not members_by_name[manifest_name].isfile():
             raise ValueError("Archive must contain a regular capsule.yaml under its top-level directory")
+        # .checksums is read by payload_digest and verify after extraction; a
+        # link or directory member of that name would make tarfile follow the
+        # link (KeyError / RecursionError) or hide the wrong type behind a
+        # "not found" message. Refuse it up front (#124).
+        checksums_name = f"{capsule_dir_name}/.checksums"
+        if checksums_name in members_by_name and not members_by_name[checksums_name].isreg():
+            raise ValueError(".checksums must be a regular file member of the archive")
+        if checksums_name in members_by_name:
+            _check_checksums_size(members_by_name[checksums_name])
+        # Sizes come from the member headers, which bound what extraction
+        # writes, so the limit is enforced before a single byte lands on disk.
+        total = sum(m.size for m in members_by_name.values() if m.isreg())
+        if max_bytes is not None and total > max_bytes:
+            raise ValueError(
+                f"archive inflates to {total} bytes, which exceeds the "
+                f"{max_bytes}-byte limit"
+            )
         destination = output_dir / capsule_dir_name
         if destination.exists() or destination.is_symlink():
             raise ValueError(f"Capsule destination already exists: {destination}")
@@ -196,12 +228,80 @@ def unpack_capsule(
         # admits older 3.10/3.11 patch releases where it raises TypeError and
         # kills the whole unpack path.  Feature-detect it and fall back to a
         # hand-rolled safe extraction that guards traversal and links.
-        if _extractall_filter_supported():
-            tf.extractall(path=str(output_dir), filter="data")
-        else:
-            _safe_extractall(tf, output_dir)
+        try:
+            if _extractall_filter_supported():
+                tf.extractall(path=str(output_dir), filter="data")
+            else:
+                _safe_extractall(tf, output_dir)
+        except EOFError as exc:
+            raise ValueError(f"archive is truncated or corrupt: {archive_path}") from exc
 
     return output_dir / capsule_dir_name
+
+
+class _open_archive:
+    """``tarfile.open(path, "r:gz")`` whose read errors are ``ValueError``.
+
+    A gzip stream cut off after its header raises ``EOFError`` from inside
+    tarfile — neither an ``OSError`` nor a ``TarError`` — and a stream that is
+    not gzip at all raises ``tarfile.ReadError``. Both are "this is not a
+    capsule archive", which the public API documents as ``ValueError`` (#124).
+    """
+
+    def __init__(self, archive_path: Path):
+        self.archive_path = archive_path
+        self._tf: Optional[tarfile.TarFile] = None
+
+    def __enter__(self) -> tarfile.TarFile:
+        try:
+            self._tf = tarfile.open(str(self.archive_path), "r:gz")
+            # Read the whole member table now so a truncated stream fails here,
+            # as ValueError, rather than from a later getmembers()/extract.
+            self._tf.getmembers()
+        except EOFError as exc:
+            self._close()
+            raise ValueError(f"archive is truncated or corrupt: {self.archive_path}") from exc
+        except tarfile.TarError as exc:
+            self._close()
+            raise ValueError(f"not a capsule archive: {self.archive_path}: {exc}") from exc
+        return self._tf
+
+    def __exit__(self, *exc_info):
+        self._close()
+
+    def _close(self):
+        if self._tf is not None:
+            self._tf.close()
+            self._tf = None
+
+
+def _single_root_layout(tf: tarfile.TarFile) -> tuple[str, dict[str, tarfile.TarInfo]]:
+    """Validate member names and return ``(root dir name, members by name)``.
+
+    Shared by ``unpack_capsule`` and ``payload_digest`` so both agree on what a
+    well-formed archive is: safe relative names, no duplicates (byte-wise or
+    after NFC), exactly one top-level directory (#94).
+    """
+    roots = set()
+    normalized_names = set()
+    members_by_name: dict[str, tarfile.TarInfo] = {}
+    for member in tf.getmembers():
+        name = member.name.rstrip("/")
+        parts = PurePosixPath(name)
+        if (not name or parts.is_absolute() or ".." in parts.parts
+                or parts.as_posix() != name):
+            raise ValueError(f"Refusing unsafe archive member: {member.name!r}")
+        if name in members_by_name:
+            raise ValueError(f"Duplicate archive member: {name!r}")
+        normalized = unicodedata.normalize("NFC", name)
+        if normalized in normalized_names:
+            raise ValueError(f"Archive members collide after Unicode normalization: {name!r}")
+        normalized_names.add(normalized)
+        members_by_name[name] = member
+        roots.add(parts.parts[0])
+    if len(roots) != 1:
+        raise ValueError("Archive must contain a single top-level capsule directory")
+    return roots.pop(), members_by_name
 
 
 def payload_digest(capsule_dir_or_archive: Union[str, Path]) -> str:
@@ -251,6 +351,29 @@ def payload_digest(capsule_dir_or_archive: Union[str, Path]) -> str:
 
     digest = hashlib.sha256(checksums_bytes).hexdigest()
     return f"sha256:{digest}"
+
+
+def _lifecycle_state(capsule_dir: Path) -> Optional[str]:
+    """The ``lifecycle_state`` declared by ``capsule_dir/capsule.yaml``."""
+    manifest_path = capsule_dir / "capsule.yaml"
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise ValueError(f"{capsule_dir} is not sealed: it has no capsule.yaml")
+    try:
+        manifest = load_manifest_yaml(manifest_path.read_text(encoding="utf-8"))
+    except (yaml.YAMLError, UnicodeDecodeError) as exc:
+        raise ValueError(f"{manifest_path} could not be parsed: {exc.__class__.__name__}") from exc
+    if not isinstance(manifest, dict):
+        raise ValueError(f"{manifest_path} must be a YAML mapping")
+    state = manifest.get("lifecycle_state")
+    return state if isinstance(state, str) else None
+
+
+def _check_checksums_size(member: tarfile.TarInfo) -> None:
+    if member.size > MAX_CHECKSUMS_BYTES:
+        raise ValueError(
+            f".checksums member is {member.size} bytes, which exceeds the "
+            f"{MAX_CHECKSUMS_BYTES}-byte limit"
+        )
 
 
 def _add_directory_deterministic(
@@ -368,22 +491,35 @@ def _safe_extractall(tf: tarfile.TarFile, output_dir: Path) -> None:
 
 
 def _extract_checksums_from_archive(archive_path: Path) -> bytes:
-    """Extract the .checksums member from a tar.gz archive without full extraction.
+    """Read the *root* ``.checksums`` member of a capsule archive without
+    extracting anything to disk.
 
-    Searches for a member whose name ends with ``/.checksums`` or is
-    exactly ``.checksums``.
+    Only ``<root>/.checksums`` counts. Members are stored in byte order, so a
+    payload subdirectory sorting before ``.`` (``-data/``, ``#notes/`` …) that
+    carries its own ``.checksums`` — legal payload, since only the root file
+    is excluded from checksumming — used to be found first, and ``pack``
+    reported the digest of the decoy (#94).
 
     Returns:
         The raw bytes of the .checksums file.
 
     Raises:
-        FileNotFoundError: If no .checksums member is found.
+        FileNotFoundError: If the root has no ``.checksums`` member.
+        ValueError: If the archive is malformed, has zero or several roots,
+            or its ``.checksums`` member is not a regular file (#124).
     """
-    with tarfile.open(str(archive_path), "r:gz") as tf:
-        for member in tf.getmembers():
-            if member.name.endswith("/.checksums") or member.name == ".checksums":
-                f = tf.extractfile(member)
-                if f is not None:
-                    return f.read()
-
-    raise FileNotFoundError(f".checksums not found in archive: {archive_path}")
+    with _open_archive(archive_path) as tf:
+        root, members_by_name = _single_root_layout(tf)
+        member = members_by_name.get(f"{root}/.checksums")
+        if member is None:
+            raise FileNotFoundError(f".checksums not found in archive: {archive_path}")
+        if not member.isreg():
+            raise ValueError(".checksums must be a regular file member of the archive")
+        _check_checksums_size(member)
+        f = tf.extractfile(member)
+        if f is None:
+            raise ValueError(".checksums must be a regular file member of the archive")
+        try:
+            return f.read()
+        except EOFError as exc:
+            raise ValueError(f"archive is truncated or corrupt: {archive_path}") from exc

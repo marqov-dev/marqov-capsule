@@ -310,6 +310,27 @@
       }
     },
     {
+      "name": "below-min-shots-asymmetric",
+      "note": "The floor applies to the smaller arm: 40000 reference shots do not rescue a 10-shot candidate. Section 6.2 declines without computing a bound. Pins the min() in the procedure (a max() passes every equal-arm vector).",
+      "ref_counts": {
+        "00": 20000,
+        "11": 20000
+      },
+      "new_counts": {
+        "00": 5,
+        "11": 5
+      },
+      "settings": {
+        "alpha": 0.05,
+        "epsilon": 0.02,
+        "min_shots": 100
+      },
+      "expected": {
+        "verdict": "INCONCLUSIVE",
+        "stage": "below-min-shots"
+      }
+    },
+    {
       "name": "disjoint-supports-clamped",
       "note": "Disjoint supports give TVD 1.0; point + slack exceeds 1 and must clamp to exactly 1.0.",
       "ref_counts": {

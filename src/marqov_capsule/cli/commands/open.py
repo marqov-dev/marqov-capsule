@@ -3,13 +3,14 @@ import shutil
 import sys
 from pathlib import Path
 import click
+from marqov_capsule.cli._manifest import check_expected_id
 from marqov_capsule.verifier import CapsuleVerifier
 
 
 @click.command()
 @click.argument("capsule", type=click.Path(exists=True, file_okay=False))
 @click.option("--dest", "-d", default=None, help="Destination directory")
-@click.option("--id", "expected_id", default=None,
+@click.option("--id", "expected_id", default=None, callback=check_expected_id,
               help="Trusted capsule ID to verify the manifest against (spec §6 layer 3)")
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
 def open_cmd(capsule, dest, expected_id, as_json):
@@ -33,7 +34,18 @@ def open_cmd(capsule, dest, expected_id, as_json):
 
     if dest:
         dest_path = Path(dest)
-        opened_to = dest_path / capsule_path.name
+        # ``Path(".").name`` is "" and ``Path("..").name`` is "..": resolve
+        # first, as pack_capsule does for the archive name, so ``open .
+        # --dest X`` lands in X/<real directory name> (#97).
+        name = capsule_path.resolve().name
+        if not name or name in (".", ".."):
+            message = f"cannot derive a destination name from {capsule}"
+            if as_json:
+                click.echo(json.dumps({"status": "error", "message": message}, indent=2))
+            else:
+                click.echo(f"Error: {message}", err=True)
+            sys.exit(1)
+        opened_to = dest_path / name
         # symlinks=True copies links as links rather than materialising their target
         # content into the destination (defence-in-depth; verify_checksums already
         # rejects capsules containing symlinks). A non-regular member (FIFO/socket/

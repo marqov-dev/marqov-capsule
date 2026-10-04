@@ -38,6 +38,7 @@ def _seal(capsule_dir: Path, counts=None) -> str:
         status="success",
         result_type="probabilistic",
         backend={"provider": "ibm", "name": "ibm_kyiv", "shots": 1024},
+        verification_settings={"epsilon": 0.02, "min_shots": 100, "tolerance_regime": "strict"},
     )
     return b.seal(capsule_dir=capsule_dir, sealed_by="test-runner")
 
@@ -47,7 +48,7 @@ def _rewrite_checksums(capsule_dir: Path) -> None:
     checksums = {}
     for fp in sorted(capsule_dir.rglob("*")):
         if fp.is_file() and fp.name not in {".checksums", "capsule.yaml"}:
-            rel = str(fp.relative_to(capsule_dir))
+            rel = fp.relative_to(capsule_dir).as_posix()
             checksums[rel] = "sha256:" + hashlib.sha256(fp.read_bytes()).hexdigest()
     (capsule_dir / ".checksums").write_text(yaml.dump(checksums, default_flow_style=False, sort_keys=True))
 
@@ -218,10 +219,14 @@ def test_cli_verify_id_mismatch_exits_1(tmp_path):
     from marqov_capsule.cli.main import cli
 
     capsule_dir = tmp_path / "bell.capsule"
-    _seal(capsule_dir)
+    sealed_id = _seal(capsule_dir)
+    # A well-formed mqc:1: ID that is not this capsule's — not a malformed
+    # string, which is a different failure (#114, #118).
+    wrong_id = "mqc:1:" + ("0" if sealed_id[6] != "0" else "1") + sealed_id[7:]
 
-    result = CliRunner().invoke(cli, ["verify", "--id", "0" * 64, str(capsule_dir)])
+    result = CliRunner().invoke(cli, ["verify", "--id", wrong_id, str(capsule_dir)])
     assert result.exit_code == 1, result.output
+    assert "capsule ID mismatch" in result.output
 
 
 def test_cli_verify_reports_capsule_id(tmp_path):
@@ -393,6 +398,6 @@ def test_cli_open_id_mismatch_refuses(tmp_path):
     _seal(capsule_dir)
 
     dest = tmp_path / "out"
-    result = CliRunner().invoke(cli, ["open", str(capsule_dir), "--id", "0" * 64, "--dest", str(dest)])
+    result = CliRunner().invoke(cli, ["open", str(capsule_dir), "--id", "mqc:1:" + "0" * 64, "--dest", str(dest)])
     assert result.exit_code == 1, result.output
     assert not (dest / "bell.capsule").exists()

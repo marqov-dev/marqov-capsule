@@ -1,36 +1,44 @@
 import json
-import sys
+import tarfile
 from pathlib import Path
 
 import click
 
-from marqov_capsule._canonical import compute_capsule_id, load_manifest_yaml
+from marqov_capsule._canonical import compute_capsule_id
 from marqov_capsule.archive import pack_capsule, payload_digest, unpack_capsule
+from marqov_capsule.cli._manifest import fail, load_manifest_or_exit
+
+# Everything the archive layer documents, plus the OS and tarfile families it
+# can still surface — a crafted or merely broken .capsule must be a one-line
+# error and exit 1 in both output modes, never a traceback (#96, #124).
+_ARCHIVE_ERRORS = (FileNotFoundError, ValueError, OSError, tarfile.TarError, EOFError)
 
 
 @click.command()
 @click.argument("directory", type=click.Path(exists=True, file_okay=False))
 @click.option("--output", "-o", default=None, help="Archive path (default: <name>.capsule)")
+@click.option("--force", is_flag=True, help="Replace an existing archive at the output path")
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
-def pack(directory, output, as_json):
+def pack(directory, output, force, as_json):
     """Pack a sealed capsule directory into a deterministic archive.
 
     The archive is byte-reproducible: packing the same capsule twice yields
     identical bytes. Identity is the capsule ID, which covers the manifest;
     the payload digest covers only the files listed in .checksums.
     """
-    try:
-        archive_path = pack_capsule(directory, output_path=output)
-    except FileNotFoundError as e:
-        click.echo(f"Error: {e}", err=True)
-        sys.exit(1)
+    # Read the manifest *before* writing anything: a draft that does not parse
+    # must not leave an archive behind (#95).
+    manifest = load_manifest_or_exit(Path(directory) / "capsule.yaml", as_json)
 
-    # Identity is the capsule ID: it covers the manifest, which .checksums
-    # deliberately does not. The payload digest is reported too, but labelled
-    # as what it is rather than as a content identifier (#48).
-    manifest = load_manifest_yaml((Path(directory) / "capsule.yaml").read_text())
-    capsule_id = compute_capsule_id(manifest)
-    digest = payload_digest(archive_path)
+    try:
+        archive_path = pack_capsule(directory, output_path=output, overwrite=force)
+        # Identity is the capsule ID: it covers the manifest, which .checksums
+        # deliberately does not. The payload digest is reported too, but
+        # labelled as what it is rather than as a content identifier (#48).
+        capsule_id = compute_capsule_id(manifest)
+        digest = payload_digest(archive_path)
+    except _ARCHIVE_ERRORS as e:
+        fail(str(e), as_json)
 
     if as_json:
         click.echo(json.dumps({
@@ -53,9 +61,8 @@ def unpack(archive, output, as_json):
     dest = Path(output) if output else Path.cwd()
     try:
         restored = unpack_capsule(archive, output_dir=dest)
-    except (FileNotFoundError, ValueError) as e:
-        click.echo(f"Error: {e}", err=True)
-        sys.exit(1)
+    except _ARCHIVE_ERRORS as e:
+        fail(str(e), as_json)
 
     if as_json:
         click.echo(json.dumps({"path": str(restored)}, indent=2))
