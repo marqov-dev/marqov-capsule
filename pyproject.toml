@@ -63,3 +63,9 @@ only-include = [
     "README.md",
     "pyproject.toml",
 ]
+
+# The version is read from the package (see [tool.hatch.version]); tell uv so
+# it rebuilds the editable install's metadata when that file changes, instead
+# of serving the cached version after a bump.
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/marqov_capsule/__init__.py" }]

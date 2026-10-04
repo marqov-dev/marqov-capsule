@@ -13,11 +13,11 @@ The format is an open standard (`spec/v1/`, CC-BY-4.0). The Python tooling is Ap
 Requires Python 3.10+:
 
 ```bash
-python -m pip install marqov-capsule==0.1.1
+python -m pip install marqov-capsule==0.2.0
 ```
 
 For offline installation, install a supplied release wheel with
-`python -m pip install ./marqov_capsule-0.1.1-py3-none-any.whl`.
+`python -m pip install ./marqov_capsule-0.2.0-py3-none-any.whl`.
 The source distribution includes
 `spec/v1/` and `examples/`; from its extracted directory, install with
 `python -m pip install .`.
