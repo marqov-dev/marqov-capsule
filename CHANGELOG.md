@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] — 0.2.0
+## [0.2.0] — 2026-10-03
 
 From the Fable review of 0.1.1 (epic #91). The fixes carry no behaviour change
 for a conformant manifest. The entries under "Changed" marked in bold refuse an
