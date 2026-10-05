@@ -222,7 +222,8 @@ Any mismatch must be reported as a verification failure.
 ### Statistical equivalence (probabilistic results)
 
 This optional procedure describes the reference implementation's current
-`CapsuleVerifier.verify_statistical` API. There is no statistical CLI in 0.1.0.
+`CapsuleVerifier.verify_statistical` API, which the `marqov-capsule compare`
+command exposes for two supplied count samples.
 Integrity verification and statistical equivalence are separate checks: a
 statistical verdict does not authenticate either input capsule.
 
