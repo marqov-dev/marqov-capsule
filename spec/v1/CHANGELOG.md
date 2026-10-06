@@ -8,6 +8,17 @@ Version history for the Marqov Capsule format specification.
 
 Clarifications to the digest scheme and manifest canonicalization ahead of the first tag, making the format byte-reproducible across independent implementations.
 
+### Parse-time rules (§5)
+
+Clarifications: each of these was a case the earlier text left open, and on which the Python reference and the independent Node checker gave different answers — so a manifest using one had no single ID. Nothing the reference writer emits is affected.
+
+- Mapping keys that are not strings MUST be rejected. The earlier text said both that keys "MUST be strings" and that a non-string key "is stringified"; the second sentence is removed.
+- `capsule.yaml` MUST be UTF-8, and an unpaired surrogate MUST be rejected.
+- The file MUST be exactly one document, and that document MUST be a mapping.
+- Alias nodes MUST be rejected; `<<` is an ordinary key.
+- Explicit tags outside the core set MUST be rejected, and explicitly tagged `!!int` / `!!float` / `!!bool` scalars are held to the implicit spellings.
+- 25 vectors added to `golden/canonical-edge-cases.json` (23 reject, 2 accept), including `bytes_hex` vectors for files that are not UTF-8 text.
+
 ### Verification and conformance
 
 - Added independent Node checks of the published YAML/digest corpus and fixed path-encoding vectors; no digest-format change.

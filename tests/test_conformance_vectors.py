@@ -86,11 +86,16 @@ def test_versioned_derived_id_does_not_hide_same_line_credential(tmp_path):
 
 
 @pytest.mark.parametrize("vector", json.loads(
-    (GOLDEN / "canonical-edge-cases.json").read_text()), ids=lambda v: v["name"])
+    (GOLDEN / "canonical-edge-cases.json").read_text(encoding="utf-8")), ids=lambda v: v["name"])
 def test_canonical_edge_vectors(vector):
     if vector.get("reject"):
+        # A reject vector has no capsule ID: decoding, parsing or
+        # canonicalising it must fail. ``bytes_hex`` vectors are files that
+        # are not UTF-8 text at all.
         with pytest.raises((ValueError, TypeError, yaml.YAMLError)):
-            canonical_bytes(load_manifest_yaml(vector["yaml"]))
+            text = (bytes.fromhex(vector["bytes_hex"]).decode("utf-8")
+                    if "bytes_hex" in vector else vector["yaml"])
+            compute_capsule_id(load_manifest_yaml(text))
         return
     manifest = load_manifest_yaml(vector["yaml"])
     expected = vector["canonical_utf8"].encode("utf-8")

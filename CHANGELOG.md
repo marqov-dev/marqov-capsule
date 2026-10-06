@@ -1,5 +1,27 @@
 # Changelog
 
+## [Unreleased]
+
+Brings the reference implementation and the independent Node checker to the
+spec's clarified parse-time rules (spec changelog, §5).
+
+### Changed
+
+- **A manifest key that is not a string is a parse error.** `1:`, `true:` and
+  `~:` used to load and be stringified; an unquoted `00:` silently became
+  `"0"`. Quote the key. In-memory dicts passed to the builder are unaffected.
+  (#119)
+- `compute_capsule_id` raises `ValueError` for anything that is not a mapping;
+  an empty or list-shaped document no longer has an ID. (#119)
+
+### Fixed
+
+- Node conformance checker: an explicit finite `!!float` is no longer
+  rejected; input is decoded as strict UTF-8; unpaired surrogates, non-core
+  tags, non-decimal `!!int` and non-mapping documents are rejected. It now
+  checks 55 vectors. (#120)
+- CONTRIBUTING cites the right spec sections. (#109)
+
 ## [0.2.0] — 2026-10-03
 
 From the Fable review of 0.1.1 (epic #91). The fixes carry no behaviour change
