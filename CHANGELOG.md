@@ -1,9 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] — 2026-10-06
 
-Brings the reference implementation and the independent Node checker to the
-spec's clarified parse-time rules (spec changelog, §5).
+From the Fable review of 0.1.1 (epic #91). The fixes carry no behaviour change
+for a conformant manifest. The entries under "Changed" marked in bold refuse an
+input, or report one differently, that 0.1.x accepted — hence the minor
+version. Every change ships through a release pipeline that now runs the test
+suite before publishing.
 
 ### Changed
 
@@ -13,24 +16,6 @@ spec's clarified parse-time rules (spec changelog, §5).
   (#119)
 - `compute_capsule_id` raises `ValueError` for anything that is not a mapping;
   an empty or list-shaped document no longer has an ID. (#119)
-
-### Fixed
-
-- Node conformance checker: an explicit finite `!!float` is no longer
-  rejected; input is decoded as strict UTF-8; unpaired surrogates, non-core
-  tags, non-decimal `!!int` and non-mapping documents are rejected. It now
-  checks 55 vectors. (#120)
-- CONTRIBUTING cites the right spec sections. (#109)
-
-## [0.2.0] — 2026-10-03
-
-From the Fable review of 0.1.1 (epic #91). The fixes carry no behaviour change
-for a conformant manifest. The entries under "Changed" marked in bold refuse an
-input, or report one differently, that 0.1.x accepted — hence the minor
-version. Every change ships through a release pipeline that now runs the test
-suite before publishing.
-
-### Changed
 
 - **Sealing validates the manifest against the schema.** `seal` / `seal_capsule`
   raise `CapsuleValidationError` (a `ValueError` carrying the validator's
@@ -82,6 +67,12 @@ suite before publishing.
   `spec/v1/conformance/golden/statistical-cases.json` (30 Node vectors).
 
 ### Fixed
+
+- Node conformance checker: an explicit finite `!!float` is no longer
+  rejected; input is decoded as strict UTF-8; unpaired surrogates, non-core
+  tags, non-decimal `!!int` and non-mapping documents are rejected. It now
+  checks 55 vectors. (#120)
+- CONTRIBUTING cites the right spec sections. (#109)
 
 - **Sealed IDs are reproducible from disk.** The manifest writer quoted for
   YAML 1.1 while the loader typed with the YAML 1.2 / JSON profile, so an

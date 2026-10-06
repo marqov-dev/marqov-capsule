@@ -9,10 +9,9 @@ The danger is one-directional: a declared value that makes verification
 tightens in the same direction, so the rule is per-parameter — see
 VerificationPolicy.resolve.
 
-The CLI surface this policy served (`verify --against`) is cut from 0.1.0
-along with statistical equivalence (#15). The policy and these tests stay so
-the trust boundary is already correct when that feature returns — it is much
-easier to keep than to remember.
+The CLI surface this policy serves is `marqov-capsule compare` (#15, #86):
+its thresholds come from the command line and this policy's defaults, never
+from a capsule's own declaration.
 """
 from marqov_capsule.policy import VerificationPolicy
 
