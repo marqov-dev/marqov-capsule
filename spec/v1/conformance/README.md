@@ -58,8 +58,9 @@ npm test --prefix tools/conformance
 This checker uses a pinned independent YAML parser and its own canonical JSON
 serializer, path encoder, SHA-256 hashing, and corpus walk. It reads the original
 YAML and payload files, not Python-produced intermediate objects. It matches all
-six manifest IDs and checksum bytes, nine canonicalization cases, three path
-vectors, and the eleven §6 decision-procedure cases. The required
+six manifest IDs and checksum bytes, 34 canonicalization cases (27 of them
+manifests that must be rejected), three path vectors, and the twelve §6
+decision-procedure cases. The required
 `conformance-node` CI job runs it independently of Python.
 
 `golden/checksum-path-cases.json` publishes exact checksum bytes for an empty
@@ -76,8 +77,25 @@ implementation. It does not validate the JSON Schema, run credential detection,
 or extract archives. It implements the §6 decision procedure only as far as the
 published vectors require — the point estimate, the slack term, the clamp, and
 the four-step verdict — and computes none of the diagnostics (chi-squared,
-energy distance), which never affect a verdict. It rejects aliases and
-non-string keys, whereas the Python API has some legacy permissive behavior.
+energy distance), which never affect a verdict. It does not check
+`derived_from` linkage, `..` or absolute paths in `.checksums`, the closed-set
+(extra file) rule, or that a `.checksums` file parses as the normative grammar
+(it compares bytes), and it cannot be pointed at an arbitrary capsule.
+
+### Known deviations from YAML 1.2 in the Python reference
+
+The Python reference parses with PyYAML, a YAML 1.1 parser, with the typing
+rules replaced. These differences from a YAML 1.2 parser remain and have no
+vectors; a manifest that depends on one may not get the same answer from two
+implementations. The reference writer emits none of them.
+
+- A tab after `:`, inside a plain scalar or before a comment is an error
+  (YAML 1.2 allows it).
+- A raw NEL (U+0085), LS (U+2028) or PS (U+2029) is a line break (content in
+  YAML 1.2), and CR-only line endings are accepted.
+- An escaped surrogate *pair* (`"\uD83D\uDE00"`) is rejected; a YAML 1.2
+  parser joins it into one character. Write the character itself.
+- `%YAML 1.3` and unknown directives are ignored rather than rejected.
 External review and broader interoperability testing remain release work.
 
 `golden/statistical-cases.json` publishes inputs and expected outputs for §6.

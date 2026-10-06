@@ -43,7 +43,7 @@ Breaking changes to `spec/v1/` follow a public RFC process:
 Every spec change proposal MUST include:
 
 **Reproducibility impact:** Does this change affect what can be verified, or how?
-Does it alter §7 (verification), §5 (digest scheme), or §4 (credential policy)?
+Does it alter §6 (verification), §5 (digest scheme), §4 (lifecycle), or the §8 conformance requirements (including the credential check)?
 
 **Portability impact:** Does this change affect what a third party (human or agent)
 needs to re-target and re-execute a capsule? Does it introduce any
