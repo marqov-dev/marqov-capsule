@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.2.0] — 2026-10-05
+## [0.2.0] — 2026-10-06
 
 From the Fable review of 0.1.1 (epic #91). The fixes carry no behaviour change
 for a conformant manifest. The entries under "Changed" marked in bold refuse an
@@ -9,6 +9,13 @@ version. Every change ships through a release pipeline that now runs the test
 suite before publishing.
 
 ### Changed
+
+- **A manifest key that is not a string is a parse error.** `1:`, `true:` and
+  `~:` used to load and be stringified; an unquoted `00:` silently became
+  `"0"`. Quote the key. In-memory dicts passed to the builder are unaffected.
+  (#119)
+- `compute_capsule_id` raises `ValueError` for anything that is not a mapping;
+  an empty or list-shaped document no longer has an ID. (#119)
 
 - **Sealing validates the manifest against the schema.** `seal` / `seal_capsule`
   raise `CapsuleValidationError` (a `ValueError` carrying the validator's
@@ -60,6 +67,12 @@ suite before publishing.
   `spec/v1/conformance/golden/statistical-cases.json` (30 Node vectors).
 
 ### Fixed
+
+- Node conformance checker: an explicit finite `!!float` is no longer
+  rejected; input is decoded as strict UTF-8; unpaired surrogates, non-core
+  tags, non-decimal `!!int` and non-mapping documents are rejected. It now
+  checks 55 vectors. (#120)
+- CONTRIBUTING cites the right spec sections. (#109)
 
 - **Sealed IDs are reproducible from disk.** The manifest writer quoted for
   YAML 1.1 while the loader typed with the YAML 1.2 / JSON profile, so an

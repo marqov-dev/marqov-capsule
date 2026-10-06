@@ -64,7 +64,8 @@ class _ManifestLoader(yaml.SafeLoader):
         decimal, never octal — ``0755`` -> 755, ``007`` -> 7, ``08540`` -> 8540)
         and rejects any integer whose magnitude exceeds ``_MAX_SAFE_INT``;
       * rejects duplicate mapping keys, which SafeLoader silently collapses to
-        the last value — a tamper/ambiguity hazard for a content-addressed ID;
+        the last value — a tamper/ambiguity hazard for a content-addressed ID —
+        and mapping keys that are not strings;
       * rejects anchors used through aliases. Aliases have no JSON
         representation, and an aliased manifest of a few hundred bytes expands
         to a tree that takes hours to canonicalise (billion laughs, #110);
@@ -104,10 +105,17 @@ class _ManifestLoader(yaml.SafeLoader):
             self._depth -= 1
 
     def construct_mapping(self, node, deep=False):
-        """Like SafeConstructor.construct_mapping but rejects duplicate keys.
+        """Like SafeConstructor.construct_mapping but rejects duplicate keys
+        and keys that are not strings.
 
         A duplicate key makes the parsed mapping — and therefore the capsule ID —
         depend on which value the reader happens to keep. Fail closed instead.
+
+        JSON object keys are strings, so a key the profile types as something
+        else (``1:``, ``true:``, ``~:``) has no canonical form two readers
+        agree on. Stringifying it loses information — an unquoted ``00:`` reads
+        as the integer 0 and would become ``"0"`` — so it is rejected; quote
+        the key (spec §5).
         """
         if not isinstance(node, yaml.MappingNode):
             raise ConstructorError(
@@ -123,6 +131,12 @@ class _ManifestLoader(yaml.SafeLoader):
                 raise ConstructorError(
                     "while constructing a mapping", node.start_mark,
                     f"found unhashable key ({exc})", key_node.start_mark,
+                )
+            if not isinstance(key, str):
+                raise ConstructorError(
+                    "while constructing a mapping", node.start_mark,
+                    f"found non-string key ({key!r}): mapping keys must be strings "
+                    "in a capsule manifest; quote the key", key_node.start_mark,
                 )
             if key in mapping:
                 raise ConstructorError(
@@ -433,7 +447,14 @@ def compute_capsule_id(capsule_dict: dict) -> str:
     — stable across YAML emitters because it operates on the parsed dict, not
     raw YAML bytes. The ``mqc:<version>:`` prefix makes the ID self-describing
     (see the module note); this is format version 1.
+
+    Raises ValueError if ``capsule_dict`` is not a mapping: a manifest is a
+    single mapping, and an empty document, a list or a bare scalar has no
+    capsule ID (spec §5).
     """
+    if not isinstance(capsule_dict, dict):
+        raise ValueError("a capsule manifest must be a mapping; "
+                         f"got {type(capsule_dict).__name__}")
     digest = hashlib.sha256(canonical_bytes(capsule_dict)).hexdigest()
     return f"{CAPSULE_ID_SCHEME}:{CAPSULE_ID_VERSION}:{digest}"
 

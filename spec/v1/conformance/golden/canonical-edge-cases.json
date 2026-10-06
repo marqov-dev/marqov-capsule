@@ -48,5 +48,132 @@
     "yaml": "\"2\": two\n\"10\": ten\n",
     "canonical_utf8": "{\"10\":\"ten\",\"2\":\"two\"}",
     "capsule_id": "mqc:1:b71e124675fc80e7314688bffdb68e83515851fb51474125db9a0c4c8aca3808"
+  },
+  {
+    "name": "explicit-core-tags",
+    "yaml": "c: !!float 1.5\nf: !!float 1\ni: !!int 7\nn: !!null null\ns: !!str 123\nm: !!map {a: !!seq [1]}\n",
+    "canonical_utf8": "{\"c\":1.5,\"f\":1,\"i\":7,\"m\":{\"a\":[1]},\"n\":null,\"s\":\"123\"}",
+    "capsule_id": "mqc:1:ef6e79f35b4d202f6921352ee0694e53bf0b9d5ab0a0102b03235258fb71a484"
+  },
+  {
+    "name": "merge-key-is-a-plain-string",
+    "yaml": "child:\n  <<: {x: 2}\n",
+    "canonical_utf8": "{\"child\":{\"<<\":{\"x\":2}}}",
+    "capsule_id": "mqc:1:bb4ec97f0d7091d025997398f104d3602e5b39b222c4fe252f8eb2ae5ee182c0"
+  },
+  {
+    "name": "alias",
+    "yaml": "a: &a [1]\nb: *a\n",
+    "reject": true
+  },
+  {
+    "name": "tag-timestamp",
+    "yaml": "t: !!timestamp 2026-09-09T00:00:00Z\n",
+    "reject": true
+  },
+  {
+    "name": "tag-omap",
+    "yaml": "o: !!omap [{a: 1}]\n",
+    "reject": true
+  },
+  {
+    "name": "tag-pairs",
+    "yaml": "o: !!pairs [{a: 1}]\n",
+    "reject": true
+  },
+  {
+    "name": "tag-set",
+    "yaml": "o: !!set {a: null}\n",
+    "reject": true
+  },
+  {
+    "name": "tag-binary",
+    "yaml": "o: !!binary aGk=\n",
+    "reject": true
+  },
+  {
+    "name": "tag-local",
+    "yaml": "o: !mine x\n",
+    "reject": true
+  },
+  {
+    "name": "tagged-bool-yes",
+    "yaml": "b: !!bool yes\n",
+    "reject": true
+  },
+  {
+    "name": "tagged-int-octal",
+    "yaml": "i: !!int 0o17\n",
+    "reject": true
+  },
+  {
+    "name": "tagged-int-quoted-hex",
+    "yaml": "i: !!int \"0x1F\"\n",
+    "reject": true
+  },
+  {
+    "name": "tagged-float-nan",
+    "yaml": "c: !!float .nan\n",
+    "reject": true
+  },
+  {
+    "name": "key-integer",
+    "yaml": "1: a\n",
+    "reject": true
+  },
+  {
+    "name": "key-boolean",
+    "yaml": "true: a\n",
+    "reject": true
+  },
+  {
+    "name": "key-null",
+    "yaml": "~: a\n",
+    "reject": true
+  },
+  {
+    "name": "key-float",
+    "yaml": "1.5: a\n",
+    "reject": true
+  },
+  {
+    "name": "document-sequence",
+    "yaml": "- a\n",
+    "reject": true
+  },
+  {
+    "name": "document-scalar",
+    "yaml": "hello\n",
+    "reject": true
+  },
+  {
+    "name": "document-empty",
+    "yaml": "",
+    "reject": true
+  },
+  {
+    "name": "document-comment-only",
+    "yaml": "# only a comment\n",
+    "reject": true
+  },
+  {
+    "name": "multiple-documents",
+    "yaml": "a: 1\n---\nb: 2\n",
+    "reject": true
+  },
+  {
+    "name": "escaped-lone-surrogate",
+    "yaml": "s: \"\\uD800\"\n",
+    "reject": true
+  },
+  {
+    "name": "invalid-utf8",
+    "bytes_hex": "6e616d653a20ff0a",
+    "reject": true
+  },
+  {
+    "name": "utf16-with-bom",
+    "bytes_hex": "fffe61003a00200031000a00",
+    "reject": true
   }
 ]

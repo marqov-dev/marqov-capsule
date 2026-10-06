@@ -11,6 +11,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 from marqov_capsule._canonical import compute_capsule_id, load_manifest_yaml
 from marqov_capsule.builder import CapsuleBuilder, CapsuleStateError
@@ -184,12 +185,16 @@ def test_datetime_parameter_id_round_trips_from_disk(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_non_string_mapping_keys_do_not_crash():
-    """A manifest with typed (int/bool) mapping keys must canonicalize cleanly
-    and deterministically instead of raising out of jcs. (#20)"""
-    manifest = load_manifest_yaml("parameters:\n  123: foo\n  true: bar\n")
+    """Typed (int/bool) mapping keys never raise a bare exception out of jcs
+    (#20). In a YAML manifest they are a parse error, because two readers do
+    not agree on their spelling (spec §5, #119); in an in-memory dict handed
+    to the builder they are stringified deterministically."""
+    with pytest.raises(yaml.YAMLError, match="non-string key"):
+        load_manifest_yaml("parameters:\n  123: foo\n  true: bar\n")
+    manifest = {"parameters": {123: "foo", True: "bar"}}
     cid = compute_capsule_id(manifest)
     assert cid.startswith("mqc:1:") and len(cid.split(":")[-1]) == 64
-    assert cid == compute_capsule_id(manifest)
+    assert cid == compute_capsule_id({"parameters": {"123": "foo", "true": "bar"}})
 
 
 def test_verify_integrity_survives_non_string_key(tmp_path):
@@ -200,8 +205,9 @@ def test_verify_integrity_survives_non_string_key(tmp_path):
         "version: '1.0.0'\nname: t\nlifecycle_state: draft\nparameters:\n  42: x\n"
     )
     result = CapsuleVerifier.verify_integrity(capsule_dir)
-    assert result["status"] in ("pass", "fail")
-    assert result["capsule_id"] is not None and result["capsule_id"].startswith("mqc:1:") and len(result["capsule_id"].split(":")[-1]) == 64
+    assert result["status"] == "fail"
+    assert result["capsule_id"] is None
+    assert any("could not be parsed" in e for e in result["errors"])
 
 
 # ---------------------------------------------------------------------------

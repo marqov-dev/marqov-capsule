@@ -201,7 +201,13 @@ RFC 8785 canonicalises an already-valid value; it does not validate. For two ind
 - **Integers**: a leading-zero integer is decimal, never octal. Any integer with absolute value greater than 2⁵³−1 MUST be rejected, or authored as a string — outside that range JSON/JCS interoperability is not guaranteed (RFC 8785 App. D; RFC 8259 §6).
 - **Floats**: `NaN` and `±Infinity` MUST cause an error (RFC 8785 §3.2.2.3); `-0` normalises to `0`.
 - **Strings and keys**: Unicode NFC-normalised before hashing — JCS does not normalise (RFC 8785 §3.1).
-- **Keys**: mapping keys MUST be unique (a duplicate key is an error, not last-wins) and MUST be strings; a non-string key is stringified by the same rule used for the corresponding value type.
+- **Keys**: mapping keys MUST be unique (a duplicate key is an error, not last-wins) and MUST be strings. A key the typing rule above resolves to anything else (`1:`, `true:`, `~:`, `1.5:`) MUST be rejected; authors quote it. (An unquoted `00:` is the integer 0, so stringifying keys would silently turn the outcome label `00` into `0`.)
+- **Encoding**: `capsule.yaml` MUST be UTF-8. A file that does not decode as UTF-8 MUST be rejected, not decoded with replacement characters. A string or key containing an unpaired surrogate code point — reachable through a `"\uD800"`-style escape — MUST be rejected.
+- **Document**: the file MUST contain exactly one YAML document, and that document MUST be a mapping. An empty file, a comment-only file, a sequence, a bare scalar and a multi-document stream have no capsule ID.
+- **Aliases**: an alias node (`*name`) MUST be rejected. Aliases have no JSON representation, and a small aliased document can expand to an arbitrarily large value. A `<<` key is an ordinary string key; it is never interpreted as a merge.
+- **Explicit tags**: only the core tags `!!str`, `!!int`, `!!float`, `!!bool`, `!!null`, `!!map` and `!!seq` may appear. Any other tag — `!!timestamp`, `!!binary`, `!!set`, `!!omap`, `!!pairs`, or a local `!tag` — MUST be rejected. A scalar explicitly tagged `!!int`, `!!float` or `!!bool` MUST use a spelling the typing rule above accepts for that type; `!!float` also accepts decimal integer spellings such as `!!float 1`. Thus `!!bool yes`, `!!int 0o17` and `!!float .nan` are errors.
+
+Every rule in this list has accept or reject vectors in `conformance/golden/canonical-edge-cases.json`. A reject vector is a manifest for which a conformant implementation MUST NOT produce a capsule ID.
 
 **Key constraint:** All timestamp fields (`created_at`, `sealed_at`, `start_time`, `end_time`) must be stored as ISO 8601 strings, and serialised identically (ISO 8601, `T` separator) whether the ID is computed by the sealer or recomputed by a verifier from the written file. Numeric or space-separated timestamps would produce non-deterministic canonical JSON.
 
