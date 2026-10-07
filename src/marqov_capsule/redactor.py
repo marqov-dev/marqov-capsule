@@ -26,10 +26,13 @@ Two tiers, following the arrangement every upstream scanner uses (#18):
 from __future__ import annotations
 
 import math
+import json
 import re
 import string
 from pathlib import Path
 from typing import Any, Optional
+
+from marqov_capsule._canonical import load_manifest_yaml
 
 
 # ---------------------------------------------------------------------------
@@ -380,7 +383,7 @@ def _finding_allowed(line: str, match_end: int) -> bool:
     return bool(_ALLOW_RE.search(region))
 
 
-def _scan_text(text: str, filepath: str) -> list[dict]:
+def _scan_text(text: str, filepath: str, *, honor_allow: bool = True) -> list[dict]:
     findings: list[dict] = []
 
     # Multi-line shape: PEM private-key blocks, scanned across the whole file.
@@ -388,7 +391,7 @@ def _scan_text(text: str, filepath: str) -> list[dict]:
         line_no = text.count("\n", 0, start) + 1
         newline = text.find("\n", start)
         begin_line = text[start:newline if newline != -1 else len(text)]
-        if _ALLOW_RE.search(begin_line):
+        if honor_allow and _ALLOW_RE.search(begin_line):
             continue
         findings.append({
             "file": filepath,
@@ -465,7 +468,7 @@ def _scan_text(text: str, filepath: str) -> list[dict]:
             if any(start < a_end and end > a_start for a_start, a_end in accepted):
                 continue
             accepted.append((start, end))
-            if _finding_allowed(line, end):
+            if honor_allow and _finding_allowed(line, end):
                 continue
             findings.append(finding)
 
@@ -544,12 +547,57 @@ def _scan_notebook(nb_path: str, content: str) -> list[dict]:
 def finding_location(finding: dict) -> str:
     """Where a finding is, for a message: ``file:line``, or for a notebook
     ``file:cell N:line L`` / ``file:cell N:output[K]:line L``."""
+    if "field" in finding:
+        return f"{finding['file']}:field {finding['field']}"
     if "cell" not in finding:
         return f"{finding['file']}:{finding['line']}"
     where = f"{finding['file']}:cell {finding['cell']}"
     if finding.get("location", "source") != "source":
         where += f":{finding['location']}"
     return f"{where}:line {finding['line']}"
+
+
+def _scan_manifest_values(content: str, existing: list[dict]) -> list[dict]:
+    """Scan parsed scalar strings with their key context, independent of YAML layout."""
+    try:
+        manifest = load_manifest_yaml(content)
+    except (ValueError, RecursionError):
+        # Dry-run scanning also accepts unfinished drafts; their literal text
+        # has already been scanned. Sealing separately enforces valid parsing.
+        return []
+    findings = []
+    seen = {(f["reason"], f["match"]) for f in existing if f["file"] == "capsule.yaml"}
+
+    def visit(value, keys, path):
+        if isinstance(value, dict):
+            for key, child in value.items():
+                visit(child, keys + [key], path + [key])
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                visit(child, keys, path + [str(index)])
+        elif isinstance(value, str):
+            if keys and keys[-1] == "derived_from" and re.fullmatch(r"mqc:[0-9]+:[0-9a-f]{64}", value):
+                return  # A complete provenance ID is a known content hash.
+            representations = [value]
+            representations.extend(
+                f"{json.dumps(key, ensure_ascii=False)}: {json.dumps(value, ensure_ascii=False)}"
+                for key in keys)
+            for representation in representations:
+                # An allow-comment inside manifest data is not a source-code
+                # annotation and must not disable a credential finding.
+                for finding in _scan_text(representation, "capsule.yaml", honor_allow=False):
+                    identity = (finding["reason"], finding["match"])
+                    if identity in seen:
+                        continue
+                    seen.add(identity)
+                    safe_path = ["[redacted-key]" if _scan_text(p, "key", honor_allow=False) else p
+                                 for p in path]
+                    finding.update(line=0, field="/" + "/".join(
+                        p.replace("~", "~0").replace("/", "~1") for p in safe_path))
+                    findings.append(finding)
+
+    visit(manifest, [], [])
+    return findings
 
 
 # How much of a file is examined to decide it is binary: a NUL byte in the
@@ -639,7 +687,7 @@ class CapsuleRedactor:
                 })
                 continue
 
-            if _is_ignored(rel, self._ignores):
+            if rel != "capsule.yaml" and _is_ignored(rel, self._ignores):
                 skipped.append(rel)
                 continue
 
@@ -659,6 +707,11 @@ class CapsuleRedactor:
                 all_findings.extend(_scan_notebook(rel, content))
             else:
                 all_findings.extend(_scan_text(content, rel))
+                if rel == "capsule.yaml":
+                    # YAML layout can separate a credential name from a list
+                    # value or wrap a keyword away from its token. Scan each
+                    # parsed value with its ancestor keys on unwrapped lines.
+                    all_findings.extend(_scan_manifest_values(content, all_findings))
 
         return {
             "has_secrets": len(all_findings) > 0,

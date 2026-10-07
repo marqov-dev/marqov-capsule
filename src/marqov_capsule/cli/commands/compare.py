@@ -168,7 +168,7 @@ def compare(ref, new, epsilon, min_shots, alpha, counts_key, as_json):
 
     try:
         result = CapsuleVerifier().verify_statistical(ref_counts, new_counts, settings)
-    except ImportError as e:
+    except (ImportError, ValueError) as e:
         _fail(str(e), as_json)
 
     _report(result, settings, as_json)

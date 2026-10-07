@@ -135,7 +135,7 @@ def seal(directory, warn_only, dry_run, sealed_by, no_validate, as_json):
             click.echo(f"Error: {e}", err=True)
             click.echo("Use --warn-only to seal despite credential warnings.", err=True)
         sys.exit(1)
-    except ValueError as e:
+    except (ValueError, OSError) as e:
         # A draft the builder cannot seal (missing requirements, wrongly typed
         # containers, an integer past the canonical range): message, exit 1.
         if as_json:

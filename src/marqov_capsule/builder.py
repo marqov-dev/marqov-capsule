@@ -27,6 +27,7 @@ from marqov_capsule.validator import CapsuleValidator
 # CapsuleVerifier imports this so the seal and verify sides cannot drift: a file
 # one side skips and the other flags is either a false failure or a blind spot.
 UNCHECKSUMMED_ROOT_FILES = frozenset({".checksums", "capsule.yaml"})
+MAX_CHECKSUM_PATH_BYTES = 4096
 
 # Lifecycle states that a capsule can never be sealed out of. Sealing is a
 # one-way transition (spec §4: draft/runnable -> sealed -> archived, no
@@ -66,6 +67,8 @@ def _checksum_path(rel: str) -> str:
     rel = rel.replace("\r", "%0D")
     if any(ord(char) < 32 or ord(char) == 127 for char in rel):
         raise ValueError("payload path contains an unsupported control character")
+    if len(rel.encode("utf-8")) > MAX_CHECKSUM_PATH_BYTES:
+        raise ValueError("encoded payload path is too long for the checksum format")
     return rel
 
 
@@ -77,10 +80,15 @@ def _atomic_write_text(path: Path, text: str) -> None:
     second, so any failure in between — serialisation raising, disk full — left
     a zero-byte manifest where the user's draft used to be (#121).
     """
+    _atomic_write_bytes(path, text.encode("utf-8"))
+
+
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    """Replace a file only after its complete new bytes have been written."""
     fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
-            f.write(text)
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
         # mkstemp creates 0600; give the manifest the ordinary umask-derived mode.
         umask = os.umask(0)
         os.umask(umask)
@@ -137,7 +145,7 @@ class CapsuleBuilder:
         self._capsule: dict[str, Any] = {}
         self._task_executions: list[dict[str, Any]] = []
         self._sealed = False
-        self._sealed_manifest: Optional[dict[str, Any]] = None
+        self._sealed_text: Optional[str] = None
         #: The credential scan result from the most recent ``seal_capsule``
         #: (``findings``, ``skipped``, ``capsuleignore_patterns``). ``seal()``
         #: returns only the ID, so this is how a caller — the CLI in
@@ -220,9 +228,26 @@ class CapsuleBuilder:
         Raises CapsuleValidationError if the sealed manifest would not validate
         against the schema, unless ``validate=False``.
         """
+        self._require_mutable()
+        checksums_path = Path(capsule_dir) / ".checksums"
+        if checksums_path.is_symlink() or (checksums_path.exists() and not checksums_path.is_file()):
+            raise ValueError(".checksums must be a regular file")
+        previous_checksums = checksums_path.read_bytes() if checksums_path.exists() else None
+        previous_state = (copy.deepcopy(self._capsule), self._sealed, self._sealed_text, self.scan_result)
         self.seal_capsule(capsule_dir, sealed_by=sealed_by, warn_only=warn_only,
                           derived_from=derived_from, validate=validate)
-        path = self.save_capsule(Path(capsule_dir) / "capsule.yaml")
+        try:
+            path = self.save_capsule(Path(capsule_dir) / "capsule.yaml")
+        except Exception:
+            # Restore the draft and its original checksum file so one-call
+            # sealing can be retried after a failed atomic manifest write.
+            self._capsule, self._sealed, self._sealed_text, self.scan_result = previous_state
+            self._task_executions = self._capsule.get("task_executions", [])
+            if previous_checksums is None:
+                checksums_path.unlink()
+            else:
+                _atomic_write_bytes(checksums_path, previous_checksums)
+            raise
         written = load_manifest_yaml(path.read_text(encoding="utf-8"))
         return compute_capsule_id(written)
 
@@ -260,7 +285,7 @@ class CapsuleBuilder:
         }
         self._task_executions = []
         self._sealed = False
-        self._sealed_manifest = None
+        self._sealed_text = None
         self.scan_result = None
         return self
 
@@ -397,9 +422,9 @@ class CapsuleBuilder:
         scan_result = redactor.scan_and_raise(overrides={"capsule.yaml": manifest_text})
 
         # Step 2: checksums (excludes .checksums and capsule.yaml)
-        (capsule_path / ".checksums").write_bytes(checksums_bytes)
+        _atomic_write_bytes(capsule_path / ".checksums", checksums_bytes)
         self._capsule = candidate
-        self._sealed_manifest = copy.deepcopy(candidate)
+        self._sealed_text = manifest_text
         self._sealed = True
         self.scan_result = scan_result
         return scan_result
@@ -420,7 +445,8 @@ class CapsuleBuilder:
         # has nothing it may write (#107).
         if not self._sealed:
             self._require_mutable()
-        elif self._capsule != self._sealed_manifest:
+        text = self._serialise()
+        if self._sealed and text != self._sealed_text:
             raise CapsuleStateError("Cannot write a modified sealed manifest. Use CapsuleBuilder.derive().")
         path = Path(filepath)
         if path.is_dir() or not path.suffix:
@@ -428,7 +454,7 @@ class CapsuleBuilder:
         path.parent.mkdir(parents=True, exist_ok=True)
         # Serialise fully before touching the file, then replace atomically, so
         # a failure anywhere leaves the previous bytes in place (#121).
-        _atomic_write_text(path, self._serialise())
+        _atomic_write_text(path, text)
         return path
 
     def _serialise(self) -> str:
@@ -463,7 +489,7 @@ class CapsuleBuilder:
         self._require_mutable()
         capsule_path = Path(capsule_dir)
         checksums_path = capsule_path / ".checksums"
-        checksums_path.write_bytes(self._checksums_bytes(capsule_path))
+        _atomic_write_bytes(checksums_path, self._checksums_bytes(capsule_path))
         return checksums_path
 
     @staticmethod
@@ -472,10 +498,12 @@ class CapsuleBuilder:
         entries: list[tuple[str, str]] = []
         encoded_paths: set[str] = set()
         for file_path in sorted(capsule_path.rglob("*")):
-            # Never follow symlinks — hashing a link would enroll an outside file's
-            # content into this capsule (exfiltration when re-sealing a received capsule).
+            # Refuse entries the verifier cannot accept, without following or
+            # reading them. FIFOs in particular must never reach the scanner.
             if file_path.is_symlink():
-                continue
+                raise ValueError("capsule entries must not be symlinks")
+            if not file_path.is_file() and not file_path.is_dir():
+                raise ValueError("capsule entries must be regular files or directories")
             if file_path.is_file():
                 # as_posix() gives the '/'-separated relative path on every OS;
                 # the root exclusion is by that relative name, not the basename.
