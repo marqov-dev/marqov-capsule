@@ -160,8 +160,11 @@ The Python API provides `verify_deterministic` for explicit result equality and
 `verify_statistical` for independent count samples. Statistical comparison
 requires NumPy/SciPy and a verifier-owned `VerificationPolicy`; untrusted
 settings must pass through `policy.resolve`. Its one-sided bound returns
-`VERIFIED` or `INCONCLUSIVE`. There is no statistical comparison CLI in this
-release. Sampling assumptions and the decision procedure are in spec §6.
+`VERIFIED` or `INCONCLUSIVE`. The `marqov-capsule compare` command exposes
+statistical comparison for two supplied count files; verify their source
+capsules separately. Counts must be non-negative integers with string outcome
+labels; booleans and fractional counts are rejected. Sampling assumptions and
+the decision procedure are in spec §6.
 
 The pre-release `verify_capsule`, `compare_capsules`, and
 `check_calibration_drift` methods are retired and raise migration errors.

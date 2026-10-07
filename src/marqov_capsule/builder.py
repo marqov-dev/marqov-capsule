@@ -64,6 +64,8 @@ def _checksum_path(rel: str) -> str:
     rel = rel.replace("\\", "%5C")
     rel = rel.replace("\n", "%0A")
     rel = rel.replace("\r", "%0D")
+    if any(ord(char) < 32 or ord(char) == 127 for char in rel):
+        raise ValueError("payload path contains an unsupported control character")
     return rel
 
 
@@ -135,6 +137,7 @@ class CapsuleBuilder:
         self._capsule: dict[str, Any] = {}
         self._task_executions: list[dict[str, Any]] = []
         self._sealed = False
+        self._sealed_manifest: Optional[dict[str, Any]] = None
         #: The credential scan result from the most recent ``seal_capsule``
         #: (``findings``, ``skipped``, ``capsuleignore_patterns``). ``seal()``
         #: returns only the ID, so this is how a caller — the CLI in
@@ -245,18 +248,20 @@ class CapsuleBuilder:
             "created_by": created_by or "marqov-capsule",
             "lifecycle_state": "draft",
             "run_id": run_id,
-            "parameters": parameters or {},
+            "parameters": copy.deepcopy(parameters) if parameters is not None else {},
             "workflow_ref": workflow_ref,
             "environment_ref": environment_ref,
             "max_budget_usd": max_budget_usd,
-            "tags": tags or [],
-            "requirements": requirements,
+            "tags": copy.deepcopy(tags) if tags is not None else [],
+            "requirements": copy.deepcopy(requirements),
             "task_executions": [],
             "digests": {},
             "extensions": {},
         }
         self._task_executions = []
         self._sealed = False
+        self._sealed_manifest = None
+        self.scan_result = None
         return self
 
     def add_task_execution(
@@ -278,10 +283,10 @@ class CapsuleBuilder:
             "task_id": task_id,
             "status": status,
             "result_type": result_type,
-            "backend": backend,
+            "backend": copy.deepcopy(backend),
         }
         if verification_settings:
-            execution["verification_settings"] = verification_settings
+            execution["verification_settings"] = copy.deepcopy(verification_settings)
         if start_time:
             execution["start_time"] = start_time
         if end_time:
@@ -325,11 +330,10 @@ class CapsuleBuilder:
         """Seal the capsule following spec §5 sealing order.
 
         Sealing order:
-          1. Credential scan via CapsuleRedactor.
-          2. save_checksums() — excludes .checksums and capsule.yaml.
-          3. checksums_digest = SHA-256 of .checksums file bytes.
-          4. Embed checksums_digest (and derived_from if provided) in manifest.
-          5. Transition lifecycle_state → sealed.
+          1. Prepare checksums and the complete sealed manifest in memory.
+          2. Validate and credential-scan before writing or changing state.
+          3. Write .checksums, excluding .checksums and capsule.yaml.
+          4. Commit the sealed manifest and its independent snapshot.
           (Caller must call save_capsule() after this to write capsule.yaml.)
 
         Returns redactor scan result dict.
@@ -362,60 +366,40 @@ class CapsuleBuilder:
 
         capsule_path = Path(capsule_dir)
 
-        # Step 0: serialise the in-memory manifest. Two reasons it happens here,
-        # in memory, rather than as a write to disk:
-        #   * the credential scan below must cover secrets that live ONLY in the
-        #     manifest (a token passed as a parameter) on every entry point, not
-        #     just the CLI path where init happened to write capsule.yaml first
-        #     (#57) — so the text is handed to the redactor directly;
-        #   * a manifest that cannot be canonicalised (integer past 2^53, NFC
-        #     key collision) must fail *before* anything on disk is touched. The
-        #     old step 0 wrote the draft first and raised second, leaving a
-        #     zero-byte capsule.yaml, and even a blocked seal rewrote a
-        #     hand-edited draft without its comments (#121).
-        # Nothing is written until save_capsule, after the scan has passed.
-        manifest_text = self._serialise()
-
+        # Assemble the complete prospective manifest in memory so metadata
+        # supplied at seal time receives the same scan as existing fields.
+        # Canonicalization, validation and scanning must leave the draft and
+        # files untouched on refusal.
+        candidate = coerce_for_canonical(self._capsule)
         sealed_by = sealed_by or "marqov-capsule"
         sealed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        candidate.update(lifecycle_state="sealed", sealed_at=sealed_at, sealed_by=sealed_by,
+                         checksums_digest="sha256:" + "0" * 64)
+        if derived_from is not None:
+            candidate["derived_from"] = derived_from
+        if notes:
+            candidate["seal_notes"] = notes
         if validate:
             # Validate the manifest as it will be sealed, before the scan and
             # before anything is written: the seal fields are filled in with
             # their real values, the digest with a well-formed stand-in (#111).
-            candidate = coerce_for_canonical(self._capsule)
-            candidate.update(lifecycle_state="sealed", sealed_at=sealed_at, sealed_by=sealed_by,
-                             checksums_digest="sha256:" + "0" * 64)
-            if derived_from is not None:
-                candidate["derived_from"] = derived_from
-            if notes:
-                candidate["seal_notes"] = notes
             result = CapsuleValidator.validate(candidate)
             if not result["valid"]:
                 raise CapsuleValidationError(result["errors"])
 
-        # Step 1: credential scan (payload files on disk + the manifest text)
+        checksums_bytes = self._checksums_bytes(capsule_path)
+        candidate["checksums_digest"] = "sha256:" + hashlib.sha256(checksums_bytes).hexdigest()
+        manifest_text = dump_manifest_yaml(coerce_for_canonical(candidate))
+
+        # Step 1: credential scan (payload files + exactly the sealed manifest
+        # representation that save_capsule will write).
         redactor = CapsuleRedactor(capsule_path, mode="warn_only" if warn_only else "block")
         scan_result = redactor.scan_and_raise(overrides={"capsule.yaml": manifest_text})
 
         # Step 2: checksums (excludes .checksums and capsule.yaml)
-        self.save_checksums(capsule_path)
-
-        # Step 3: checksums_digest
-        checksums_bytes = (capsule_path / ".checksums").read_bytes()
-        checksums_digest = "sha256:" + hashlib.sha256(checksums_bytes).hexdigest()
-
-        # Step 4: embed in manifest
-        self._capsule["checksums_digest"] = checksums_digest
-        if derived_from is not None:
-            self._capsule["derived_from"] = derived_from
-
-        # Step 5: lifecycle transition
-        self._capsule["lifecycle_state"] = "sealed"
-        self._capsule["sealed_at"] = sealed_at
-        self._capsule["sealed_by"] = sealed_by
-        if notes:
-            self._capsule["seal_notes"] = notes
-
+        (capsule_path / ".checksums").write_bytes(checksums_bytes)
+        self._capsule = candidate
+        self._sealed_manifest = copy.deepcopy(candidate)
         self._sealed = True
         self.scan_result = scan_result
         return scan_result
@@ -436,6 +420,8 @@ class CapsuleBuilder:
         # has nothing it may write (#107).
         if not self._sealed:
             self._require_mutable()
+        elif self._capsule != self._sealed_manifest:
+            raise CapsuleStateError("Cannot write a modified sealed manifest. Use CapsuleBuilder.derive().")
         path = Path(filepath)
         if path.is_dir() or not path.suffix:
             path = path / "capsule.yaml"
@@ -472,10 +458,17 @@ class CapsuleBuilder:
         if self._sealed:
             raise CapsuleStateError(
                 "Cannot rewrite .checksums after sealed state: checksums_digest would become stale. "
-                "Call seal_capsule() again if payload files have changed."
+                "Use CapsuleBuilder.derive() to start a new draft if payload files have changed."
             )
         self._require_mutable()
         capsule_path = Path(capsule_dir)
+        checksums_path = capsule_path / ".checksums"
+        checksums_path.write_bytes(self._checksums_bytes(capsule_path))
+        return checksums_path
+
+    @staticmethod
+    def _checksums_bytes(capsule_path: Path) -> bytes:
+        """Prepare checksums without writing, including all path checks."""
         entries: list[tuple[str, str]] = []
         encoded_paths: set[str] = set()
         for file_path in sorted(capsule_path.rglob("*")):
@@ -500,14 +493,13 @@ class CapsuleBuilder:
         # digest still pins "no payload".
         entries.sort(key=lambda e: e[0].encode("utf-8"))
         lines = [f"{digest}  {path}\n" for path, digest in entries]
-        checksums_path = capsule_path / ".checksums"
         # Bytes, not text mode: text mode would turn each LF into CRLF on
         # Windows, which is neither the normative framing nor the same digest.
-        checksums_path.write_bytes("".join(lines).encode("utf-8"))
-        return checksums_path
+        return "".join(lines).encode("utf-8")
 
     def to_yaml(self) -> str:
         return self._serialise()
 
     def to_dict(self) -> dict[str, Any]:
-        return dict(self._capsule)
+        """Return an independent snapshot; editing it does not change the builder."""
+        return copy.deepcopy(self._capsule)

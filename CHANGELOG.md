@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.1] — Unreleased
+
+### Fixed
+
+- Scan the complete prospective sealed manifest, including `sealed_by`,
+  `seal_notes` and `derived_from`, before writing checksums or changing builder
+  state. Blocked scans preserve the existing draft and checksum file;
+  `warn_only` findings include secrets in seal-time metadata.
+- Reject invalid count samples at the statistical Python API boundary before
+  calculating totals or issuing a verdict. Counts must be non-negative integers,
+  excluding booleans, with string outcome labels. Empty and zero-shot samples
+  remain `INCONCLUSIVE`.
+- Deep-copy nested builder inputs and exported dictionaries so caller mutations
+  cannot change a sealed record. Refuse to write a manifest changed after sealing.
+- Refuse payload filenames with unsupported ASCII control characters before
+  writing checksums or sealing. The existing percent encoding of LF and CR
+  remains supported.
+- Correct the README to document the implemented statistical `compare` CLI.
+
 ## [0.2.0] — 2026-10-06
 
 From the Fable review of 0.1.1 (epic #91). The fixes carry no behaviour change
