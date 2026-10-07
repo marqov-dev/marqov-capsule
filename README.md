@@ -166,6 +166,13 @@ capsules separately. Counts must be non-negative integers with string outcome
 labels; booleans and fractional counts are rejected. Sampling assumptions and
 the decision procedure are in spec §6.
 
+The API accepts integral scalar types such as NumPy integers and normalizes them
+before arithmetic. Each sample's total must be at most 2^53−1 shots.
+The root manifest is always credential-scanned, including parsed value/key
+context; `.capsuleignore` can narrow only payload scanning. Detection remains
+best-effort. Keep capsule files stable while sealing: concurrent modification
+is not protected by a filesystem snapshot or lock.
+
 The pre-release `verify_capsule`, `compare_capsules`, and
 `check_calibration_drift` methods are retired and raise migration errors.
 Use `verify_integrity(directory, expected_id=trusted_id)` for artifact integrity;

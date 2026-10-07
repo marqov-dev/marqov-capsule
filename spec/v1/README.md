@@ -172,6 +172,9 @@ Because these bytes are hashed into `checksums_digest` and hence the capsule ID,
 Other ASCII control characters (U+0000–U+001F except the encoded LF and CR,
 and U+007F) are unsupported in payload paths. Writers must refuse these paths
 before sealing; readers reject their raw occurrence in checksum entries.
+The encoded UTF-8 path must not exceed 4,096 bytes. The reference writer
+refuses symlinks and non-regular filesystem entries rather than producing a
+record its verifier would reject.
 
 ### Layer 2: Checksums digest
 
@@ -241,6 +244,10 @@ Inputs are two count mappings over the same outcome alphabet, with non-negative
 integer counts. The statistical guarantee assumes independent samples within
 and between the two runs from fixed underlying distributions. Reusing the same
 samples in both arms does not establish independent replication.
+
+The reference Python API accepts integral scalar types and converts them to
+Python integers. It refuses booleans and sample totals above 2^53−1 shots before
+computing floating-point diagnostics.
 
 Acceptance settings belong to the verifier. Callers MUST resolve untrusted
 capsule declarations through `VerificationPolicy.resolve` (or an equivalent

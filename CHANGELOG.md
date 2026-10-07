@@ -18,6 +18,19 @@
   writing checksums or sealing. The existing percent encoding of LF and CR
   remains supported.
 - Correct the README to document the implemented statistical `compare` CLI.
+- Keep the root manifest in credential-scan scope even when `.capsuleignore`
+  patterns match it. Scan parsed manifest values with their key context so
+  YAML list layout and line wrapping cannot hide known credential patterns.
+- Accept NumPy and other `numbers.Integral` count scalars by normalizing them
+  to Python integers, still rejecting booleans. Cap each sample's total shots
+  at 2^53−1 and report invalid/oversized samples as clean CLI errors.
+- Compare the sealed manifest's serialized snapshot rather than Python value
+  equality, which treats `True`, `1` and `1.0` as equal.
+- Write checksum files atomically. If the manifest write fails during one-call
+  sealing, restore the draft and its previous checksums so sealing can be retried.
+  The CLI reports I/O errors without a traceback.
+- Refuse symlinks, non-regular files and checksum paths longer than 4,096 encoded
+  UTF-8 bytes before sealing, matching verifier limits.
 
 ## [0.2.0] — 2026-10-06
 

@@ -7,13 +7,14 @@ import os
 import re
 import unicodedata
 import warnings
+from numbers import Integral
 from pathlib import Path
 from typing import Any, NoReturn, Optional, Union
 
 import yaml
 
 from marqov_capsule._canonical import compute_capsule_id, load_manifest_yaml, parse_capsule_id
-from marqov_capsule.builder import UNCHECKSUMMED_ROOT_FILES, _checksum_path
+from marqov_capsule.builder import MAX_CHECKSUM_PATH_BYTES, UNCHECKSUMMED_ROOT_FILES, _checksum_path
 from marqov_capsule.policy import resolve_alpha
 
 
@@ -38,7 +39,7 @@ def _is_within_root(rel_path: str, root: Path) -> bool:
 # allows (PATH_MAX is 4096 on Linux, 1024 on macOS), so a legitimate capsule
 # never hits it; it exists so a hostile entry is rejected at parse time rather
 # than by the OS mid-check (#123).
-_MAX_CHECKSUM_PATH_BYTES = 4096
+_MAX_CHECKSUM_PATH_BYTES = MAX_CHECKSUM_PATH_BYTES
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 # Spec §5 Layer 1: one "sha256:<64 lowercase hex>  <path>" line per payload file.
@@ -51,6 +52,26 @@ _PATH_ESCAPES = {"%25": "%", "%5C": "\\", "%0A": "\n", "%0D": "\r"}
 
 # The capsule ID format version this implementation computes and can compare.
 _SUPPORTED_ID_VERSION = 1
+_MAX_SAMPLE_SHOTS = 2**53 - 1
+
+
+def _normalise_counts(counts: dict, name: str) -> dict[str, int]:
+    """Accept integral scalar types, with totals safe for float diagnostics."""
+    if not isinstance(counts, dict):
+        raise ValueError(f"{name} must be a mapping of string outcomes to non-negative integer counts")
+    normalised = {}
+    total = 0
+    for outcome, count in counts.items():
+        if not isinstance(outcome, str):
+            raise ValueError(f"{name} outcomes must be strings")
+        if isinstance(count, bool) or not isinstance(count, Integral) or count < 0:
+            raise ValueError(f"{name} counts must be non-negative integers (excluding booleans)")
+        count = int(count)
+        total += count
+        if total > _MAX_SAMPLE_SHOTS:
+            raise ValueError(f"{name} total shots exceed the supported maximum {_MAX_SAMPLE_SHOTS}")
+        normalised[outcome] = count
+    return normalised
 
 
 class _ChecksumsGrammarError(ValueError):
@@ -386,14 +407,8 @@ class CapsuleVerifier:
 
         alpha = resolve_alpha(verification_settings.get("alpha"))
 
-        for name, counts in (("ref_counts", ref_counts), ("new_counts", new_counts)):
-            if not isinstance(counts, dict):
-                raise ValueError(f"{name} must be a mapping of string outcomes to non-negative integer counts")
-            for outcome, count in counts.items():
-                if not isinstance(outcome, str):
-                    raise ValueError(f"{name} outcomes must be strings")
-                if isinstance(count, bool) or not isinstance(count, int) or count < 0:
-                    raise ValueError(f"{name} counts must be non-negative integers (excluding booleans)")
+        ref_counts = _normalise_counts(ref_counts, "ref_counts")
+        new_counts = _normalise_counts(new_counts, "new_counts")
 
         n_ref = sum(ref_counts.values())
         n_new = sum(new_counts.values())
