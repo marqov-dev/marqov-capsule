@@ -169,6 +169,10 @@ Because these bytes are hashed into `checksums_digest` and hence the capsule ID,
 - **Framing**: UTF-8, no BOM; each line terminated by a single `LF`; the file ends with one trailing `LF`. A capsule with no payload files has a zero-length `.checksums` (whose SHA-256 is the empty-string digest `e3b0c442…b855`).
 - **Uniqueness**: each path appears at most once.
 
+Other ASCII control characters (U+0000–U+001F except the encoded LF and CR,
+and U+007F) are unsupported in payload paths. Writers must refuse these paths
+before sealing; readers reject their raw occurrence in checksum entries.
+
 ### Layer 2: Checksums digest
 
 ```

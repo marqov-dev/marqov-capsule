@@ -373,6 +373,9 @@ class CapsuleVerifier:
         resolved settings, never trusted raw from a capsule's declaration —
         see ``marqov_capsule.policy`` — and a malformed value falls back to
         the default rather than crashing or silently widening the error rate.
+
+        Raises ValueError for non-mapping samples, non-string outcome labels,
+        or counts that are not non-negative integers (booleans excluded).
         """
         min_shots = verification_settings.get("min_shots", 100)
         tolerance_regime = verification_settings.get("tolerance_regime", "strict")
@@ -382,6 +385,15 @@ class CapsuleVerifier:
             epsilon = verification_settings.get("epsilon_drift", 0.08)
 
         alpha = resolve_alpha(verification_settings.get("alpha"))
+
+        for name, counts in (("ref_counts", ref_counts), ("new_counts", new_counts)):
+            if not isinstance(counts, dict):
+                raise ValueError(f"{name} must be a mapping of string outcomes to non-negative integer counts")
+            for outcome, count in counts.items():
+                if not isinstance(outcome, str):
+                    raise ValueError(f"{name} outcomes must be strings")
+                if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+                    raise ValueError(f"{name} counts must be non-negative integers (excluding booleans)")
 
         n_ref = sum(ref_counts.values())
         n_new = sum(new_counts.values())
