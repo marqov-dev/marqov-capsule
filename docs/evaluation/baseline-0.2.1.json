@@ -1,0 +1,236 @@
+[
+  {
+    "environment": {
+      "architecture": "arm64",
+      "dependencies": {
+        "PyYAML": "6.0.3",
+        "jcs": "0.2.1",
+        "jsonschema": "4.26.0",
+        "marqov-capsule": "0.2.1"
+      },
+      "os": "Darwin",
+      "python": "3.13.13"
+    },
+    "harness_sha256": "a42c722c35ae58c87c370187391e9a3c67b6ec078547aae8b6cb7ad62b2bc9b5",
+    "full_report_sha256": "5a738f71ea83943527e2f8b60c740f3489c92e056bcae7ba8279a441817bdf11",
+    "repeats": 3,
+    "scaling": [
+      {
+        "payload_files": 1,
+        "payload_bytes": 0,
+        "archive_bytes_trial_1": 590,
+        "median_seconds": {
+          "pack": 0.00127025,
+          "seal": 0.002586292,
+          "unpack": 0.000783875,
+          "verify": 0.001775875
+        }
+      },
+      {
+        "payload_files": 1,
+        "payload_bytes": 65536,
+        "archive_bytes_trial_1": 66379,
+        "median_seconds": {
+          "pack": 0.001946583,
+          "seal": 0.004348583,
+          "unpack": 0.001058875,
+          "verify": 0.00095875
+        }
+      },
+      {
+        "payload_files": 1,
+        "payload_bytes": 1048576,
+        "archive_bytes_trial_1": 1049699,
+        "median_seconds": {
+          "pack": 0.02005675,
+          "seal": 0.004107042,
+          "unpack": 0.002631625,
+          "verify": 0.001283041
+        }
+      },
+      {
+        "payload_files": 16,
+        "payload_bytes": 0,
+        "archive_bytes_trial_1": 756,
+        "median_seconds": {
+          "pack": 0.001567583,
+          "seal": 0.005407375,
+          "unpack": 0.002550625,
+          "verify": 0.00174875
+        }
+      },
+      {
+        "payload_files": 16,
+        "payload_bytes": 65536,
+        "archive_bytes_trial_1": 67723,
+        "median_seconds": {
+          "pack": 0.002457791,
+          "seal": 0.004306583,
+          "unpack": 0.00284575,
+          "verify": 0.002009791
+        }
+      },
+      {
+        "payload_files": 16,
+        "payload_bytes": 1048576,
+        "archive_bytes_trial_1": 1052407,
+        "median_seconds": {
+          "pack": 0.019052458,
+          "seal": 0.0053235,
+          "unpack": 0.006720125,
+          "verify": 0.002637917
+        }
+      },
+      {
+        "payload_files": 128,
+        "payload_bytes": 0,
+        "archive_bytes_trial_1": 1713,
+        "median_seconds": {
+          "pack": 0.008835042,
+          "seal": 0.014970917,
+          "unpack": 0.022647208,
+          "verify": 0.013236667
+        }
+      },
+      {
+        "payload_files": 128,
+        "payload_bytes": 65536,
+        "archive_bytes_trial_1": 74534,
+        "median_seconds": {
+          "pack": 0.010601041,
+          "seal": 0.021049625,
+          "unpack": 0.024830459,
+          "verify": 0.015055458
+        }
+      },
+      {
+        "payload_files": 128,
+        "payload_bytes": 1048576,
+        "archive_bytes_trial_1": 1060859,
+        "median_seconds": {
+          "pack": 0.028853542,
+          "seal": 0.012312,
+          "unpack": 0.029063417,
+          "verify": 0.011628083
+        }
+      }
+    ]
+  },
+  {
+    "environment": {
+      "architecture": "aarch64",
+      "dependencies": {
+        "PyYAML": "6.0.3",
+        "jcs": "0.2.1",
+        "jsonschema": "4.26.0",
+        "marqov-capsule": "0.2.1"
+      },
+      "os": "Linux",
+      "python": "3.12.15"
+    },
+    "harness_sha256": "a42c722c35ae58c87c370187391e9a3c67b6ec078547aae8b6cb7ad62b2bc9b5",
+    "full_report_sha256": "1691f699d6855e35b856b3f17efd507f2021a6448efc84f1529dbed80da078be",
+    "repeats": 3,
+    "scaling": [
+      {
+        "payload_files": 1,
+        "payload_bytes": 0,
+        "archive_bytes_trial_1": 591,
+        "median_seconds": {
+          "pack": 0.002628291,
+          "seal": 0.00641325,
+          "unpack": 0.002992875,
+          "verify": 0.003097834
+        }
+      },
+      {
+        "payload_files": 1,
+        "payload_bytes": 65536,
+        "archive_bytes_trial_1": 66382,
+        "median_seconds": {
+          "pack": 0.004273667,
+          "seal": 0.006827,
+          "unpack": 0.002903,
+          "verify": 0.00238875
+        }
+      },
+      {
+        "payload_files": 1,
+        "payload_bytes": 1048576,
+        "archive_bytes_trial_1": 1049701,
+        "median_seconds": {
+          "pack": 0.022636875,
+          "seal": 0.007110291,
+          "unpack": 0.008314084,
+          "verify": 0.003647125
+        }
+      },
+      {
+        "payload_files": 16,
+        "payload_bytes": 0,
+        "archive_bytes_trial_1": 755,
+        "median_seconds": {
+          "pack": 0.005775792,
+          "seal": 0.0130215,
+          "unpack": 0.013037458,
+          "verify": 0.006284333
+        }
+      },
+      {
+        "payload_files": 16,
+        "payload_bytes": 65536,
+        "archive_bytes_trial_1": 67724,
+        "median_seconds": {
+          "pack": 0.007516833,
+          "seal": 0.011004917,
+          "unpack": 0.012259875,
+          "verify": 0.006279041
+        }
+      },
+      {
+        "payload_files": 16,
+        "payload_bytes": 1048576,
+        "archive_bytes_trial_1": 1052404,
+        "median_seconds": {
+          "pack": 0.027596583,
+          "seal": 0.014317667,
+          "unpack": 0.019448375,
+          "verify": 0.009301333
+        }
+      },
+      {
+        "payload_files": 128,
+        "payload_bytes": 0,
+        "archive_bytes_trial_1": 1713,
+        "median_seconds": {
+          "pack": 0.022691125,
+          "seal": 0.055735583,
+          "unpack": 0.073108291,
+          "verify": 0.028908333
+        }
+      },
+      {
+        "payload_files": 128,
+        "payload_bytes": 65536,
+        "archive_bytes_trial_1": 74534,
+        "median_seconds": {
+          "pack": 0.025071917,
+          "seal": 0.052276583,
+          "unpack": 0.070893209,
+          "verify": 0.028815875
+        }
+      },
+      {
+        "payload_files": 128,
+        "payload_bytes": 1048576,
+        "archive_bytes_trial_1": 1060861,
+        "median_seconds": {
+          "pack": 0.047391125,
+          "seal": 0.045881125,
+          "unpack": 0.083856083,
+          "verify": 0.029842292
+        }
+      }
+    ]
+  }
+]
