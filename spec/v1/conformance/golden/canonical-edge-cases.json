@@ -8,7 +8,7 @@
   {
     "name": "unicode-sort-and-nfc",
     "yaml": "\"\\uE000\": \"private\"\n\"\\U0001F600\": \"emoji\"\naccent: \"e\\u0301\"\n",
-    "canonical_utf8": "{\"accent\":\"é\",\"😀\":\"emoji\",\"\":\"private\"}",
+    "canonical_utf8": "{\"accent\":\"\u00e9\",\"\ud83d\ude00\":\"emoji\",\"\ue000\":\"private\"}",
     "capsule_id": "mqc:1:bee8770329add5b4ad39ecf2abfbad291dcf080d4639da4673e65c839ac4acd7"
   },
   {
@@ -24,7 +24,7 @@
   },
   {
     "name": "nfc-key-collision",
-    "yaml": "\"é\": 1\n\"e\\u0301\": 2\n",
+    "yaml": "\"\u00e9\": 1\n\"e\\u0301\": 2\n",
     "reject": true
   },
   {
@@ -174,6 +174,290 @@
   {
     "name": "utf16-with-bom",
     "bytes_hex": "fffe61003a00200031000a00",
+    "reject": true
+  },
+  {
+    "name": "profile-119-tab-separator",
+    "yaml": "name:\tx\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-tab-plain",
+    "yaml": "name: x\ty\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-tab-comment",
+    "yaml": "name: x\t# c\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-tab-quoted",
+    "yaml": "name: \"x\ty\"\n",
+    "canonical_utf8": "{\"name\":\"x\\ty\"}",
+    "capsule_id": "mqc:1:d94a15e90d4d6e529d8a6935384748cc08827eaa743a31ba5b5e1b01131cb2d4"
+  },
+  {
+    "name": "profile-119-tab-block",
+    "yaml": "name: |\n  x\ty\n",
+    "canonical_utf8": "{\"name\":\"x\\ty\\n\"}",
+    "capsule_id": "mqc:1:abe41a08e0682c6c1e0a295c49072453d12cad628f298f80991ec81abfd13077"
+  },
+  {
+    "name": "profile-119-raw-nel",
+    "yaml": "name: x\u0085y\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-raw-ls",
+    "yaml": "name: x\u2028y\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-raw-ps",
+    "yaml": "name: x\u2029y\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-raw-del",
+    "yaml": "name: x\u007fy\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-raw-ffff",
+    "yaml": "name: x\uffffy\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-raw-fffe",
+    "yaml": "name: x\ufffey\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-cr-only",
+    "yaml": "a: 1\rb: 2\r",
+    "canonical_utf8": "{\"a\":1,\"b\":2}",
+    "capsule_id": "mqc:1:43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777"
+  },
+  {
+    "name": "profile-119-crlf",
+    "yaml": "a: 1\r\nb: 2\r\n",
+    "canonical_utf8": "{\"a\":1,\"b\":2}",
+    "capsule_id": "mqc:1:43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777"
+  },
+  {
+    "name": "profile-119-yaml-1.1",
+    "yaml": "%YAML 1.1\n---\na: yes\n",
+    "canonical_utf8": "{\"a\":\"yes\"}",
+    "capsule_id": "mqc:1:e51dc715a1d9c52f0ecec289536b3ca25c662a3daadc6f1d6a8eff6b64beef82"
+  },
+  {
+    "name": "profile-119-yaml-1.2",
+    "yaml": "%YAML 1.2\n---\na: yes\n",
+    "canonical_utf8": "{\"a\":\"yes\"}",
+    "capsule_id": "mqc:1:e51dc715a1d9c52f0ecec289536b3ca25c662a3daadc6f1d6a8eff6b64beef82"
+  },
+  {
+    "name": "profile-119-yaml-1.3",
+    "yaml": "%YAML 1.3\n---\na: yes\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-unknown-directive",
+    "yaml": "%FOO bar\n---\na: 1\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-escaped-pair",
+    "yaml": "name: \"\\uD83D\\uDE00\"\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-escaped-scalar",
+    "yaml": "name: \"\\U0001F600\"\n",
+    "canonical_utf8": "{\"name\":\"\ud83d\ude00\"}",
+    "capsule_id": "mqc:1:aab4cc6cb1b653e3b72c99d51a4af9bddd67593a0e32647c30b3b1967ce77678"
+  },
+  {
+    "name": "profile-119-literal-emoji",
+    "yaml": "name: \"\ud83d\ude00\"\n",
+    "canonical_utf8": "{\"name\":\"\ud83d\ude00\"}",
+    "capsule_id": "mqc:1:aab4cc6cb1b653e3b72c99d51a4af9bddd67593a0e32647c30b3b1967ce77678"
+  },
+  {
+    "name": "profile-119-escaped-tab",
+    "yaml": "name: \"x\\ty\"\n",
+    "canonical_utf8": "{\"name\":\"x\\ty\"}",
+    "capsule_id": "mqc:1:d94a15e90d4d6e529d8a6935384748cc08827eaa743a31ba5b5e1b01131cb2d4"
+  },
+  {
+    "name": "profile-119-escaped-nel",
+    "yaml": "name: \"x\\Ny\"\n",
+    "canonical_utf8": "{\"name\":\"x\u0085y\"}",
+    "capsule_id": "mqc:1:56af64c9d4bc53e3cf66a9fe85a1b8f9ac5134046135f223db88c608e175e397"
+  },
+  {
+    "name": "profile-119-escaped-ls",
+    "yaml": "name: \"x\\Ly\"\n",
+    "canonical_utf8": "{\"name\":\"x\u2028y\"}",
+    "capsule_id": "mqc:1:d80bcf06aa2a4152a9d36e1a73959529b223e4fa5ab52b1b66fefcbf614406c6"
+  },
+  {
+    "name": "profile-119-escaped-ps",
+    "yaml": "name: \"x\\Py\"\n",
+    "canonical_utf8": "{\"name\":\"x\u2029y\"}",
+    "capsule_id": "mqc:1:f226d8a07ddd32dc50763c68272b9a247b9d3a41dd5497cf2fbd853cf7a73922"
+  },
+  {
+    "name": "profile-119-literal-backslashes",
+    "yaml": "name: \"\\\\uD83D\\\\uDE00\"\n",
+    "canonical_utf8": "{\"name\":\"\\\\uD83D\\\\uDE00\"}",
+    "capsule_id": "mqc:1:0f91af3466c3f674a1f1394164444e1bbf590c5a941422aa294935a10381f814"
+  },
+  {
+    "name": "profile-119-raw-nel-quoted",
+    "yaml": "name: \"x\u0085y\"\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-raw-ls-block",
+    "yaml": "name: |\n  x\u2028y\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-raw-tab-single-quoted",
+    "yaml": "name: 'x\ty'\n",
+    "canonical_utf8": "{\"name\":\"x\\ty\"}",
+    "capsule_id": "mqc:1:d94a15e90d4d6e529d8a6935384748cc08827eaa743a31ba5b5e1b01131cb2d4"
+  },
+  {
+    "name": "profile-119-tab-in-comment",
+    "yaml": "name: x # ignored\ttab\n",
+    "canonical_utf8": "{\"name\":\"x\"}",
+    "capsule_id": "mqc:1:0229d37e33daae149bf40543a5ce1db4459d10f830d5139279aa2bfd5f6485a1"
+  },
+  {
+    "name": "profile-119-escaped-pair-key",
+    "yaml": "\"\\uD83D\\uDE00\": value\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-escaped-high-surrogate",
+    "yaml": "name: \"\\uD800\"\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-escaped-low-surrogate",
+    "yaml": "name: \"\\uDE00\"\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-escaped-U-surrogate",
+    "yaml": "name: \"\\U0000D800\"\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-escaped-del",
+    "yaml": "name: \"x\\x7fy\"\n",
+    "canonical_utf8": "{\"name\":\"x\u007fy\"}",
+    "capsule_id": "mqc:1:2408f2d042e23acef6f91c73c8fe21bf36177219c47a17647259a0f4ee417660"
+  },
+  {
+    "name": "profile-119-escaped-c1",
+    "yaml": "name: \"x\\x80y\"\n",
+    "canonical_utf8": "{\"name\":\"x\u0080y\"}",
+    "capsule_id": "mqc:1:bbf394e2c9fb79a48de8096d2749fb2b9fb8b5e90091cfaa9515c3b95cee6bde"
+  },
+  {
+    "name": "profile-119-raw-c1",
+    "yaml": "name: x\u0080y\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-raw-null",
+    "yaml": "name: x\u0000y\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-raw-bell",
+    "yaml": "name: x\u0007y\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-raw-vertical-tab",
+    "yaml": "name: x\u000by\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-raw-form-feed",
+    "yaml": "name: x\fy\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-escaped-null",
+    "yaml": "name: \"x\\0y\"\n",
+    "canonical_utf8": "{\"name\":\"x\\u0000y\"}",
+    "capsule_id": "mqc:1:d5c940f2e631977dba61e1327ff19d885fdc24d429b754e7fc57d928f993b6bb"
+  },
+  {
+    "name": "profile-119-cr-block",
+    "yaml": "name: |\r  x\r  y\r",
+    "canonical_utf8": "{\"name\":\"x\\ny\\n\"}",
+    "capsule_id": "mqc:1:ae2a44d371acb894aa689e5f78d8683c8d6e236dfcb00d1bf6154f33936026b2"
+  },
+  {
+    "name": "profile-119-cr-quoted",
+    "yaml": "name: \"x\r  y\"\r",
+    "canonical_utf8": "{\"name\":\"x y\"}",
+    "capsule_id": "mqc:1:27cd5b5d26d898147f0bb43f8bd5107828687c06f116e08a3e6152bcbf3bc4cc"
+  },
+  {
+    "name": "profile-119-utf8-bom",
+    "yaml": "\ufeffname: x\n",
+    "canonical_utf8": "{\"name\":\"x\"}",
+    "capsule_id": "mqc:1:0229d37e33daae149bf40543a5ce1db4459d10f830d5139279aa2bfd5f6485a1"
+  },
+  {
+    "name": "profile-119-tag-directive",
+    "yaml": "%TAG !c! tag:yaml.org,2002:\n---\nname: !c!str yes\n",
+    "canonical_utf8": "{\"name\":\"yes\"}",
+    "capsule_id": "mqc:1:253d132869966224d23d50b63918c473a0183e2fad5c1e0137768cf00802c4d5"
+  },
+  {
+    "name": "profile-119-yaml-2.0",
+    "yaml": "%YAML 2.0\n---\na: 1\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-document-marker",
+    "yaml": "---\nname: x\n...\n",
+    "canonical_utf8": "{\"name\":\"x\"}",
+    "capsule_id": "mqc:1:0229d37e33daae149bf40543a5ce1db4459d10f830d5139279aa2bfd5f6485a1"
+  },
+  {
+    "name": "profile-119-directive-tab",
+    "yaml": "%YAML\t1.2\n---\na: 1\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-directive-comment-tab",
+    "yaml": "%YAML 1.2 # ignored\ttab\n---\na: 1\n",
+    "canonical_utf8": "{\"a\":1}",
+    "capsule_id": "mqc:1:015abd7f5cc57a2dd94b7590f04ad8084273905ee33ec5cebeae62276a97f862"
+  },
+  {
+    "name": "profile-119-flow-tab",
+    "yaml": "a: [1,\t2]\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-sequence-tab",
+    "yaml": "a:\n- x\ty\n",
+    "reject": true
+  },
+  {
+    "name": "profile-119-block-header-tab",
+    "yaml": "a: |\t\n  x\n",
     "reject": true
   }
 ]

@@ -6,11 +6,37 @@ Version history for the Marqov Capsule format specification.
 
 ## Unreleased
 
-Clarifications to the digest scheme and manifest canonicalization ahead of the first tag, making the format byte-reproducible across independent implementations.
+Unreleased clarifications and interoperability corrections to manifest parsing and the digest scheme.
+
+### Remaining YAML profile disagreements (#119)
+
+- Normalize CRLF and CR-only manifest line breaks to LF in both readers.
+- Reject raw non-printables and NEL/LS/PS consistently, including within quoted
+  or block content. The Python writer double-quotes and escapes these scalar
+  values, preserving their canonical identity and round-trip semantics.
+- Refuse syntax/plain-scalar tabs in Node while retaining quoted/block/comment
+  tabs and explicit scalar escapes supported by both readers.
+- Reject unknown directives and unsupported YAML versions in Python. Pin
+  supported 1.1/1.2 version declarations to the same JSON-aligned typing and
+  retain core-tag handles.
+- Reject surrogate escapes at parse time in both readers, including paired
+  escapes; literal supplementary characters and full scalar escapes remain
+  supported. Escaped literal backslash text is distinguished from an escape.
+- Add 52 accept/reject vectors with independently stated canonical values.
+  Extract the Node manifest reader into an internal module for differential
+  probing; it remains a corpus implementation, not a production verifier.
+
+These changes restrict ambiguous YAML spellings and make formerly divergent
+CR-only spellings interoperable. No new content-ID scheme, manifest version or
+JSON Schema property is introduced; existing ordinary records retain their IDs.
+Manifests using the rejected spellings must be reviewed before re-encoding;
+never silently re-seal stored records or claim that a new ID authenticates an
+old export. Strict raw-text rejection can affect older hand-authored manifests
+and older writer output containing literal Unicode line separators.
 
 ### Parse-time rules (§5)
 
-Clarifications: each of these was a case the earlier text left open, and on which the Python reference and the independent Node checker gave different answers — so a manifest using one had no single ID. Nothing the reference writer emits is affected.
+Clarifications: each of these was a case the earlier text left open, and on which the Python reference and the independent Node checker gave different answers — so a manifest using one had no single ID. Ordinary manifest identities remain unchanged. The writer now escapes raw NEL/LS/PS characters so their scalar values remain readable under the common profile.
 
 - Mapping keys that are not strings MUST be rejected. The earlier text said both that keys "MUST be strings" and that a non-string key "is stringified"; the second sentence is removed.
 - `capsule.yaml` MUST be UTF-8, and an unpaired surrogate MUST be rejected.
