@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Align Python and the independent Node corpus reader on manifest line breaks,
+  syntax tabs, directives, raw non-printables and Unicode surrogate escapes
+  (#119). Add 52 shared accept/reject vectors and writer round-trip checks.
+  NEL/LS/PS scalar values are now emitted as escapes. Older manifests using
+  newly rejected raw spellings need explicit review; no stored record is
+  rewritten and ordinary content IDs remain unchanged. See spec §5 and its
+  changelog for the supported common profile and compatibility limits.
+
 ## [0.2.1] — 2026-10-07
 
 ### Fixed

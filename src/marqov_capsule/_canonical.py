@@ -81,6 +81,14 @@ class _ManifestLoader(yaml.SafeLoader):
         super().__init__(stream)
         self._depth = 0
 
+    def scan_directive(self):
+        token = super().scan_directive()
+        if token.name not in {"YAML", "TAG"}:
+            raise ManifestError(f"unsupported manifest directive %{token.name}")
+        if token.name == "YAML" and token.value not in {(1, 1), (1, 2)}:
+            raise ManifestError("manifest YAML directive must name 1.1 or 1.2")
+        return token
+
     def compose_node(self, parent, index):
         if self.check_event(yaml.AliasEvent):
             event = self.peek_event()
@@ -163,6 +171,15 @@ _FLOAT_RE = re.compile(
 _MAX_INT_LITERAL_LEN = len(str(_MAX_SAFE_INT)) + 1  # sign + 16 digits
 
 
+def _construct_manifest_string(loader: _ManifestLoader, node: yaml.Node) -> str:
+    value = loader.construct_scalar(node)
+    if re.search(r"[\ud800-\udfff]", value):
+        raise ConstructorError(None, None,
+            "surrogate escapes are not Unicode scalars; use a literal or full scalar escape",
+            node.start_mark)
+    return value
+
+
 def _construct_int_base10(loader: _ManifestLoader, node: yaml.Node) -> int:
     """Construct integers as base-10 with a magnitude guard.
 
@@ -231,6 +248,7 @@ def _reject_tag(tag: str):
     return construct
 
 
+_ManifestLoader.add_constructor("tag:yaml.org,2002:str", _construct_manifest_string)
 _ManifestLoader.add_constructor("tag:yaml.org,2002:int", _construct_int_base10)
 _ManifestLoader.add_constructor("tag:yaml.org,2002:float", _construct_float_strict)
 _ManifestLoader.add_constructor("tag:yaml.org,2002:bool", _construct_bool_strict)
@@ -259,6 +277,14 @@ _ManifestLoader.add_implicit_resolver("tag:yaml.org,2002:int", _INT_RE, list("-+
 _ManifestLoader.add_implicit_resolver("tag:yaml.org,2002:float", _FLOAT_RE, list("-+0123456789."))
 
 
+# These raw characters are either outside YAML's printable range or receive
+# different line-break semantics in YAML 1.1 and 1.2 parsers. Escaped scalar
+# values remain allowed; rejecting raw text avoids silently changing its value.
+_RAW_MANIFEST_CHAR = re.compile(
+    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u2028\u2029\ud800-\udfff\ufffe\uffff]"
+)
+
+
 def load_manifest_yaml(text: str) -> Any:
     """Parse a capsule.yaml string with YAML 1.2 / JSON-aligned implicit typing.
 
@@ -267,6 +293,11 @@ def load_manifest_yaml(text: str) -> Any:
     cross-emitter ID determinism.
     """
     try:
+        if _RAW_MANIFEST_CHAR.search(text):
+            raise ManifestError("manifest contains a forbidden raw character; use a scalar escape")
+        # LF, CRLF and CR-only are transport spellings of the same YAML line
+        # breaks. Normalize before parsing, including within block scalars.
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
         return yaml.load(text, Loader=_ManifestLoader)  # noqa: S506
     except yaml.YAMLError:
         raise
@@ -301,6 +332,16 @@ class _ManifestDumper(yaml.SafeDumper):
     type it. ``yes``/``007``/``1e5``/``1.0.0`` all come out quoted; what the
     loader reads back is exactly what was written.
     """
+
+
+def _represent_manifest_string(dumper, value):
+    # PyYAML emits NEL/LS/PS literally with allow_unicode=True, even in quoted
+    # strings. Force double quotes so those values use \N, \L and \P escapes.
+    style = '"' if _RAW_MANIFEST_CHAR.search(value) else None
+    return dumper.represent_scalar("tag:yaml.org,2002:str", value, style=style)
+
+
+_ManifestDumper.add_representer(str, _represent_manifest_string)
 
 
 for _first, _rules in _ManifestLoader.yaml_implicit_resolvers.items():

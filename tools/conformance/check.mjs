@@ -4,88 +4,12 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isMap, isScalar, parseDocument, visit } from 'yaml';
+import { parse, canonical, decode } from './manifest.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../spec/v1/conformance');
 const golden = resolve(root, 'golden');
 const readJSON = path => JSON.parse(readFileSync(path, 'utf8'));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
-
-// A manifest is UTF-8 text. A file that is not must be rejected, never decoded
-// with replacement characters and given an ID.
-const decode = bytes => new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-
-// Section 5: only the core tags may appear explicitly, and an explicitly
-// tagged scalar is held to the same spelling the implicit rule accepts.
-const CORE = 'tag:yaml.org,2002:';
-const CORE_TAGS = new Set(['str', 'int', 'float', 'bool', 'null', 'map', 'seq'].map(t => CORE + t));
-const INT = /^[-+]?[0-9]+$/;
-const FLOAT = /^[-+]?(?:(?:[0-9]+\.[0-9]*|\.[0-9]+)(?:[eE][-+]?[0-9]+)?|[0-9]+[eE][-+]?[0-9]+)$/;
-
-function checkTag(node) {
-  if (!node.tag) return;
-  assert(CORE_TAGS.has(node.tag), `tag outside the core set: ${node.tag}`);
-  if (!isScalar(node)) return;
-  const source = node.source ?? '';
-  if (node.tag === CORE + 'int') {
-    assert(INT.test(source), `not a decimal integer: ${source}`);
-    node.value = BigInt(source);
-  } else if (node.tag === CORE + 'float') {
-    // The library resolves an explicit !!float through its .nan/.inf tag;
-    // resolve it here from the source text instead.
-    assert(FLOAT.test(source) || INT.test(source), `not a finite decimal float: ${source}`);
-    node.value = Number(source);
-  }
-}
-
-function parse(text) {
-  const document = parseDocument(text, {
-    schema: 'core', intAsBigInt: true, uniqueKeys: true,
-    // Capsule's JSON-aligned profile leaves hex/octal and untagged .nan/.inf
-    // as strings. Retain explicit YAML tags so nonfinite numbers are rejected.
-    customTags: tags => tags.map(tag =>
-      (tag.tag === 'tag:yaml.org,2002:int' && tag.format) ||
-      (tag.tag === 'tag:yaml.org,2002:float' && tag.test?.test('.nan'))
-        ? { ...tag, default: false } : tag),
-  });
-  assert.equal(document.errors.length, 0, document.errors.map(e => e.message).join('; '));
-  assert.equal(document.warnings.length, 0, document.warnings.map(e => e.message).join('; '));
-  assert(isMap(document.contents), 'a manifest must be a single mapping');
-  visit(document, { Node: (_key, node) => checkTag(node) });
-  return document.toJS({ mapAsMap: true, maxAliasCount: 0 });
-}
-
-// A string with an unpaired surrogate is not Unicode text and has no UTF-8 form.
-const wellFormed = text => !/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(text);
-
-function canonical(value) {
-  if (value instanceof Map) {
-    const entries = new Map();
-    for (const [key, item] of value) {
-      assert.equal(typeof key, 'string', 'non-string manifest key');
-      assert(wellFormed(key), 'unpaired surrogate');
-      const normalized = key.normalize('NFC');
-      assert(!entries.has(normalized), 'NFC key collision');
-      entries.set(normalized, item);
-    }
-    // JS string sort compares UTF-16 code units. Serialize directly: object
-    // property enumeration would reorder integer-looking keys numerically.
-    return '{' + [...entries.keys()].sort().map(key =>
-      JSON.stringify(key) + ':' + canonical(entries.get(key))).join(',') + '}';
-  }
-  if (Array.isArray(value)) return '[' + value.map(canonical).join(',') + ']';
-  if (typeof value === 'bigint') {
-    assert(value >= -9007199254740991n && value <= 9007199254740991n, 'unsafe integer');
-    return value.toString();
-  }
-  if (typeof value === 'number') assert(Number.isFinite(value), 'nonfinite number');
-  if (typeof value === 'string') {
-    assert(wellFormed(value), 'unpaired surrogate');
-    value = value.normalize('NFC');
-  }
-  assert(value === null || ['string', 'number', 'boolean'].includes(typeof value), 'non-JSON value');
-  return JSON.stringify(value); // ECMAScript number spelling, including -0 -> 0
-}
 
 function encodedPath(path) {
   return path.normalize('NFC').replaceAll('%', '%25').replaceAll('\\', '%5C')
