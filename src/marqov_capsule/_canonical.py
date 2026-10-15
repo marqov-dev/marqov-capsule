@@ -10,6 +10,7 @@ import jcs
 import yaml
 from yaml.composer import ComposerError
 from yaml.constructor import ConstructorError
+from yaml.scanner import ScannerError
 
 
 # The largest integer JSON/RFC-8785 (IEEE-754 double) round-trips exactly. Above
@@ -88,6 +89,20 @@ class _ManifestLoader(yaml.SafeLoader):
         if token.name == "YAML" and token.value not in {(1, 1), (1, 2)}:
             raise ManifestError("manifest YAML directive must name 1.1 or 1.2")
         return token
+
+    def scan_flow_scalar_breaks(self, double, start_mark):
+        chunks = super().scan_flow_scalar_breaks(double, start_mark)
+        # SafeLoader intentionally relaxes quoted continuation indentation.
+        # Require the containing block's indentation plus one space, just as
+        # the YAML 1.2 reader does. A root flow collection has indent -1 and
+        # may continue at column zero. Blank lines are consumed by the parent.
+        if self.line > start_mark.line and self.indent >= 0:
+            prefix = self.buffer[self.pointer - self.column:self.pointer]
+            if not prefix.startswith(" " * (self.indent + 1)):
+                raise ScannerError("while scanning a quoted scalar", start_mark,
+                    "continuation must be indented beyond its containing block",
+                    self.get_mark())
+        return chunks
 
     def compose_node(self, parent, index):
         if self.check_event(yaml.AliasEvent):
@@ -193,7 +208,7 @@ def _construct_int_base10(loader: _ManifestLoader, node: yaml.Node) -> int:
     spec forbids.
     """
     value = loader.construct_scalar(node)
-    if not _INT_RE.match(value):
+    if not _INT_RE.fullmatch(value):
         raise ConstructorError(
             None, None,
             f"found {value!r}: not a decimal integer in the YAML 1.2 / JSON profile",
@@ -215,7 +230,7 @@ def _construct_float_strict(loader: _ManifestLoader, node: yaml.Node) -> float:
     sexagesimal, no underscores — and never a bare ``ValueError`` from
     ``float()`` (#122)."""
     value = loader.construct_scalar(node)
-    if not _FLOAT_RE.match(value) and not _INT_RE.match(value):
+    if not _FLOAT_RE.fullmatch(value) and not _INT_RE.fullmatch(value):
         raise ConstructorError(
             None, None,
             f"found {value!r}: not a finite decimal float in the YAML 1.2 / JSON profile",
@@ -224,11 +239,20 @@ def _construct_float_strict(loader: _ManifestLoader, node: yaml.Node) -> float:
     return float(value)
 
 
+def _construct_null_strict(loader: _ManifestLoader, node: yaml.Node) -> None:
+    value = loader.construct_scalar(node)
+    if not _NULL_RE.fullmatch(value):
+        raise ConstructorError(None, None,
+            "explicit null must use a null spelling in the manifest profile",
+            node.start_mark)
+    return None
+
+
 def _construct_bool_strict(loader: _ManifestLoader, node: yaml.Node) -> bool:
     """``!!bool`` held to the YAML 1.2 core set: ``true``/``false`` and their
     capitalised forms only — never ``yes``/``no``, never a ``KeyError``."""
     value = loader.construct_scalar(node)
-    if not _BOOL_RE.match(value):
+    if not _BOOL_RE.fullmatch(value):
         raise ConstructorError(
             None, None,
             f"found {value!r}: not a boolean in the YAML 1.2 / JSON profile",
@@ -252,6 +276,7 @@ _ManifestLoader.add_constructor("tag:yaml.org,2002:str", _construct_manifest_str
 _ManifestLoader.add_constructor("tag:yaml.org,2002:int", _construct_int_base10)
 _ManifestLoader.add_constructor("tag:yaml.org,2002:float", _construct_float_strict)
 _ManifestLoader.add_constructor("tag:yaml.org,2002:bool", _construct_bool_strict)
+_ManifestLoader.add_constructor("tag:yaml.org,2002:null", _construct_null_strict)
 for _non_core in ("timestamp", "binary", "set", "omap", "pairs"):
     _ManifestLoader.add_constructor(f"tag:yaml.org,2002:{_non_core}", _reject_tag(f"!!{_non_core}"))
 
@@ -352,15 +377,18 @@ for _first, _rules in _ManifestLoader.yaml_implicit_resolvers.items():
 
 
 def dump_manifest_yaml(obj: Any) -> str:
-    """Serialise a manifest dict so that ``load_manifest_yaml`` reads it back
-    as the identical Python value.
+    """Serialise a valid manifest value in its canonical-ready form.
+
+    Apply the same NFC, timestamp and legacy typed-key conversion as ID
+    computation. Readback preserves that converted value, not the original
+    Python key types. Key collisions fail rather than silently losing a value.
 
     Use this everywhere a capsule manifest is written — ``yaml.dump`` and
     ``yaml.safe_dump`` quote for YAML 1.1 and silently change the type of
     exponent-shaped strings under this project's loader (#92).
     """
     return yaml.dump(
-        obj,
+        coerce_for_canonical(obj),
         Dumper=_ManifestDumper,
         default_flow_style=False,
         sort_keys=False,

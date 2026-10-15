@@ -8,6 +8,23 @@ Version history for the Marqov Capsule format specification.
 
 Unreleased clarifications and interoperability corrections to manifest parsing and the digest scheme.
 
+### Independent pre-0.2.2 review follow-up
+
+- Explicit `!!null` uses the null grammar instead of discarding arbitrary text.
+  All typed scalar constructors require full spelling matches, preventing a
+  decoded trailing newline from turning `!!bool "true\n"` into false.
+- Reject duplicate version directives and duplicate tag handles in Node, and
+  under-indented quoted continuations in Python. Valid indented continuations,
+  root flow collections, null variants and distinct tag handles remain covered.
+- Add 39 shared accept/reject vectors with stated canonical values, plus
+  load-phase and writer round-trip tests. The writer helper now applies the
+  same NFC/date/key conversion as canonicalization; this matches the existing
+  builder path and refuses key collisions.
+
+These are additional raw spelling restrictions before 0.2.2. Existing ordinary
+IDs remain unchanged; do not silently re-seal old stored records to migrate them.
+The manifest JSON Schema is unchanged because no JSON value property changes.
+
 ### Remaining YAML profile disagreements (#119)
 
 - Normalize CRLF and CR-only manifest line breaks to LF in both readers.

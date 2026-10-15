@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- Address independent pre-0.2.2 review: reject invalid explicit null spellings
+  and trailing-newline bool/int/float spellings, duplicate YAML/TAG directives,
+  and under-indented quoted continuations consistently across readers. Add 39
+  shared vectors and load-phase/writer regressions. The direct writer helper
+  now applies the same canonical-ready conversion as builder serialization,
+  rejecting collisions rather than emitting unreadable typed keys.
+
 - Align Python and the independent Node corpus reader on manifest line breaks,
   syntax tabs, directives, raw non-printables and Unicode surrogate escapes
   (#119). Add 52 shared accept/reject vectors and writer round-trip checks.

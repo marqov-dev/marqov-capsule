@@ -70,7 +70,21 @@ export function parse(text) {
   assert.equal(document.errors.length, 0, document.errors.map(e => e.message).join('; '));
   assert.equal(document.warnings.length, 0, document.warnings.map(e => e.message).join('; '));
   assert(isMap(document.contents), 'a manifest must be a single mapping');
-  for (const token of new Parser().parse(text)) checkTokens(token);
+  let yamlDirective = false;
+  const tagHandles = new Set();
+  for (const token of new Parser().parse(text)) {
+    checkTokens(token);
+    if (token.type === 'directive') {
+      const [name, argument] = token.source.trim().split(/ +/);
+      if (name === '%YAML') {
+        assert(!yamlDirective, 'duplicate YAML directive');
+        yamlDirective = true;
+      } else if (name === '%TAG') {
+        assert(!tagHandles.has(argument), 'duplicate TAG handle');
+        tagHandles.add(argument);
+      }
+    }
+  }
   visit(document, { Node: (_key, node) => { checkTag(node); checkEscapes(node); } });
   return document.toJS({ mapAsMap: true, maxAliasCount: 0 });
 }
