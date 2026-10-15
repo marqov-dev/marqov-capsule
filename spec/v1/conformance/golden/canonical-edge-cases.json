@@ -459,5 +459,215 @@
     "name": "profile-119-block-header-tab",
     "yaml": "a: |\t\n  x\n",
     "reject": true
+  },
+  {
+    "name": "gemini-022-0-bad-null",
+    "yaml": "a: !!null non_null_payload\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-1-duplicate-yaml",
+    "yaml": "%YAML 1.2\n%YAML 1.2\n---\na: 1\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-2-duplicate-tag",
+    "yaml": "%TAG !x! tag:yaml.org,2002:\n%TAG !x! tag:yaml.org,2002:\n---\na: 1\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-3-unindented-double",
+    "yaml": "a: \"line1\nline2\"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-4-unindented-single",
+    "yaml": "a: 'line1\nline2'\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-5-indented-double",
+    "yaml": "a: \"line1\n  line2\"\n",
+    "canonical_utf8": "{\"a\":\"line1 line2\"}",
+    "capsule_id": "mqc:1:1255c2f639e602d28de5044a5923b50fc7fffac40586e907949ea02e1ce640a3"
+  },
+  {
+    "name": "gemini-022-6-flow-root",
+    "yaml": "{a: \"x\ny\"}\n",
+    "canonical_utf8": "{\"a\":\"x y\"}",
+    "capsule_id": "mqc:1:422c10fa8659b334734a8c2bb819ad27065a4e12afd77953de28eac42755adb9"
+  },
+  {
+    "name": "gemini-022-7-flow-nested",
+    "yaml": "a: {b: \"x\ny\"}\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-8-nested-low",
+    "yaml": "a:\n  b: \"x\n y\"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-9-nested-equal",
+    "yaml": "a:\n  b: \"x\n  y\"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-10-nested-more",
+    "yaml": "a:\n  b: \"x\n   y\"\n",
+    "canonical_utf8": "{\"a\":{\"b\":\"x y\"}}",
+    "capsule_id": "mqc:1:c8c65e5f0bd9ed892de004bc4dc7266fad5078a570059c6e81e8561a074d273a"
+  },
+  {
+    "name": "gemini-022-11-blank",
+    "yaml": "a: \"x\n\ny\"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-12-closing-low",
+    "yaml": "a: \"x\n\"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-13-escaped-low",
+    "yaml": "a: \"x\\\ny\"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-14-tab-indent",
+    "yaml": "a: \"x\n\ty\"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-15-flow-space",
+    "yaml": "{a: \"x\n y\"}\n",
+    "canonical_utf8": "{\"a\":\"x y\"}",
+    "capsule_id": "mqc:1:422c10fa8659b334734a8c2bb819ad27065a4e12afd77953de28eac42755adb9"
+  },
+  {
+    "name": "gemini-022-16-indentless-seq",
+    "yaml": "a:\n- \"x\ny\"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-17-comment-quote",
+    "yaml": "a: \"x\n #y\"\n",
+    "canonical_utf8": "{\"a\":\"x #y\"}",
+    "capsule_id": "mqc:1:d79c5dd8042c11fc1963e08ba7e2cd7573bfc19aba60c70def1b732b6c322565"
+  },
+  {
+    "name": "gemini-022-18-null-'null'",
+    "yaml": "a: !!null \"null\"\n",
+    "canonical_utf8": "{\"a\":null}",
+    "capsule_id": "mqc:1:d091f9c83c091f79652fe8786375b3fe4ce0861a56f5bfbafedbe431877ff0e8"
+  },
+  {
+    "name": "gemini-022-19-null-'Null'",
+    "yaml": "a: !!null \"Null\"\n",
+    "canonical_utf8": "{\"a\":null}",
+    "capsule_id": "mqc:1:d091f9c83c091f79652fe8786375b3fe4ce0861a56f5bfbafedbe431877ff0e8"
+  },
+  {
+    "name": "gemini-022-20-null-'NULL'",
+    "yaml": "a: !!null \"NULL\"\n",
+    "canonical_utf8": "{\"a\":null}",
+    "capsule_id": "mqc:1:d091f9c83c091f79652fe8786375b3fe4ce0861a56f5bfbafedbe431877ff0e8"
+  },
+  {
+    "name": "gemini-022-21-null-'~'",
+    "yaml": "a: !!null \"~\"\n",
+    "canonical_utf8": "{\"a\":null}",
+    "capsule_id": "mqc:1:d091f9c83c091f79652fe8786375b3fe4ce0861a56f5bfbafedbe431877ff0e8"
+  },
+  {
+    "name": "gemini-022-22-null-''",
+    "yaml": "a: !!null \"\"\n",
+    "canonical_utf8": "{\"a\":null}",
+    "capsule_id": "mqc:1:d091f9c83c091f79652fe8786375b3fe4ce0861a56f5bfbafedbe431877ff0e8"
+  },
+  {
+    "name": "gemini-022-23-null-'foo'",
+    "yaml": "a: !!null \"foo\"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-24-null-'null\\\\n'",
+    "yaml": "a: !!null \"null\\n\"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-25-null-' null'",
+    "yaml": "a: !!null \" null\"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-26-null-'null '",
+    "yaml": "a: !!null \"null \"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-27-bool-'true'",
+    "yaml": "a: !!bool \"true\"\n",
+    "canonical_utf8": "{\"a\":true}",
+    "capsule_id": "mqc:1:5daa0644c4a1c43ea018f7f1ef2944b90e0165ef1f2d5669ca89e5d4f69ac597"
+  },
+  {
+    "name": "gemini-022-28-bool-'false'",
+    "yaml": "a: !!bool \"false\"\n",
+    "canonical_utf8": "{\"a\":false}",
+    "capsule_id": "mqc:1:5cd40cde8aebb4b90dfb1cf75cb2f0580d58a86bda6f6f19bf872ab9e041fa32"
+  },
+  {
+    "name": "gemini-022-29-bool-'true\\\\n'",
+    "yaml": "a: !!bool \"true\\n\"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-30-bool-'true '",
+    "yaml": "a: !!bool \"true \"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-31-int-'1'",
+    "yaml": "a: !!int \"1\"\n",
+    "canonical_utf8": "{\"a\":1}",
+    "capsule_id": "mqc:1:015abd7f5cc57a2dd94b7590f04ad8084273905ee33ec5cebeae62276a97f862"
+  },
+  {
+    "name": "gemini-022-32-int-'1\\\\n'",
+    "yaml": "a: !!int \"1\\n\"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-33-int-'1 '",
+    "yaml": "a: !!int \"1 \"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-34-float-'1.5'",
+    "yaml": "a: !!float \"1.5\"\n",
+    "canonical_utf8": "{\"a\":1.5}",
+    "capsule_id": "mqc:1:3b1cb40b22933d83e9242f8ac724f114d812ddd49909917b365375c24b69a455"
+  },
+  {
+    "name": "gemini-022-35-float-'1.5\\\\n'",
+    "yaml": "a: !!float \"1.5\\n\"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-36-float-'1.5 '",
+    "yaml": "a: !!float \"1.5 \"\n",
+    "reject": true
+  },
+  {
+    "name": "gemini-022-37-distinct-tag-handles",
+    "yaml": "%TAG !x! tag:yaml.org,2002:\n%TAG !y! tag:yaml.org,2002:\n---\na: !x!str hello\nb: !y!str world\n",
+    "canonical_utf8": "{\"a\":\"hello\",\"b\":\"world\"}",
+    "capsule_id": "mqc:1:520e8bb59c40d1fd625552beee74753660924bccc867510a258bffef6721ee60"
+  },
+  {
+    "name": "gemini-022-38-duplicate-tag-different-prefix",
+    "yaml": "%TAG !x! tag:yaml.org,2002:\n%TAG !x! tag:example.org,2026:\n---\na: 1\n",
+    "reject": true
   }
 ]
