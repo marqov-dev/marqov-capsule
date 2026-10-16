@@ -33,11 +33,11 @@ from marqov_capsule._canonical import load_manifest_yaml
 # .capsule fills the destination disk. 1 GiB is far above any capsule this
 # tool has produced; pass ``max_bytes`` to ``unpack_capsule`` to raise it, or
 # ``None`` to remove it for an archive you trust.
-MAX_UNPACK_BYTES = 1024 ** 3
+MAX_UNPACK_BYTES = 1024**3
 
 # Upper bound on the ``.checksums`` member, which is read fully into memory.
 # At roughly 100 bytes a line, 16 MiB is over a hundred thousand payload files.
-MAX_CHECKSUMS_BYTES = 16 * 1024 ** 2
+MAX_CHECKSUMS_BYTES = 16 * 1024**2
 
 _PACKABLE_STATES = ("sealed", "archived")
 
@@ -105,9 +105,7 @@ def pack_capsule(
     resolved = capsule_dir.resolve()
     arcname_prefix = resolved.name
     if not arcname_prefix or arcname_prefix in (".", ".."):
-        raise ValueError(
-            f"Cannot derive a safe archive name from directory {capsule_dir!r}"
-        )
+        raise ValueError(f"Cannot derive a safe archive name from directory {capsule_dir!r}")
 
     if output_path is None:
         # Default to the current working directory, not the capsule
@@ -115,9 +113,7 @@ def pack_capsule(
         # ``<name>.capsule`` directory collides with the directory itself,
         # and the old collision workaround silently wrote to the grandparent.
         archive_name = (
-            arcname_prefix
-            if arcname_prefix.endswith(".capsule")
-            else arcname_prefix + ".capsule"
+            arcname_prefix if arcname_prefix.endswith(".capsule") else arcname_prefix + ".capsule"
         )
         output_path = Path.cwd() / archive_name
     else:
@@ -150,9 +146,7 @@ def pack_capsule(
     # "xb" makes the existence check above atomic: a file that appeared in
     # between is still not replaced.
     with open(output_path, "wb" if overwrite else "xb") as fout:
-        with gzip.GzipFile(
-            filename="", fileobj=fout, mode="wb", mtime=0
-        ) as gz:
+        with gzip.GzipFile(filename="", fileobj=fout, mode="wb", mtime=0) as gz:
             gz.write(tar_bytes)
 
     return output_path
@@ -200,7 +194,9 @@ def unpack_capsule(
         capsule_dir_name, members_by_name = _single_root_layout(tf)
         manifest_name = f"{capsule_dir_name}/capsule.yaml"
         if manifest_name not in members_by_name or not members_by_name[manifest_name].isfile():
-            raise ValueError("Archive must contain a regular capsule.yaml under its top-level directory")
+            raise ValueError(
+                "Archive must contain a regular capsule.yaml under its top-level directory"
+            )
         # .checksums is read by payload_digest and verify after extraction; a
         # link or directory member of that name would make tarfile follow the
         # link (KeyError / RecursionError) or hide the wrong type behind a
@@ -215,8 +211,7 @@ def unpack_capsule(
         total = sum(m.size for m in members_by_name.values() if m.isreg())
         if max_bytes is not None and total > max_bytes:
             raise ValueError(
-                f"archive inflates to {total} bytes, which exceeds the "
-                f"{max_bytes}-byte limit"
+                f"archive inflates to {total} bytes, which exceeds the {max_bytes}-byte limit"
             )
         destination = output_dir / capsule_dir_name
         if destination.exists() or destination.is_symlink():
@@ -288,8 +283,7 @@ def _single_root_layout(tf: tarfile.TarFile) -> tuple[str, dict[str, tarfile.Tar
     for member in tf.getmembers():
         name = member.name.rstrip("/")
         parts = PurePosixPath(name)
-        if (not name or parts.is_absolute() or ".." in parts.parts
-                or parts.as_posix() != name):
+        if not name or parts.is_absolute() or ".." in parts.parts or parts.as_posix() != name:
             raise ValueError(f"Refusing unsafe archive member: {member.name!r}")
         if name in members_by_name:
             raise ValueError(f"Duplicate archive member: {name!r}")
@@ -481,8 +475,7 @@ def _safe_extractall(tf: tarfile.TarFile, output_dir: Path) -> None:
             link_target = (anchor / member.linkname).resolve()
             if link_target != base and base not in link_target.parents:
                 raise ValueError(
-                    f"Archive link target escapes destination: "
-                    f"{name!r} -> {member.linkname!r}"
+                    f"Archive link target escapes destination: {name!r} -> {member.linkname!r}"
                 )
         # Members are vetted above; suppress the pre-3.14 "no filter" warning.
         with warnings.catch_warnings():

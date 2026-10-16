@@ -13,8 +13,13 @@ from marqov_capsule.verifier import CapsuleVerifier
 
 @click.command()
 @click.argument("capsule", type=click.Path(exists=True))
-@click.option("--id", "expected_id", default=None, callback=check_expected_id,
-              help="Trusted capsule ID to verify the manifest against (spec §6 layer 3)")
+@click.option(
+    "--id",
+    "expected_id",
+    default=None,
+    callback=check_expected_id,
+    help="Trusted capsule ID to verify the manifest against (spec §6 layer 3)",
+)
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
 def verify(capsule, expected_id, as_json):
     """Verify the integrity of a sealed capsule directory or archive.
@@ -45,7 +50,9 @@ def verify(capsule, expected_id, as_json):
             unpacked = unpack_capsule(path, output_dir=tmp)
         except (ValueError, OSError, tarfile.TarError, EOFError) as e:
             if as_json:
-                click.echo(json.dumps({"status": "fail", "errors": [f"could not unpack archive: {e}"]}))
+                click.echo(
+                    json.dumps({"status": "fail", "errors": [f"could not unpack archive: {e}"]})
+                )
             else:
                 click.echo(f"Error: could not unpack {path}: {e}", err=True)
             sys.exit(1)
@@ -83,5 +90,7 @@ def _report(result: dict, as_json: bool) -> None:
     for err in result.get("errors", []):
         click.echo(f"  {err}")
     if result["status"] == "pass" and not result["manifest_authenticated"]:
-        click.echo("  Note: manifest is not authenticated — nothing on disk can "
-                   "attest to it. Pass --id <trusted-id> to check layer 3.")
+        click.echo(
+            "  Note: manifest is not authenticated — nothing on disk can "
+            "attest to it. Pass --id <trusted-id> to check layer 3."
+        )

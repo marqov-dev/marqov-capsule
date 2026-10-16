@@ -1,8 +1,9 @@
 """Check built source/wheel contents before upload; uses only the standard library."""
+
 import argparse
-from pathlib import Path, PurePosixPath
 import tarfile
 import zipfile
+from pathlib import Path, PurePosixPath
 
 
 def check_sdist(path):
@@ -13,8 +14,17 @@ def check_sdist(path):
         raise ValueError("Duplicate source archive members")
     roots = set()
     relative = set()
-    allowed = {"src", "spec", "examples", "LICENSE-CODE", "LICENSE-SPEC",
-               "README.md", "pyproject.toml", "PKG-INFO", ".gitignore"}
+    allowed = {
+        "src",
+        "spec",
+        "examples",
+        "LICENSE-CODE",
+        "LICENSE-SPEC",
+        "README.md",
+        "pyproject.toml",
+        "PKG-INFO",
+        ".gitignore",
+    }
     for member in members:
         parts = PurePosixPath(member.name)
         if parts.is_absolute() or ".." in parts.parts or len(parts.parts) < 2:
@@ -22,8 +32,10 @@ def check_sdist(path):
         roots.add(parts.parts[0])
         if parts.parts[1] not in allowed:
             raise ValueError(f"Unexpected source archive root: {member.name}")
-        if any(part in {".git", ".claude", ".codex", ".venv", "__pycache__", "node_modules"}
-               for part in parts.parts[1:]):
+        if any(
+            part in {".git", ".claude", ".codex", ".venv", "__pycache__", "node_modules"}
+            for part in parts.parts[1:]
+        ):
             raise ValueError(f"Local workspace content in source archive: {member.name}")
         if not member.isfile() and not member.isdir():
             raise ValueError(f"Nonregular source archive member: {member.name}")
@@ -31,9 +43,16 @@ def check_sdist(path):
             relative.add(PurePosixPath(*parts.parts[1:]).as_posix())
     if len(roots) != 1:
         raise ValueError("Expected one source archive root")
-    required = {"pyproject.toml", "README.md", "LICENSE-CODE", "LICENSE-SPEC",
-                "src/marqov_capsule/__init__.py", "spec/v1/capsule-schema.json",
-                "examples/run_bell.py", "examples/seal_bell.py"}
+    required = {
+        "pyproject.toml",
+        "README.md",
+        "LICENSE-CODE",
+        "LICENSE-SPEC",
+        "src/marqov_capsule/__init__.py",
+        "spec/v1/capsule-schema.json",
+        "examples/run_bell.py",
+        "examples/seal_bell.py",
+    }
     if required - relative:
         raise ValueError(f"Source archive missing required files: {sorted(required - relative)}")
     return len(names)
@@ -57,8 +76,12 @@ def check_wheel(path):
     if len(metadata_roots) != 1:
         raise ValueError("Expected one wheel metadata directory")
     metadata = metadata_roots.pop()
-    required = {"marqov_capsule/__init__.py", "marqov_capsule/schemas/capsule-schema.json",
-                f"{metadata}/licenses/LICENSE-CODE", f"{metadata}/licenses/LICENSE-SPEC"}
+    required = {
+        "marqov_capsule/__init__.py",
+        "marqov_capsule/schemas/capsule-schema.json",
+        f"{metadata}/licenses/LICENSE-CODE",
+        f"{metadata}/licenses/LICENSE-SPEC",
+    }
     if required - set(names):
         raise ValueError(f"Wheel missing required files: {sorted(required - set(names))}")
     if sum(name.endswith("capsule-schema.json") for name in names) != 1:

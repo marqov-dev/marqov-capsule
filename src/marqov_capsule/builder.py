@@ -1,4 +1,5 @@
 """CapsuleBuilder — constructs and seals capsule.yaml manifests."""
+
 from __future__ import annotations
 
 import contextlib
@@ -38,11 +39,21 @@ _TERMINAL_STATES = frozenset({"sealed", "archived"})
 # Manifest fields that describe one particular seal or one particular run. A
 # capsule derived from a sealed parent starts without them: it has not been
 # sealed, and it has not run.
-_NOT_INHERITED = frozenset({
-    "checksums_digest", "sealed_at", "sealed_by", "seal_notes", "derived_from",
-    "num_tasks", "wall_time_seconds", "actual_cost_usd", "total_shots",
-    "exit_code", "exit_message",
-})
+_NOT_INHERITED = frozenset(
+    {
+        "checksums_digest",
+        "sealed_at",
+        "sealed_by",
+        "seal_notes",
+        "derived_from",
+        "num_tasks",
+        "wall_time_seconds",
+        "actual_cost_usd",
+        "total_shots",
+        "exit_code",
+        "exit_message",
+    }
+)
 
 
 def _checksum_path(rel: str) -> str:
@@ -167,8 +178,13 @@ class CapsuleBuilder:
         # A hand-edited draft may leave a container key empty (YAML null) or
         # give it the wrong shape. Null reads as "none yet"; a wrong type is
         # an error the CLI turns into a clean exit, not a traceback (#95).
-        for key, kind in (("task_executions", list), ("digests", dict), ("extensions", dict),
-                          ("parameters", dict), ("requirements", dict)):
+        for key, kind in (
+            ("task_executions", list),
+            ("digests", dict),
+            ("extensions", dict),
+            ("parameters", dict),
+            ("requirements", dict),
+        ):
             value = b._capsule.get(key)
             if value is None:
                 if key in b._capsule and key != "requirements":
@@ -214,9 +230,14 @@ class CapsuleBuilder:
                 "CapsuleBuilder.derive() to start a new draft from it."
             )
 
-    def seal(self, capsule_dir: str | Path, sealed_by: Optional[str] = None,
-             warn_only: bool = False, derived_from: Optional[str] = None,
-             validate: bool = True) -> str:
+    def seal(
+        self,
+        capsule_dir: str | Path,
+        sealed_by: Optional[str] = None,
+        warn_only: bool = False,
+        derived_from: Optional[str] = None,
+        validate: bool = True,
+    ) -> str:
         """Full sealing sequence: credential scan → checksums → transition → save → ID.
 
         This is the one-call path for the CLI. Returns the versioned capsule ID
@@ -230,12 +251,24 @@ class CapsuleBuilder:
         """
         self._require_mutable()
         checksums_path = Path(capsule_dir) / ".checksums"
-        if checksums_path.is_symlink() or (checksums_path.exists() and not checksums_path.is_file()):
+        if checksums_path.is_symlink() or (
+            checksums_path.exists() and not checksums_path.is_file()
+        ):
             raise ValueError(".checksums must be a regular file")
         previous_checksums = checksums_path.read_bytes() if checksums_path.exists() else None
-        previous_state = (copy.deepcopy(self._capsule), self._sealed, self._sealed_text, self.scan_result)
-        self.seal_capsule(capsule_dir, sealed_by=sealed_by, warn_only=warn_only,
-                          derived_from=derived_from, validate=validate)
+        previous_state = (
+            copy.deepcopy(self._capsule),
+            self._sealed,
+            self._sealed_text,
+            self.scan_result,
+        )
+        self.seal_capsule(
+            capsule_dir,
+            sealed_by=sealed_by,
+            warn_only=warn_only,
+            derived_from=derived_from,
+            validate=validate,
+        )
         try:
             path = self.save_capsule(Path(capsule_dir) / "capsule.yaml")
         except Exception:
@@ -335,6 +368,7 @@ class CapsuleBuilder:
         """Add a SHA-256 digest of result data to the digests block."""
         self._require_mutable()
         import json as _json
+
         if isinstance(data, dict):
             data_str = _json.dumps(data, sort_keys=True, default=str)
         else:
@@ -398,8 +432,12 @@ class CapsuleBuilder:
         candidate = coerce_for_canonical(self._capsule)
         sealed_by = sealed_by or "marqov-capsule"
         sealed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-        candidate.update(lifecycle_state="sealed", sealed_at=sealed_at, sealed_by=sealed_by,
-                         checksums_digest="sha256:" + "0" * 64)
+        candidate.update(
+            lifecycle_state="sealed",
+            sealed_at=sealed_at,
+            sealed_by=sealed_by,
+            checksums_digest="sha256:" + "0" * 64,
+        )
         if derived_from is not None:
             candidate["derived_from"] = derived_from
         if notes:
@@ -447,7 +485,9 @@ class CapsuleBuilder:
             self._require_mutable()
         text = self._serialise()
         if self._sealed and text != self._sealed_text:
-            raise CapsuleStateError("Cannot write a modified sealed manifest. Use CapsuleBuilder.derive().")
+            raise CapsuleStateError(
+                "Cannot write a modified sealed manifest. Use CapsuleBuilder.derive()."
+            )
         path = Path(filepath)
         if path.is_dir() or not path.suffix:
             path = path / "capsule.yaml"

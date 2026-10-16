@@ -1,10 +1,12 @@
 import json
 import sys
 from pathlib import Path
+
 import click
+
 from marqov_capsule.builder import CapsuleBuilder, CapsuleStateError, CapsuleValidationError
-from marqov_capsule.redactor import CapsuleRedactor, RedactorError, finding_location
 from marqov_capsule.cli._manifest import load_manifest_or_exit
+from marqov_capsule.redactor import CapsuleRedactor, RedactorError, finding_location
 
 
 def _report_findings(findings: list[dict]) -> None:
@@ -17,8 +19,11 @@ def _report_findings(findings: list[dict]) -> None:
     if not findings:
         return
     blocking = sum(1 for f in findings if f.get("blocking"))
-    click.echo(f"  Warning: {len(findings)} credential finding(s) sealed into this capsule"
-               f" ({blocking} blocking, {len(findings) - blocking} entropy warning(s)):", err=True)
+    click.echo(
+        f"  Warning: {len(findings)} credential finding(s) sealed into this capsule"
+        f" ({blocking} blocking, {len(findings) - blocking} entropy warning(s)):",
+        err=True,
+    )
     for f in findings:
         click.echo(f"    {finding_location(f)} — {f['reason']}: {f['match']}", err=True)
 
@@ -46,8 +51,10 @@ def _report_scope(scan_result: dict) -> None:
     if not patterns:
         return
     skipped = scan_result.get("skipped") or []
-    click.echo(f"  Note: .capsuleignore narrowed the scan — {len(skipped)} file(s) "
-               f"not scanned, patterns: {', '.join(patterns)}")
+    click.echo(
+        f"  Note: .capsuleignore narrowed the scan — {len(skipped)} file(s) "
+        f"not scanned, patterns: {', '.join(patterns)}"
+    )
     for path in skipped[:10]:
         click.echo(f"    skipped: {path}")
     if len(skipped) > 10:
@@ -59,8 +66,11 @@ def _report_scope(scan_result: dict) -> None:
 @click.option("--warn-only", is_flag=True, help="Warn on credentials instead of blocking")
 @click.option("--dry-run", is_flag=True, help="Scan for issues and report; never write")
 @click.option("--sealed-by", default=None, help="Identity string recorded in sealed_by field")
-@click.option("--no-validate", is_flag=True,
-              help="Seal even if the manifest does not validate against the schema")
+@click.option(
+    "--no-validate",
+    is_flag=True,
+    help="Seal even if the manifest does not validate against the schema",
+)
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
 def seal(directory, warn_only, dry_run, sealed_by, no_validate, as_json):
     """Scan for secrets then seal a capsule directory."""
@@ -68,7 +78,10 @@ def seal(directory, warn_only, dry_run, sealed_by, no_validate, as_json):
     manifest_path = capsule_dir / "capsule.yaml"
 
     if not manifest_path.exists():
-        click.echo(f"Error: capsule.yaml not found in {directory}. Run 'marqov-capsule init' first.", err=True)
+        click.echo(
+            f"Error: capsule.yaml not found in {directory}. Run 'marqov-capsule init' first.",
+            err=True,
+        )
         sys.exit(1)
 
     # --dry-run: scan only, always exits 0 (report flag, not a gate)
@@ -77,13 +90,18 @@ def seal(directory, warn_only, dry_run, sealed_by, no_validate, as_json):
         scan_result = redactor.scan()
         status = "clean" if not scan_result["has_secrets"] else "warnings"
         if as_json:
-            click.echo(json.dumps({
-                "status": status,
-                "findings": scan_result["findings"],
-                "skipped": scan_result["skipped"],
-                "skipped_binary": scan_result["skipped_binary"],
-                "capsuleignore_patterns": scan_result["capsuleignore_patterns"],
-            }, indent=2))
+            click.echo(
+                json.dumps(
+                    {
+                        "status": status,
+                        "findings": scan_result["findings"],
+                        "skipped": scan_result["skipped"],
+                        "skipped_binary": scan_result["skipped_binary"],
+                        "capsuleignore_patterns": scan_result["capsuleignore_patterns"],
+                    },
+                    indent=2,
+                )
+            )
         else:
             if scan_result["has_secrets"]:
                 click.echo(f"Dry run: {len(scan_result['findings'])} credential pattern(s) found")
@@ -119,9 +137,16 @@ def seal(directory, warn_only, dry_run, sealed_by, no_validate, as_json):
         # Spec §8: a sealed manifest validates against the schema. Refuse, and
         # list every error the way `validate` does (#111).
         if as_json:
-            click.echo(json.dumps({"status": "error",
-                                   "message": "manifest does not validate against the capsule schema",
-                                   "errors": e.errors}, indent=2))
+            click.echo(
+                json.dumps(
+                    {
+                        "status": "error",
+                        "message": "manifest does not validate against the capsule schema",
+                        "errors": e.errors,
+                    },
+                    indent=2,
+                )
+            )
         else:
             click.echo("Error: manifest does not validate against the capsule schema:", err=True)
             for err in e.errors:
@@ -149,17 +174,27 @@ def seal(directory, warn_only, dry_run, sealed_by, no_validate, as_json):
     narrowed = scan_result.get("capsuleignore_patterns", [])
 
     if as_json:
-        click.echo(json.dumps({"status": "sealed", "capsule_id": capsule_id,
-                               "directory": str(directory),
-                               "findings": findings,
-                               "skipped_binary": scan_result.get("skipped_binary", []),
-                               "capsuleignore_patterns": narrowed}, indent=2))
+        click.echo(
+            json.dumps(
+                {
+                    "status": "sealed",
+                    "capsule_id": capsule_id,
+                    "directory": str(directory),
+                    "findings": findings,
+                    "skipped_binary": scan_result.get("skipped_binary", []),
+                    "capsuleignore_patterns": narrowed,
+                },
+                indent=2,
+            )
+        )
     else:
         click.echo(f"Sealed: {capsule_id}")
         click.echo(f"  Directory: {directory}")
         _report_findings(findings)
         _report_binary(scan_result)
         if narrowed:
-            click.echo(f"  Note: .capsuleignore narrowed the credential scan — "
-                       f"patterns: {', '.join(narrowed)}. Review these when sealing "
-                       f"a capsule you did not author.")
+            click.echo(
+                f"  Note: .capsuleignore narrowed the credential scan — "
+                f"patterns: {', '.join(narrowed)}. Review these when sealing "
+                f"a capsule you did not author."
+            )

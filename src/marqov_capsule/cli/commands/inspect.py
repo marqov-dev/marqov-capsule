@@ -1,15 +1,21 @@
 import json
 import sys
 from pathlib import Path
+
 import click
+
 from marqov_capsule.cli._manifest import load_manifest_or_exit
 
 
 def _safe_echo(value):
     """Display untrusted metadata without terminal commands or forged lines."""
     text = str(value)
-    click.echo("".join(char if char.isprintable() else
-                       char.encode("unicode_escape").decode("ascii") for char in text))
+    click.echo(
+        "".join(
+            char if char.isprintable() else char.encode("unicode_escape").decode("ascii")
+            for char in text
+        )
+    )
 
 
 @click.command()
@@ -47,7 +53,9 @@ def inspect_cmd(capsule, as_json):
             continue
         b = t.get("backend")
         b = b if isinstance(b, dict) else {}
-        _safe_echo(f"  [{i}] {b.get('provider', '?')}/{b.get('name', '?')} — {t.get('status', '?')} — {t.get('result_type', '?')}")
+        _safe_echo(
+            f"  [{i}] {b.get('provider', '?')}/{b.get('name', '?')} — {t.get('status', '?')} — {t.get('result_type', '?')}"
+        )
     if cap.get("derived_from"):
         _safe_echo(f"Derived from: {str(cap['derived_from'])[:16]}...")
     if cap.get("checksums_digest"):

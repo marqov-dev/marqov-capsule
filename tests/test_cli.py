@@ -1,6 +1,8 @@
 from pathlib import Path
+
 import pytest
 from click.testing import CliRunner
+
 from marqov_capsule.cli.main import cli
 
 FIXTURE_DIR = Path(__file__).parent.parent / "spec/v1/conformance"
@@ -20,8 +22,11 @@ def test_validate_invalid_capsule_exits_1():
 
 def test_validate_json_output():
     runner = CliRunner()
-    result = runner.invoke(cli, ["validate", "--json", str(FIXTURE_DIR / "valid_capsule/capsule.yaml")])
+    result = runner.invoke(
+        cli, ["validate", "--json", str(FIXTURE_DIR / "valid_capsule/capsule.yaml")]
+    )
     import json
+
     assert result.exit_code == 0, result.output
     data = json.loads(result.output)
     assert data["valid"] is True
@@ -57,6 +62,7 @@ def test_inspect_json():
     result = runner.invoke(cli, ["inspect", "--json", str(FIXTURE_DIR / "valid_capsule")])
     assert result.exit_code == 0
     import json
+
     data = json.loads(result.output)
     assert data["name"] == "Bell State Preparation"
 
@@ -104,6 +110,7 @@ def test_seal_blocks_secrets_exits_1(tmp_path):
 
 def test_seal_actually_seals(tmp_path):
     import yaml
+
     (tmp_path / "capsule.yaml").write_text(
         "version: '1.0.0'\nname: test-capsule\nlifecycle_state: draft\n"
         "requirements:\n  paradigm: [gate-based]\n  max_qubit_count: 1\n"
@@ -113,6 +120,7 @@ def test_seal_actually_seals(tmp_path):
     result = runner.invoke(cli, ["seal", "--sealed-by", "test-runner", str(tmp_path)])
     assert result.exit_code == 0, result.output
     from marqov_capsule._canonical import load_manifest_yaml
+
     manifest = load_manifest_yaml((tmp_path / "capsule.yaml").read_text())
     assert manifest["lifecycle_state"] == "sealed"
     assert manifest.get("checksums_digest", "").startswith("sha256:")
@@ -121,7 +129,9 @@ def test_seal_actually_seals(tmp_path):
     sealed_line = [l for l in result.output.splitlines() if l.startswith("Sealed:")]
     assert sealed_line, f"No 'Sealed:' line in output: {result.output}"
     capsule_id = sealed_line[0].split("Sealed: ")[-1].strip()
-    assert capsule_id.startswith("mqc:1:") and len(capsule_id.split(":")[-1]) == 64, f"Expected mqc:1:<64hex> ID, got: {capsule_id!r}"
+    assert capsule_id.startswith("mqc:1:") and len(capsule_id.split(":")[-1]) == 64, (
+        f"Expected mqc:1:<64hex> ID, got: {capsule_id!r}"
+    )
 
 
 def test_init_creates_draft_manifest(tmp_path):
@@ -132,6 +142,7 @@ def test_init_creates_draft_manifest(tmp_path):
     manifest_path = new_dir / "capsule.yaml"
     assert manifest_path.exists()
     from marqov_capsule._canonical import load_manifest_yaml
+
     manifest = load_manifest_yaml(manifest_path.read_text())
     assert manifest["lifecycle_state"] == "draft"
     assert manifest["name"] == "my-capsule"
@@ -143,6 +154,7 @@ def test_init_respects_name_flag(tmp_path):
     result = runner.invoke(cli, ["init", "--name", "custom-name", str(new_dir)])
     assert result.exit_code == 0
     from marqov_capsule._canonical import load_manifest_yaml
+
     manifest = load_manifest_yaml((new_dir / "capsule.yaml").read_text())
     assert manifest["name"] == "custom-name"
 
@@ -157,11 +169,12 @@ def test_init_refuses_overwrite_without_force(tmp_path):
 def test_init_paradigm_and_qubits_flags(tmp_path):
     new_dir = tmp_path / "cap"
     runner = CliRunner()
-    result = runner.invoke(cli, [
-        "init", "--name", "bell", "--paradigm", "gate-based", "--qubits", "2", str(new_dir)
-    ])
+    result = runner.invoke(
+        cli, ["init", "--name", "bell", "--paradigm", "gate-based", "--qubits", "2", str(new_dir)]
+    )
     assert result.exit_code == 0, result.output
     from marqov_capsule._canonical import load_manifest_yaml
+
     manifest = load_manifest_yaml((new_dir / "capsule.yaml").read_text())
     assert manifest["requirements"]["paradigm"] == ["gate-based"]
     assert manifest["requirements"]["max_qubit_count"] == 2
@@ -170,11 +183,12 @@ def test_init_paradigm_and_qubits_flags(tmp_path):
 def test_init_multiple_paradigms(tmp_path):
     new_dir = tmp_path / "cap"
     runner = CliRunner()
-    result = runner.invoke(cli, [
-        "init", "--paradigm", "gate-based", "--paradigm", "analog", str(new_dir)
-    ])
+    result = runner.invoke(
+        cli, ["init", "--paradigm", "gate-based", "--paradigm", "analog", str(new_dir)]
+    )
     assert result.exit_code == 0, result.output
     from marqov_capsule._canonical import load_manifest_yaml
+
     manifest = load_manifest_yaml((new_dir / "capsule.yaml").read_text())
     assert "gate-based" in manifest["requirements"]["paradigm"]
     assert "analog" in manifest["requirements"]["paradigm"]
@@ -189,6 +203,7 @@ def test_open_rejects_capsule_with_symlink(tmp_path):
     (the old fixture had no capsule.yaml and failed on that instead — #118).
     """
     from marqov_capsule.builder import CapsuleBuilder
+
     secret = tmp_path / "id_rsa"
     secret.write_text("PRIVATE KEY CONTENT")
 
@@ -201,6 +216,7 @@ def test_open_rejects_capsule_with_symlink(tmp_path):
     dest = tmp_path / "out"
     assert CliRunner().invoke(cli, ["open", str(capsule_dir), "--dest", str(dest)]).exit_code == 0
     import shutil
+
     shutil.rmtree(dest)
 
     (capsule_dir / "payload" / "link.txt").symlink_to(secret)
@@ -212,8 +228,8 @@ def test_open_rejects_capsule_with_symlink(tmp_path):
     assert not copied.exists() and not copied.is_symlink()
 
 
-
 # --- Integrity and equivalence stay separate verbs (#15) --------------------
+
 
 def test_verify_has_no_against_option():
     """`verify` checks integrity only; equivalence lives in `compare`.

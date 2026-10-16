@@ -1,4 +1,5 @@
 """Adversarial reproductions from the independent review of PR #131."""
+
 import json
 import os
 
@@ -11,7 +12,6 @@ from marqov_capsule.cli.main import cli
 from marqov_capsule.redactor import RedactorError
 from marqov_capsule.verifier import CapsuleVerifier
 
-
 REQ = {"paradigm": ["gate-based"], "max_qubit_count": 2}
 TOKEN = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 HEX64 = "7e2a91c4f0b8d63e5a1f8c02d94b7e6a3f5c8091b2d4e6f7a0c1b3d5e7f9a2c4"
@@ -22,20 +22,24 @@ HEX64 = "7e2a91c4f0b8d63e5a1f8c02d94b7e6a3f5c8091b2d4e6f7a0c1b3d5e7f9a2c4"
 def test_ignore_cannot_disable_manifest_scan(tmp_path, pattern, late_metadata):
     (tmp_path / ".capsuleignore").write_text(pattern + "\n")
     builder = CapsuleBuilder().start_capsule(
-        "test", requirements=REQ, parameters={} if late_metadata else {"token": TOKEN})
+        "test", requirements=REQ, parameters={} if late_metadata else {"token": TOKEN}
+    )
     with pytest.raises(RedactorError):
         builder.seal_capsule(tmp_path, notes=TOKEN if late_metadata else "")
     assert not (tmp_path / ".checksums").exists()
     assert builder.to_dict()["lifecycle_state"] == "draft"
 
 
-@pytest.mark.parametrize("parameters", [
-    {"ibm_token": [HEX64]},
-    {"IBM_QUANTUM_TOKEN": ["s3cr3tvalue123"]},
-    {"IBM_QUANTUM_TOKEN": {"value": "s3cr3tvalue123"}},
-    {"note": "x " * 34 + "ibm token " + HEX64},
-    {"token": TOKEN + " # capsule:allow"},
-])
+@pytest.mark.parametrize(
+    "parameters",
+    [
+        {"ibm_token": [HEX64]},
+        {"IBM_QUANTUM_TOKEN": ["s3cr3tvalue123"]},
+        {"IBM_QUANTUM_TOKEN": {"value": "s3cr3tvalue123"}},
+        {"note": "x " * 34 + "ibm token " + HEX64},
+        {"token": TOKEN + " # capsule:allow"},
+    ],
+)
 def test_yaml_layout_and_data_annotations_do_not_hide_manifest_credentials(tmp_path, parameters):
     builder = CapsuleBuilder().start_capsule("test", requirements=REQ, parameters=parameters)
     with pytest.raises(RedactorError):
@@ -45,7 +49,8 @@ def test_yaml_layout_and_data_annotations_do_not_hide_manifest_credentials(tmp_p
 
 def test_structured_manifest_findings_include_field_path(tmp_path):
     builder = CapsuleBuilder().start_capsule(
-        "test", requirements=REQ, parameters={"IBM_QUANTUM_TOKEN": ["s3cr3tvalue123"]})
+        "test", requirements=REQ, parameters={"IBM_QUANTUM_TOKEN": ["s3cr3tvalue123"]}
+    )
     builder.seal(tmp_path, warn_only=True)
     finding = next(f for f in builder.scan_result["findings"] if f["reason"] == "name_pattern")
     assert finding["field"] == "/parameters/IBM_QUANTUM_TOKEN/0"
@@ -53,8 +58,9 @@ def test_structured_manifest_findings_include_field_path(tmp_path):
 
 
 def test_structured_finding_does_not_echo_secret_in_field_name(tmp_path):
-    builder = CapsuleBuilder().start_capsule("test", requirements=REQ,
-                                            parameters={TOKEN: {"IBM_QUANTUM_TOKEN": [HEX64]}})
+    builder = CapsuleBuilder().start_capsule(
+        "test", requirements=REQ, parameters={TOKEN: {"IBM_QUANTUM_TOKEN": [HEX64]}}
+    )
     builder.seal(tmp_path, warn_only=True)
     assert all(TOKEN not in f.get("field", "") for f in builder.scan_result["findings"])
 
@@ -66,8 +72,7 @@ def test_numpy_integer_counts_preserve_statistical_result():
     settings = {"epsilon": 0.1}
     plain = {"0": 500, "1": 500}
     expected = verifier.verify_statistical(plain, plain, settings)
-    actual = verifier.verify_statistical(
-        {"0": np.int64(500), "1": np.uint64(500)}, plain, settings)
+    actual = verifier.verify_statistical({"0": np.int64(500), "1": np.uint64(500)}, plain, settings)
     assert actual == expected
     for count in (np.bool_(True), np.float64(500.0)):
         with pytest.raises(ValueError, match="integer"):
@@ -91,6 +96,7 @@ def test_oversized_counts_are_clean_api_and_cli_errors(tmp_path, counts):
 
 def test_safe_shot_ceiling_accepts_boundary():
     from marqov_capsule.verifier import _normalise_counts
+
     assert _normalise_counts({"0": 2**53 - 1}, "counts") == {"0": 2**53 - 1}
 
 
@@ -135,7 +141,9 @@ def test_checksum_partial_write_preserves_original_and_draft(tmp_path, monkeypat
 
 
 @pytest.mark.parametrize("existing_checksums", [False, True])
-def test_manifest_write_failure_restores_draft_and_allows_retry(tmp_path, monkeypatch, existing_checksums):
+def test_manifest_write_failure_restores_draft_and_allows_retry(
+    tmp_path, monkeypatch, existing_checksums
+):
     builder = CapsuleBuilder().start_capsule("test", requirements=REQ)
     builder.save_capsule(tmp_path)
     before = builder.to_dict()

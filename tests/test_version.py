@@ -5,6 +5,7 @@ hand-maintained sources of truth. pyproject.toml now reads the version from the
 package (`dynamic = ["version"]`), so there is nothing left to keep in step
 (#104).
 """
+
 import re
 from importlib import metadata
 from pathlib import Path
@@ -19,8 +20,8 @@ PYPROJECT = Path(__file__).parent.parent / "pyproject.toml"
 def _project_table():
     text = PYPROJECT.read_text(encoding="utf-8")
     start = text.index("[project]")
-    end = re.search(r"^\[", text[start + 1:], re.MULTILINE)
-    return text[start:start + 1 + end.start()] if end else text[start:]
+    end = re.search(r"^\[", text[start + 1 :], re.MULTILINE)
+    return text[start : start + 1 + end.start()] if end else text[start:]
 
 
 def test_pyproject_does_not_declare_a_second_version():

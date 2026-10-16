@@ -1,8 +1,10 @@
 import hashlib
 from pathlib import Path
+
 import pytest
-from marqov_capsule.builder import CapsuleBuilder
+
 from marqov_capsule._canonical import compute_capsule_id, load_manifest_yaml
+from marqov_capsule.builder import CapsuleBuilder
 from marqov_capsule.redactor import RedactorError
 
 
@@ -191,6 +193,7 @@ def test_from_manifest_roundtrip():
 def test_seal_convenience_returns_capsule_id(tmp_path):
     """CapsuleBuilder.seal() runs the full sequence and returns the 64-char hex capsule ID."""
     import yaml
+
     manifest = {
         "version": "1.0.0",
         "name": "test-capsule",
@@ -212,6 +215,7 @@ def test_seal_convenience_returns_capsule_id(tmp_path):
 
 
 # --- helpers ---
+
 
 def _make_builder():
     b = CapsuleBuilder()
@@ -237,9 +241,12 @@ def _populate_capsule_dir(capsule_dir: Path, counts=None):
     if counts is None:
         counts = {"00": 500, "11": 500}
     import json
+
     payload = capsule_dir / "payload"
     payload.mkdir(exist_ok=True)
-    (payload / "results.json").write_text(json.dumps({"counts": counts, "shots": sum(counts.values())}))
+    (payload / "results.json").write_text(
+        json.dumps({"counts": counts, "shots": sum(counts.values())})
+    )
     src = capsule_dir / "source"
     src.mkdir(exist_ok=True)
     (src / "circuit.qasm").write_text("OPENQASM 3.0;\nqubit[2] q;\nh q[0];\ncx q[0], q[1];\n")

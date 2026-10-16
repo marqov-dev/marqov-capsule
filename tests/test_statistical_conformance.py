@@ -8,6 +8,7 @@ with whatever the code happens to do.
 The same file is checked by an independent Node implementation in
 tools/conformance/check.mjs.
 """
+
 import json
 from pathlib import Path
 
@@ -16,8 +17,7 @@ import pytest
 from marqov_capsule.verifier import CapsuleVerifier
 
 VECTORS = json.loads(
-    (Path(__file__).parent.parent
-     / "spec/v1/conformance/golden/statistical-cases.json").read_text()
+    (Path(__file__).parent.parent / "spec/v1/conformance/golden/statistical-cases.json").read_text()
 )
 CASES = VECTORS["cases"]
 TOLERANCE = VECTORS["tolerance"]
@@ -38,9 +38,7 @@ def statistical_dependencies():
 def _run(case):
     settings = dict(case["settings"])
     settings["tolerance_regime"] = "strict"
-    return CapsuleVerifier().verify_statistical(
-        case["ref_counts"], case["new_counts"], settings
-    )
+    return CapsuleVerifier().verify_statistical(case["ref_counts"], case["new_counts"], settings)
 
 
 @pytest.mark.usefixtures("statistical_dependencies")

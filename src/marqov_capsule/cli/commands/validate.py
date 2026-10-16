@@ -1,7 +1,9 @@
 import json
 import sys
 from pathlib import Path
+
 import click
+
 from marqov_capsule.validator import CapsuleValidator
 
 

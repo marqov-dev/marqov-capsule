@@ -41,11 +41,16 @@ def pack(directory, output, force, as_json):
         fail(str(e), as_json)
 
     if as_json:
-        click.echo(json.dumps({
-            "path": str(archive_path),
-            "capsule_id": capsule_id,
-            "payload_digest": digest,
-        }, indent=2))
+        click.echo(
+            json.dumps(
+                {
+                    "path": str(archive_path),
+                    "capsule_id": capsule_id,
+                    "payload_digest": digest,
+                },
+                indent=2,
+            )
+        )
     else:
         click.echo(f"Packed: {archive_path}")
         click.echo(f"  Capsule ID:     {capsule_id}")

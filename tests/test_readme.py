@@ -5,6 +5,7 @@ and closing the tab, and docs drift silently in a way code does not. This
 executes the README's own CLI block rather than a paraphrase of it, so the
 two cannot diverge (#19).
 """
+
 import re
 from pathlib import Path
 

@@ -1,9 +1,9 @@
 import sys
 from pathlib import Path
+
 import click
 
 from marqov_capsule._canonical import dump_manifest_yaml
-
 
 _DRAFT_MANIFEST = {
     "version": "1.0.0",
@@ -20,11 +20,19 @@ _DRAFT_MANIFEST = {
 @click.command()
 @click.argument("directory", type=click.Path(file_okay=False))
 @click.option("--name", default=None, help="Capsule name (defaults to directory name)")
-@click.option("--paradigm", "paradigms", multiple=True,
-              type=click.Choice(["gate-based", "analog", "annealing", "classical"]),
-              help="Paradigm (gate-based, analog, annealing, classical). Repeatable.")
-@click.option("--qubits", default=None, type=click.IntRange(min=0),
-              help="Maximum qubit count (0 for a classical-only capsule)")
+@click.option(
+    "--paradigm",
+    "paradigms",
+    multiple=True,
+    type=click.Choice(["gate-based", "analog", "annealing", "classical"]),
+    help="Paradigm (gate-based, analog, annealing, classical). Repeatable.",
+)
+@click.option(
+    "--qubits",
+    default=None,
+    type=click.IntRange(min=0),
+    help="Maximum qubit count (0 for a classical-only capsule)",
+)
 @click.option("--force", is_flag=True, help="Overwrite existing capsule.yaml")
 def init(directory, name, paradigms, qubits, force):
     """Create a draft capsule.yaml in DIRECTORY."""
@@ -37,6 +45,7 @@ def init(directory, name, paradigms, qubits, force):
         sys.exit(1)
 
     import copy
+
     manifest = copy.deepcopy(_DRAFT_MANIFEST)
     manifest["name"] = name or capsule_dir.name
     if paradigms:

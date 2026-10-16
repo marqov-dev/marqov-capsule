@@ -20,6 +20,24 @@ pytest tests/ -v
 
 All tests must pass before submitting a PR. If you are adding a new spec feature, add a conformance fixture under `spec/v1/conformance/` alongside the code change.
 
+## Formatting
+
+The code is formatted with [ruff](https://docs.astral.sh/ruff/) at line length 100
+(the convention shared by Qiskit, Cirq, PennyLane and the Braket SDK), with imports
+sorted by ruff's isort rules. Run both before committing:
+
+```bash
+ruff format src tests tools
+ruff check --select I --fix src tests tools
+```
+
+The one-time formatting sweep is listed in `.git-blame-ignore-revs`. To keep
+`git blame` pointing at the real authors, run once per clone:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
+
 ## License agreement
 
 This repository contains two separately licensed components:

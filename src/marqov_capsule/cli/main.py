@@ -1,13 +1,15 @@
 """marqov-capsule CLI entry point."""
+
 import click
+
+from marqov_capsule.cli.commands.compare import compare
 from marqov_capsule.cli.commands.init import init
-from marqov_capsule.cli.commands.seal import seal
-from marqov_capsule.cli.commands.verify import verify
 from marqov_capsule.cli.commands.inspect import inspect_cmd
 from marqov_capsule.cli.commands.open import open_cmd
-from marqov_capsule.cli.commands.validate import validate
 from marqov_capsule.cli.commands.pack import pack, unpack
-from marqov_capsule.cli.commands.compare import compare
+from marqov_capsule.cli.commands.seal import seal
+from marqov_capsule.cli.commands.validate import validate
+from marqov_capsule.cli.commands.verify import verify
 
 
 @click.group()

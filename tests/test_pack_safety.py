@@ -1,6 +1,7 @@
 """``pack`` refuses to replace an existing archive (#106) or to archive a draft;
 the archive layer bounds how much it will inflate (review finding, 2026-10-02).
 """
+
 import gzip
 import io
 import json
@@ -26,6 +27,7 @@ def _sealed(tmp_path, name="cap"):
 
 
 # --- #106 -------------------------------------------------------------------
+
 
 def test_pack_refuses_to_overwrite_an_existing_archive(tmp_path):
     first = _sealed(tmp_path, "one")
@@ -75,13 +77,15 @@ def test_cli_pack_force_replaces(tmp_path):
 
 # --- pack refuses drafts ------------------------------------------------------
 
+
 def test_pack_refuses_a_draft_with_a_stale_checksums_file(tmp_path):
     d = tmp_path / "draft"
     d.mkdir()
     (d / "payload.txt").write_text("x\n")
     (d / "capsule.yaml").write_text(
         "version: '1.0.0'\nname: d\nlifecycle_state: draft\n"
-        "requirements:\n  paradigm: [gate-based]\n  max_qubit_count: 2\ntask_executions: []\n")
+        "requirements:\n  paradigm: [gate-based]\n  max_qubit_count: 2\ntask_executions: []\n"
+    )
     CapsuleBuilder().save_checksums(d)
     with pytest.raises(ValueError, match="not sealed"):
         pack_capsule(d, tmp_path / "x.capsule")
@@ -94,11 +98,14 @@ def test_pack_refuses_a_draft_with_a_stale_checksums_file(tmp_path):
 def test_pack_accepts_an_archived_capsule(tmp_path):
     d = _sealed(tmp_path)
     text = (d / "capsule.yaml").read_text(encoding="utf-8")
-    (d / "capsule.yaml").write_text(text.replace("lifecycle_state: sealed", "lifecycle_state: archived"), encoding="utf-8")
+    (d / "capsule.yaml").write_text(
+        text.replace("lifecycle_state: sealed", "lifecycle_state: archived"), encoding="utf-8"
+    )
     assert pack_capsule(d, tmp_path / "a.capsule").is_file()
 
 
 # --- inflation caps ------------------------------------------------------------
+
 
 def _bomb(member_name: str, size: int, extra=()) -> bytes:
     buf = io.BytesIO()
@@ -127,7 +134,7 @@ def test_unpack_refuses_an_archive_over_the_inflation_cap(tmp_path):
 
 
 def test_unpack_default_cap_is_generous_and_documented():
-    assert archive_mod.MAX_UNPACK_BYTES >= 1024 ** 3
+    assert archive_mod.MAX_UNPACK_BYTES >= 1024**3
 
 
 def test_payload_digest_refuses_an_oversized_checksums_member(tmp_path):
@@ -144,4 +151,6 @@ def test_cli_exits_1_cleanly_on_oversized_checksums_member(command, tmp_path):
     args = [command, str(archive)] + (["-o", str(tmp_path / "out")] if command == "unpack" else [])
     result = CliRunner().invoke(cli, args)
     assert result.exit_code == 1, result.output
-    assert result.exception is None or isinstance(result.exception, SystemExit), repr(result.exception)
+    assert result.exception is None or isinstance(result.exception, SystemExit), repr(
+        result.exception
+    )

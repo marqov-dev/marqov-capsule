@@ -109,17 +109,23 @@ def _inconclusive_guidance(metrics):
 
     min_shots = metrics.get("min_shots")
     if min_shots is not None and min_shots > min(shots_ref, shots_new):
-        return (f"  Note: below the {min_shots}-shot floor, so no bound was computed. "
-                "Re-run with more shots.")
+        return (
+            f"  Note: below the {min_shots}-shot floor, so no bound was computed. "
+            "Re-run with more shots."
+        )
 
     tvd = metrics.get("total_variation_distance")
     epsilon = metrics.get("epsilon_used")
     if tvd is not None and epsilon is not None and tvd <= epsilon:
-        return ("  Note: the point estimate is within epsilon but the confidence bound is not. "
-                "This is a sample-size limit, not evidence of a difference — more shots "
-                "should resolve it.")
-    return ("  Note: equivalence was not demonstrated at this epsilon. This is not proof of a "
-            "difference; the test never asserts one.")
+        return (
+            "  Note: the point estimate is within epsilon but the confidence bound is not. "
+            "This is a sample-size limit, not evidence of a difference — more shots "
+            "should resolve it."
+        )
+    return (
+        "  Note: equivalence was not demonstrated at this epsilon. This is not proof of a "
+        "difference; the test never asserts one."
+    )
 
 
 @click.command()
@@ -130,14 +136,29 @@ def _inconclusive_guidance(metrics):
 # an error rate; and a non-positive shot floor is never applied. Silently
 # substituting a default — which the verifier does for a *capsule-declared*
 # alpha — would hide an operator's typo behind a plausible report (#99).
-@click.option("--epsilon", type=click.FloatRange(0.0, 1.0, min_open=True, max_open=True), default=None,
-              help="Equivalence tolerance owned by the verifier, in (0, 1) (default: policy default)")
-@click.option("--min-shots", type=click.IntRange(min=1), default=None,
-              help="Shot floor below which no bound is computed (>= 1)")
-@click.option("--alpha", type=click.FloatRange(0.0, 1.0, min_open=True, max_open=True), default=None,
-              help="Error rate for the one-sided confidence bound, in (0, 1)")
-@click.option("--counts-key", default=None,
-              help="Key holding the counts mapping (default: 'counts', else the whole object)")
+@click.option(
+    "--epsilon",
+    type=click.FloatRange(0.0, 1.0, min_open=True, max_open=True),
+    default=None,
+    help="Equivalence tolerance owned by the verifier, in (0, 1) (default: policy default)",
+)
+@click.option(
+    "--min-shots",
+    type=click.IntRange(min=1),
+    default=None,
+    help="Shot floor below which no bound is computed (>= 1)",
+)
+@click.option(
+    "--alpha",
+    type=click.FloatRange(0.0, 1.0, min_open=True, max_open=True),
+    default=None,
+    help="Error rate for the one-sided confidence bound, in (0, 1)",
+)
+@click.option(
+    "--counts-key",
+    default=None,
+    help="Key holding the counts mapping (default: 'counts', else the whole object)",
+)
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
 def compare(ref, new, epsilon, min_shots, alpha, counts_key, as_json):
     """Test whether two count samples are equivalent within a tolerance.

@@ -4,6 +4,7 @@ Covers: base-10 leading-zero integers, the 2^53-1 integer-magnitude guard, NFC
 normalization of keys/values/paths, path percent-encoding in .checksums,
 duplicate-key rejection, and float-key canonical number formatting.
 """
+
 import os
 import unicodedata
 
@@ -23,6 +24,7 @@ _MAX_SAFE = 9007199254740991  # 2**53 - 1
 
 # --- 1. leading-zero integers construct base-10 (never octal, never crash) ---
 
+
 @pytest.mark.parametrize(
     "raw,expected",
     [("0755", 755), ("08540", 8540), ("007", 7), ("-0755", -755), ("0", 0), ("00", 0)],
@@ -32,6 +34,7 @@ def test_leading_zero_ints_are_base10(raw, expected):
 
 
 # --- 2. integer-magnitude guard (fail closed above 2^53-1) ------------------
+
 
 def test_max_safe_int_loads():
     assert load_manifest_yaml(f"n: {_MAX_SAFE}\n")["n"] == _MAX_SAFE
@@ -55,6 +58,7 @@ def test_over_max_safe_int_rejected_in_canonical():
 
 # --- 3. NFC normalization: NFD and NFC forms share one capsule ID ------------
 
+
 def test_nfc_key_yields_same_id():
     nfd = unicodedata.normalize("NFD", "café")
     nfc = unicodedata.normalize("NFC", "café")
@@ -77,6 +81,7 @@ def test_nfc_path_normalized_in_checksums_helper():
 
 
 # --- 4. path percent-encoding (only %0A %0D %25 %5C, uppercase; space literal) -
+
 
 def test_checksum_path_percent_encodes_specials():
     # newline, carriage return, percent, backslash -> uppercase triplets
@@ -103,6 +108,7 @@ def test_checksums_percent_encodes_special_filename(tmp_path):
 
 # --- 5. duplicate mapping keys are rejected ---------------------------------
 
+
 def test_duplicate_mapping_key_rejected():
     with pytest.raises(yaml.YAMLError):
         load_manifest_yaml("a: 1\na: 2\n")
@@ -118,6 +124,7 @@ def test_distinct_keys_still_load():
 
 
 # --- 6. non-string keys route through the value-side number formatter --------
+
 
 def test_float_key_uses_canonical_number_form():
     # 100.0 -> "100" (ES6/JCS), not repr()'s "100.0"

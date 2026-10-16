@@ -1,6 +1,7 @@
 """The archive layer on malformed or crafted input: documented exceptions only,
 clean CLI exits, and the right ``.checksums`` member (#124, #96, #94).
 """
+
 import gzip
 import io
 import json
@@ -49,14 +50,17 @@ MANIFEST = b"version: '1.0.0'\nname: t\nlifecycle_state: sealed\n"
 
 
 def _archive_with_checksums_member(info, data=None) -> bytes:
-    return _tar_gz([
-        (_info("cap", tarfile.DIRTYPE), None),
-        (_info("cap/capsule.yaml"), MANIFEST),
-        (info, data),
-    ])
+    return _tar_gz(
+        [
+            (_info("cap", tarfile.DIRTYPE), None),
+            (_info("cap/capsule.yaml"), MANIFEST),
+            (info, data),
+        ]
+    )
 
 
 # --- #124: documented exception types only -----------------------------------
+
 
 def test_truncated_gzip_is_a_value_error_from_unpack(tmp_path):
     archive = pack_capsule(_sealed(tmp_path), tmp_path / "a.capsule")
@@ -76,13 +80,18 @@ def test_truncated_gzip_is_a_value_error_from_payload_digest(tmp_path):
         payload_digest(truncated)
 
 
-@pytest.mark.parametrize("member", [
-    pytest.param(_info("cap/.checksums", tarfile.SYMTYPE, "../../etc/passwd"), id="symlink-outside"),
-    pytest.param(_info("cap/.checksums", tarfile.SYMTYPE, "missing"), id="symlink-dangling"),
-    pytest.param(_info("cap/.checksums", tarfile.SYMTYPE, ".checksums"), id="symlink-self"),
-    pytest.param(_info("cap/.checksums", tarfile.LNKTYPE, "cap/capsule.yaml"), id="hardlink"),
-    pytest.param(_info("cap/.checksums", tarfile.DIRTYPE), id="directory"),
-])
+@pytest.mark.parametrize(
+    "member",
+    [
+        pytest.param(
+            _info("cap/.checksums", tarfile.SYMTYPE, "../../etc/passwd"), id="symlink-outside"
+        ),
+        pytest.param(_info("cap/.checksums", tarfile.SYMTYPE, "missing"), id="symlink-dangling"),
+        pytest.param(_info("cap/.checksums", tarfile.SYMTYPE, ".checksums"), id="symlink-self"),
+        pytest.param(_info("cap/.checksums", tarfile.LNKTYPE, "cap/capsule.yaml"), id="hardlink"),
+        pytest.param(_info("cap/.checksums", tarfile.DIRTYPE), id="directory"),
+    ],
+)
 def test_non_regular_checksums_member_is_a_value_error(member, tmp_path):
     archive = tmp_path / "bad.capsule"
     archive.write_bytes(_archive_with_checksums_member(member))
@@ -90,11 +99,14 @@ def test_non_regular_checksums_member_is_a_value_error(member, tmp_path):
         payload_digest(archive)
 
 
-@pytest.mark.parametrize("member", [
-    pytest.param(_info("cap/.checksums", tarfile.SYMTYPE, ".checksums"), id="symlink-self"),
-    pytest.param(_info("cap/.checksums", tarfile.LNKTYPE, "cap/capsule.yaml"), id="hardlink"),
-    pytest.param(_info("cap/.checksums", tarfile.DIRTYPE), id="directory"),
-])
+@pytest.mark.parametrize(
+    "member",
+    [
+        pytest.param(_info("cap/.checksums", tarfile.SYMTYPE, ".checksums"), id="symlink-self"),
+        pytest.param(_info("cap/.checksums", tarfile.LNKTYPE, "cap/capsule.yaml"), id="hardlink"),
+        pytest.param(_info("cap/.checksums", tarfile.DIRTYPE), id="directory"),
+    ],
+)
 @pytest.mark.parametrize("command", ["verify", "unpack"])
 def test_cli_exits_1_cleanly_on_crafted_checksums_member(command, member, tmp_path):
     archive = tmp_path / "bad.capsule"
@@ -104,7 +116,9 @@ def test_cli_exits_1_cleanly_on_crafted_checksums_member(command, member, tmp_pa
         args += ["-o", str(tmp_path / "out")]
     result = CliRunner().invoke(cli, args)
     assert result.exit_code == 1, result.output
-    assert result.exception is None or isinstance(result.exception, SystemExit), repr(result.exception)
+    assert result.exception is None or isinstance(result.exception, SystemExit), repr(
+        result.exception
+    )
 
 
 @pytest.mark.parametrize("command", ["verify", "unpack"])
@@ -118,10 +132,13 @@ def test_cli_exits_1_cleanly_on_truncated_archive(command, tmp_path):
         args += ["-o", str(tmp_path / "out")]
     result = CliRunner().invoke(cli, args)
     assert result.exit_code == 1, result.output
-    assert result.exception is None or isinstance(result.exception, SystemExit), repr(result.exception)
+    assert result.exception is None or isinstance(result.exception, SystemExit), repr(
+        result.exception
+    )
 
 
 # --- #96: unpack/pack error handling ----------------------------------------
+
 
 @pytest.mark.parametrize("as_json", [False, True], ids=["text", "json"])
 def test_unpack_of_non_archive_exits_1_cleanly(as_json, tmp_path):
@@ -130,7 +147,9 @@ def test_unpack_of_non_archive_exits_1_cleanly(as_json, tmp_path):
     args = ["unpack", str(bogus), "-o", str(tmp_path / "out")] + (["--json"] if as_json else [])
     result = CliRunner().invoke(cli, args)
     assert result.exit_code == 1, result.output
-    assert result.exception is None or isinstance(result.exception, SystemExit), repr(result.exception)
+    assert result.exception is None or isinstance(result.exception, SystemExit), repr(
+        result.exception
+    )
     if as_json:
         assert json.loads(result.output)["status"] == "error"
     else:
@@ -143,7 +162,9 @@ def test_pack_output_over_capsule_dir_exits_1_cleanly(as_json, tmp_path):
     args = ["pack", str(d), "-o", str(d)] + (["--json"] if as_json else [])
     result = CliRunner().invoke(cli, args)
     assert result.exit_code == 1, result.output
-    assert result.exception is None or isinstance(result.exception, SystemExit), repr(result.exception)
+    assert result.exception is None or isinstance(result.exception, SystemExit), repr(
+        result.exception
+    )
     if as_json:
         assert json.loads(result.output)["status"] == "error"
     else:
@@ -158,10 +179,13 @@ def test_pack_into_unwritable_location_exits_1_cleanly(as_json, tmp_path):
     args = ["pack", str(d), "-o", str(target)] + (["--json"] if as_json else [])
     result = CliRunner().invoke(cli, args)
     assert result.exit_code == 1, result.output
-    assert result.exception is None or isinstance(result.exception, SystemExit), repr(result.exception)
+    assert result.exception is None or isinstance(result.exception, SystemExit), repr(
+        result.exception
+    )
 
 
 # --- #94: the root .checksums, not the first one in byte order ---------------
+
 
 def test_payload_digest_of_archive_uses_root_checksums(tmp_path):
     d = tmp_path / "cap"
@@ -185,20 +209,28 @@ def test_pack_cli_reports_root_payload_digest(tmp_path):
 
 def test_payload_digest_rejects_archive_with_multiple_roots(tmp_path):
     archive = tmp_path / "two.capsule"
-    archive.write_bytes(_tar_gz([
-        (_info("a/capsule.yaml"), MANIFEST),
-        (_info("a/.checksums"), b""),
-        (_info("b/.checksums"), b""),
-    ]))
+    archive.write_bytes(
+        _tar_gz(
+            [
+                (_info("a/capsule.yaml"), MANIFEST),
+                (_info("a/.checksums"), b""),
+                (_info("b/.checksums"), b""),
+            ]
+        )
+    )
     with pytest.raises(ValueError, match="single top-level"):
         payload_digest(archive)
 
 
 def test_payload_digest_rejects_archive_without_root_checksums(tmp_path):
     archive = tmp_path / "nested-only.capsule"
-    archive.write_bytes(_tar_gz([
-        (_info("cap/capsule.yaml"), MANIFEST),
-        (_info("cap/sub/.checksums"), b"decoy\n"),
-    ]))
+    archive.write_bytes(
+        _tar_gz(
+            [
+                (_info("cap/capsule.yaml"), MANIFEST),
+                (_info("cap/sub/.checksums"), b"decoy\n"),
+            ]
+        )
+    )
     with pytest.raises(FileNotFoundError):
         payload_digest(archive)

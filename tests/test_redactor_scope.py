@@ -1,6 +1,7 @@
 """The credential scan skips binary payloads and says so (#98); notebook
 findings say which cell they are in (#100).
 """
+
 import json
 
 import pytest
@@ -21,6 +22,7 @@ def _capsule(tmp_path):
 
 
 # --- #98 ----------------------------------------------------------------------
+
 
 def test_file_with_nul_bytes_is_skipped_as_binary_and_reported(tmp_path):
     d = _capsule(tmp_path)
@@ -73,13 +75,21 @@ def test_cli_seal_reports_binary_files_it_did_not_scan(flags, tmp_path):
 
 # --- #100 ---------------------------------------------------------------------
 
+
 def _notebook(d):
-    nb = {"cells": [
-        {"cell_type": "code", "source": ["a=1\n"] * 50, "outputs": []},
-        {"cell_type": "code", "source": ["x=1\n", SECRET],
-         "outputs": [{"output_type": "stream", "text": ["ok\n"]},
-                     {"output_type": "stream", "text": ["a\n", "b\n", SECRET]}]},
-    ]}
+    nb = {
+        "cells": [
+            {"cell_type": "code", "source": ["a=1\n"] * 50, "outputs": []},
+            {
+                "cell_type": "code",
+                "source": ["x=1\n", SECRET],
+                "outputs": [
+                    {"output_type": "stream", "text": ["ok\n"]},
+                    {"output_type": "stream", "text": ["a\n", "b\n", SECRET]},
+                ],
+            },
+        ]
+    }
     (d / "n.ipynb").write_text(json.dumps(nb), encoding="utf-8")
 
 
@@ -88,7 +98,9 @@ def test_notebook_findings_carry_cell_index_and_location(tmp_path):
     _notebook(d)
     findings = CapsuleRedactor(d).scan()["findings"]
     assert [(f["cell"], f["location"], f["line"]) for f in findings] == [
-        (1, "source", 2), (1, "output[1]", 3)]
+        (1, "source", 2),
+        (1, "output[1]", 3),
+    ]
 
 
 def test_plain_file_findings_have_no_cell(tmp_path):
