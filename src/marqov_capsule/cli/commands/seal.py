@@ -72,7 +72,14 @@ def _report_scope(scan_result: dict) -> None:
     help="Seal even if the manifest does not validate against the schema",
 )
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
-def seal(directory, warn_only, dry_run, sealed_by, no_validate, as_json):
+def seal(
+    directory: str,
+    warn_only: bool,
+    dry_run: bool,
+    sealed_by: str | None,
+    no_validate: bool,
+    as_json: bool,
+) -> None:
     """Scan for secrets then seal a capsule directory."""
     capsule_dir = Path(directory)
     manifest_path = capsule_dir / "capsule.yaml"

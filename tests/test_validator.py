@@ -1,7 +1,4 @@
-import json
 from pathlib import Path
-
-import pytest
 
 from marqov_capsule.validator import CapsuleValidator
 

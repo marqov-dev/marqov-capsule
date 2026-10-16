@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from marqov_capsule.cli.main import cli
@@ -109,8 +108,6 @@ def test_seal_blocks_secrets_exits_1(tmp_path):
 
 
 def test_seal_actually_seals(tmp_path):
-    import yaml
-
     (tmp_path / "capsule.yaml").write_text(
         "version: '1.0.0'\nname: test-capsule\nlifecycle_state: draft\n"
         "requirements:\n  paradigm: [gate-based]\n  max_qubit_count: 1\n"
@@ -126,7 +123,7 @@ def test_seal_actually_seals(tmp_path):
     assert manifest.get("checksums_digest", "").startswith("sha256:")
     assert (tmp_path / ".checksums").exists()
     # Output contains 64-char capsule ID after "Sealed: "
-    sealed_line = [l for l in result.output.splitlines() if l.startswith("Sealed:")]
+    sealed_line = [line for line in result.output.splitlines() if line.startswith("Sealed:")]
     assert sealed_line, f"No 'Sealed:' line in output: {result.output}"
     capsule_id = sealed_line[0].split("Sealed: ")[-1].strip()
     assert capsule_id.startswith("mqc:1:") and len(capsule_id.split(":")[-1]) == 64, (

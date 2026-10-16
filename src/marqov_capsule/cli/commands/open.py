@@ -20,7 +20,7 @@ from marqov_capsule.verifier import CapsuleVerifier
     help="Trusted capsule ID to verify the manifest against (spec §6 layer 3)",
 )
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
-def open_cmd(capsule, dest, expected_id, as_json):
+def open_cmd(capsule: str, dest: str | None, expected_id: str | None, as_json: bool) -> None:
     """Extract a capsule after full integrity verification."""
     capsule_path = Path(capsule)
 

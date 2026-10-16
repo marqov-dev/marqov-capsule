@@ -127,7 +127,7 @@ def main(argv=None) -> int:
         print(f"FAIL: {raw!r}: {reason}; in {', '.join(sorted(files))}")
     if not args.offline:
         with ThreadPoolExecutor(max_workers=8) as pool:
-            for url, warning in zip(network, pool.map(probe, network)):
+            for url, warning in zip(network, pool.map(probe, network), strict=False):
                 if warning:
                     print(f"WARN: {url!r}: {warning}; review availability/access manually")
         print("Network results do not establish ownership or release readiness.")

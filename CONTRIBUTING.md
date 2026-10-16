@@ -20,16 +20,38 @@ pytest tests/ -v
 
 All tests must pass before submitting a PR. If you are adding a new spec feature, add a conformance fixture under `spec/v1/conformance/` alongside the code change.
 
-## Formatting
+## Quality gates
 
-The code is formatted with [ruff](https://docs.astral.sh/ruff/) at line length 100
-(the convention shared by Qiskit, Cirq, PennyLane and the Braket SDK), with imports
-sorted by ruff's isort rules. Run both before committing:
+CI runs the same three checks as the `lint` job, so run them locally before
+opening a PR (all are installed by the `[dev]` extra):
 
 ```bash
-ruff format src tests tools
-ruff check --select I --fix src tests tools
+ruff format --check src tests tools   # or `ruff format ...` to apply
+ruff check src tests tools            # or `ruff check --fix ...` to apply
+mypy src
+pytest tests/ --cov --cov-report=xml
+diff-cover coverage.xml --compare-branch=origin/main --fail-under=90
 ```
+
+Or let pre-commit run the first three on every commit:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+The rules, chosen to match Qiskit, Cirq, PennyLane and the Braket SDK:
+
+- **Line length is 100.** The formatter owns wrapping; `E501` is not enforced,
+  so a long string or URL the formatter cannot split is fine.
+- **Lint set is `E, F, W, I, B, UP`** (pycodestyle, pyflakes, isort, bugbear,
+  pyupgrade) at ruff's defaults. Suppress a false positive with a targeted
+  `# noqa: <code>` and a one-line reason, never a blanket ignore.
+- **mypy** checks `src/` with `check_untyped_defs`; everything under
+  `marqov_capsule.cli` must be fully annotated.
+- **Changed lines must be covered.** `diff-cover` requires at least 90 % of
+  the lines a PR touches to be exercised by the suite. There is **no global
+  coverage floor** and **no complexity cap**; reviewers judge those.
 
 The one-time formatting sweep is listed in `.git-blame-ignore-revs`. To keep
 `git blame` pointing at the real authors, run once per clone:

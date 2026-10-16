@@ -14,7 +14,7 @@ from marqov_capsule.cli.commands.verify import verify
 
 @click.group()
 @click.version_option()
-def cli():
+def cli() -> None:
     """marqov-capsule — build, seal, verify, and inspect quantum experiment capsules."""
 
 

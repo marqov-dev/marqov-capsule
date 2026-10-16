@@ -31,7 +31,7 @@ import math
 import re
 import string
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from marqov_capsule._canonical import load_manifest_yaml
 
@@ -420,14 +420,17 @@ def _scan_text(text: str, filepath: str, *, honor_allow: bool = True) -> list[di
         # (start, end, finding) for this line, deduped and allow-filtered below.
         candidates: list[tuple[int, int, dict]] = []
 
+        # `add` is called only within this loop iteration, so the `candidates`
+        # and `i` it closes over are always the current line's (B023 is a
+        # false positive here).
         def add(start: int, end: int, reason: str, value: str, blocking: bool, tier: str):
-            candidates.append(
+            candidates.append(  # noqa: B023
                 (
                     start,
                     end,
                     {
                         "file": filepath,
-                        "line": i,
+                        "line": i,  # noqa: B023
                         "match": _redact_value(value),
                         "reason": reason,
                         "blocking": blocking,
@@ -659,7 +662,7 @@ class CapsuleRedactor:
         #: caller can report narrowed scope without paying for a full scan.
         self.capsuleignore_patterns = sorted(self._capsuleignore)
 
-    def scan(self, overrides: Optional[dict[str, str]] = None) -> dict[str, Any]:
+    def scan(self, overrides: dict[str, str] | None = None) -> dict[str, Any]:
         """Scan all files in capsule_dir for credentials.
 
         ``overrides`` maps a capsule-relative path to text that is scanned *in
@@ -746,7 +749,7 @@ class CapsuleRedactor:
             "capsuleignore_patterns": sorted(self._capsuleignore),
         }
 
-    def scan_and_raise(self, overrides: Optional[dict[str, str]] = None) -> dict[str, Any]:
+    def scan_and_raise(self, overrides: dict[str, str] | None = None) -> dict[str, Any]:
         """Scan and raise RedactorError if *blocking* secrets are found.
 
         Only Tier A (distinctive shape) and credential-file findings block the

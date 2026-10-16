@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 DEFAULT_EPSILON = 0.02
 DEFAULT_EPSILON_DRIFT = 0.08
@@ -37,7 +37,7 @@ DEFAULT_MIN_SHOTS = 100
 DEFAULT_ALPHA = 0.05
 
 
-def _usable_threshold(value: Any) -> Optional[float]:
+def _usable_threshold(value: Any) -> float | None:
     """Return ``value`` as a float if it is a usable threshold, else ``None``.
 
     Rejects strings, ``None``, containers, booleans (``bool`` is an ``int``
@@ -56,7 +56,7 @@ def _usable_threshold(value: Any) -> Optional[float]:
     return v
 
 
-def _usable_alpha(value: Any) -> Optional[float]:
+def _usable_alpha(value: Any) -> float | None:
     """Return ``value`` as a float if it is a usable confidence-bound alpha, else ``None``.
 
     Alpha is an error rate, not a threshold: it must be a real number strictly
@@ -126,7 +126,7 @@ class VerificationPolicy:
         ):
             raise ValueError(f"min_shots must be an integer >= 1, got {self.min_shots!r}")
 
-    def resolve(self, declared: Optional[dict]) -> dict[str, Any]:
+    def resolve(self, declared: dict | None) -> dict[str, Any]:
         """Resolve effective settings from this policy and a capsule's declaration.
 
         Returns a dict accepted by ``CapsuleVerifier.verify_statistical`` plus

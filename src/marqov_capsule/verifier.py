@@ -10,7 +10,7 @@ import unicodedata
 import warnings
 from numbers import Integral
 from pathlib import Path
-from typing import Any, NoReturn, Optional, Union
+from typing import Any, NoReturn
 
 import yaml
 
@@ -153,10 +153,10 @@ def _require_numpy():
         import scipy.stats as ss
 
         return np, ss
-    except ImportError:
+    except ImportError as exc:
         raise ImportError(
             "Statistical verification requires numpy and scipy: pip install numpy scipy"
-        )
+        ) from exc
 
 
 def _tvd_point(ref_counts: dict, new_counts: dict, n_ref: int, n_new: int) -> float:
@@ -279,7 +279,9 @@ def _compute_energy_distance(ref_counts: dict, new_counts: dict):
     for i in range(n):
         for j in range(n):
             if i != j:
-                d[i, j] = sum(a != b for a, b in zip(all_keys[i], all_keys[j])) / key_len
+                d[i, j] = (
+                    sum(a != b for a, b in zip(all_keys[i], all_keys[j], strict=False)) / key_len
+                )
 
     e_pq = float(ref_probs @ d @ new_probs)
     e_pp = float(ref_probs @ d @ ref_probs)
@@ -342,7 +344,7 @@ def _check_entry(
 class CapsuleVerifier:
     """Verify capsule integrity and equivalence."""
 
-    def __init__(self, schema_path: Optional[Path] = None):
+    def __init__(self, schema_path: Path | None = None):
         """
         Args:
             schema_path: Deprecated and ignored. The verifier never validated
@@ -505,7 +507,7 @@ class CapsuleVerifier:
     # -------------------------------------------------------------------------
 
     @staticmethod
-    def verify_checksums(capsule_dir: Union[str, Path]) -> dict[str, Any]:
+    def verify_checksums(capsule_dir: str | Path) -> dict[str, Any]:
         """Verify SHA-256 checksums for all files in capsule directory.
 
         Returns a dict with:
@@ -700,8 +702,8 @@ class CapsuleVerifier:
 
     @staticmethod
     def verify_integrity(
-        capsule_dir: Union[str, Path],
-        expected_id: Optional[str] = None,
+        capsule_dir: str | Path,
+        expected_id: str | None = None,
     ) -> dict[str, Any]:
         """Full spec §6 integrity check — all three layers.
 
@@ -747,14 +749,14 @@ class CapsuleVerifier:
         if checksums["status"] != "pass":
             errors.append("payload does not match .checksums")
 
-        checksums_digest_match: Optional[bool] = None
-        capsule_id: Optional[str] = None
-        capsule_id_match: Optional[bool] = None
+        checksums_digest_match: bool | None = None
+        capsule_id: str | None = None
+        capsule_id_match: bool | None = None
         if expected_id is not None and not expected_id_usable:
             capsule_id_match = False
 
         manifest_path = capsule_path / "capsule.yaml"
-        manifest: Optional[dict] = None
+        manifest: dict | None = None
         if manifest_path.is_symlink() or not manifest_path.is_file():
             errors.append(
                 "capsule.yaml missing or not a regular file — no manifest to anchor .checksums to"
@@ -839,7 +841,7 @@ class CapsuleVerifier:
     # Pre-release legacy API migration guards
     # -------------------------------------------------------------------------
 
-    def load_capsule(self, filepath: Union[str, Path]) -> dict[str, Any]:
+    def load_capsule(self, filepath: str | Path) -> dict[str, Any]:
         """Parse a manifest using the capsule YAML profile; does not verify it."""
         manifest = load_manifest_yaml(Path(filepath).read_text(encoding="utf-8"))
         if not isinstance(manifest, dict):
@@ -849,8 +851,8 @@ class CapsuleVerifier:
     def verify_capsule(
         self,
         capsule: dict[str, Any],
-        method: Optional[str] = None,
-        reference_results: Optional[dict[str, Any]] = None,
+        method: str | None = None,
+        reference_results: dict[str, Any] | None = None,
         tolerance: float = 0.01,
         significance_level: float = 0.05,
     ) -> NoReturn:
@@ -884,8 +886,8 @@ class CapsuleVerifier:
 
     def compare_capsules(
         self,
-        capsule1_path: Union[str, Path],
-        capsule2_path: Union[str, Path],
+        capsule1_path: str | Path,
+        capsule2_path: str | Path,
         method: str = "statistical",
         tolerance: float = 0.01,
     ) -> NoReturn:

@@ -1,11 +1,12 @@
 import sys
 from pathlib import Path
+from typing import Any
 
 import click
 
 from marqov_capsule._canonical import dump_manifest_yaml
 
-_DRAFT_MANIFEST = {
+_DRAFT_MANIFEST: dict[str, Any] = {
     "version": "1.0.0",
     "name": "my-capsule",
     "lifecycle_state": "draft",
@@ -34,7 +35,9 @@ _DRAFT_MANIFEST = {
     help="Maximum qubit count (0 for a classical-only capsule)",
 )
 @click.option("--force", is_flag=True, help="Overwrite existing capsule.yaml")
-def init(directory, name, paradigms, qubits, force):
+def init(
+    directory: str, name: str | None, paradigms: tuple[str, ...], qubits: int | None, force: bool
+) -> None:
     """Create a draft capsule.yaml in DIRECTORY."""
     capsule_dir = Path(directory)
     capsule_dir.mkdir(parents=True, exist_ok=True)

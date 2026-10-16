@@ -10,7 +10,7 @@ import tempfile
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from marqov_capsule._canonical import (
     coerce_for_canonical,
@@ -156,15 +156,15 @@ class CapsuleBuilder:
         self._capsule: dict[str, Any] = {}
         self._task_executions: list[dict[str, Any]] = []
         self._sealed = False
-        self._sealed_text: Optional[str] = None
+        self._sealed_text: str | None = None
         #: The credential scan result from the most recent ``seal_capsule``
         #: (``findings``, ``skipped``, ``capsuleignore_patterns``). ``seal()``
         #: returns only the ID, so this is how a caller — the CLI in
         #: particular — learns what a ``warn_only`` seal let through (#105).
-        self.scan_result: Optional[dict[str, Any]] = None
+        self.scan_result: dict[str, Any] | None = None
 
     @classmethod
-    def from_manifest(cls, manifest: dict[str, Any]) -> "CapsuleBuilder":
+    def from_manifest(cls, manifest: dict[str, Any]) -> CapsuleBuilder:
         """Load an existing draft manifest into a new builder.
 
         Used by the CLI `seal` command which reads a capsule.yaml written by
@@ -198,7 +198,7 @@ class CapsuleBuilder:
         return b
 
     @_ClassOrInstanceMethod
-    def derive(cls, manifest: dict[str, Any]) -> "CapsuleBuilder":
+    def derive(cls, manifest: dict[str, Any]) -> CapsuleBuilder:
         """Start a new draft from a sealed (or archived) capsule.
 
         A sealed capsule rejects modification (spec §4); this is the way to
@@ -233,9 +233,9 @@ class CapsuleBuilder:
     def seal(
         self,
         capsule_dir: str | Path,
-        sealed_by: Optional[str] = None,
+        sealed_by: str | None = None,
         warn_only: bool = False,
-        derived_from: Optional[str] = None,
+        derived_from: str | None = None,
         validate: bool = True,
     ) -> str:
         """Full sealing sequence: credential scan → checksums → transition → save → ID.
@@ -288,15 +288,15 @@ class CapsuleBuilder:
         self,
         name: str,
         description: str = "",
-        parameters: Optional[dict[str, Any]] = None,
-        requirements: Optional[dict[str, Any]] = None,
-        run_id: Optional[str] = None,
-        workflow_ref: Optional[str] = None,
-        environment_ref: Optional[str] = None,
-        max_budget_usd: Optional[float] = None,
-        created_by: Optional[str] = None,
-        tags: Optional[list[str]] = None,
-    ) -> "CapsuleBuilder":
+        parameters: dict[str, Any] | None = None,
+        requirements: dict[str, Any] | None = None,
+        run_id: str | None = None,
+        workflow_ref: str | None = None,
+        environment_ref: str | None = None,
+        max_budget_usd: float | None = None,
+        created_by: str | None = None,
+        tags: list[str] | None = None,
+    ) -> CapsuleBuilder:
         """Initialise a new capsule manifest."""
         self._capsule = {
             "version": "1.0.0",
@@ -328,13 +328,13 @@ class CapsuleBuilder:
         status: str,
         result_type: str,
         backend: dict[str, Any],
-        verification_settings: Optional[dict[str, Any]] = None,
-        start_time: Optional[str] = None,
-        end_time: Optional[str] = None,
-        wall_time_seconds: Optional[float] = None,
-        cost_usd: Optional[float] = None,
-        job_id: Optional[str] = None,
-    ) -> "CapsuleBuilder":
+        verification_settings: dict[str, Any] | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None,
+        wall_time_seconds: float | None = None,
+        cost_usd: float | None = None,
+        job_id: str | None = None,
+    ) -> CapsuleBuilder:
         """Record a task execution."""
         self._require_mutable()
         execution: dict[str, Any] = {
@@ -364,7 +364,7 @@ class CapsuleBuilder:
         self,
         data: Any,
         digest_name: str = "results",
-    ) -> "CapsuleBuilder":
+    ) -> CapsuleBuilder:
         """Add a SHA-256 digest of result data to the digests block."""
         self._require_mutable()
         import json as _json
@@ -380,10 +380,10 @@ class CapsuleBuilder:
     def seal_capsule(
         self,
         capsule_dir: str | Path,
-        sealed_by: Optional[str] = None,
+        sealed_by: str | None = None,
         notes: str = "",
         warn_only: bool = False,
-        derived_from: Optional[str] = None,
+        derived_from: str | None = None,
         validate: bool = True,
     ) -> dict[str, Any]:
         """Seal the capsule following spec §5 sealing order.

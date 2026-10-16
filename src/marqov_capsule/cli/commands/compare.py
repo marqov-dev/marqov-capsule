@@ -1,6 +1,7 @@
 import json
 import sys
 from pathlib import Path
+from typing import Any, NoReturn
 
 import click
 
@@ -23,7 +24,7 @@ class _CountsError(Exception):
     """A supplied file could not be read as a counts mapping."""
 
 
-def _fail(message, as_json):
+def _fail(message: str, as_json: bool) -> NoReturn:
     if as_json:
         click.echo(json.dumps({"status": "error", "message": message}, indent=2))
     else:
@@ -31,7 +32,7 @@ def _fail(message, as_json):
     sys.exit(EXIT_ERROR)
 
 
-def _load_counts(path, counts_key):
+def _load_counts(path: str, counts_key: str | None) -> dict[str, int]:
     """Read a counts mapping from a JSON file.
 
     Accepts both shapes this project produces: a bare outcome->count mapping,
@@ -64,7 +65,7 @@ def _load_counts(path, counts_key):
     return {str(outcome): _as_count(path, outcome, value) for outcome, value in counts.items()}
 
 
-def _as_count(path, outcome, value):
+def _as_count(path: str, outcome: object, value: object) -> int:
     # bool is an int subclass; a True here means the file is not counts.
     if isinstance(value, bool) or not isinstance(value, int):
         raise _CountsError(f"{path}: count for '{outcome}' must be an integer, got {value!r}")
@@ -73,7 +74,7 @@ def _as_count(path, outcome, value):
     return value
 
 
-def _report(result, settings, as_json):
+def _report(result: dict[str, Any], settings: dict[str, Any], as_json: bool) -> None:
     if as_json:
         click.echo(json.dumps(result, indent=2))
         return
@@ -95,7 +96,7 @@ def _report(result, settings, as_json):
         click.echo(_inconclusive_guidance(metrics))
 
 
-def _inconclusive_guidance(metrics):
+def _inconclusive_guidance(metrics: dict[str, Any]) -> str:
     """Say which kind of INCONCLUSIVE this is.
 
     A bare INCONCLUSIVE cannot be told apart from "did not reproduce" (#85).
@@ -160,7 +161,15 @@ def _inconclusive_guidance(metrics):
     help="Key holding the counts mapping (default: 'counts', else the whole object)",
 )
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
-def compare(ref, new, epsilon, min_shots, alpha, counts_key, as_json):
+def compare(
+    ref: str,
+    new: str,
+    epsilon: float | None,
+    min_shots: int | None,
+    alpha: float | None,
+    counts_key: str | None,
+    as_json: bool,
+) -> None:
     """Test whether two count samples are equivalent within a tolerance.
 
     Compares the supplied result files; it does not verify the capsules they

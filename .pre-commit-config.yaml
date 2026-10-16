@@ -1,0 +1,23 @@
+# Local mirror of the CI `lint` job. Install once per clone:
+#   pip install pre-commit && pre-commit install
+# ruff is pinned to the same version as the [dev] extra in pyproject.toml.
+# mypy runs from the project environment (`language: system`) so it sees the
+# installed dependencies and the [tool.mypy] config exactly as CI does; the
+# [dev] extra pins its version.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.0
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy src
+        entry: mypy src
+        language: system
+        types: [python]
+        files: ^src/
+        pass_filenames: false

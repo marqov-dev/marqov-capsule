@@ -21,7 +21,7 @@ from marqov_capsule.verifier import CapsuleVerifier
     help="Trusted capsule ID to verify the manifest against (spec §6 layer 3)",
 )
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
-def verify(capsule, expected_id, as_json):
+def verify(capsule: str, expected_id: str | None, as_json: bool) -> None:
     """Verify the integrity of a sealed capsule directory or archive.
 
     This checks that the artifact is unchanged since sealing. To test whether
@@ -63,7 +63,7 @@ def verify(capsule, expected_id, as_json):
         sys.exit(0 if result["status"] == "pass" else 1)
 
 
-def _payload_digest_or_none(capsule_dir: Path):
+def _payload_digest_or_none(capsule_dir: Path) -> str | None:
     """The payload digest of an unsealed or malformed capsule is meaningless."""
     try:
         return payload_digest(capsule_dir)

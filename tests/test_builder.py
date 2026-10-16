@@ -192,7 +192,6 @@ def test_from_manifest_roundtrip():
 
 def test_seal_convenience_returns_capsule_id(tmp_path):
     """CapsuleBuilder.seal() runs the full sequence and returns the 64-char hex capsule ID."""
-    import yaml
 
     manifest = {
         "version": "1.0.0",

@@ -164,7 +164,7 @@ class _ManifestLoader(yaml.SafeLoader):
                     node.start_mark,
                     f"found unhashable key ({exc})",
                     key_node.start_mark,
-                )
+                ) from exc
             if not isinstance(key, str):
                 raise ConstructorError(
                     "while constructing a mapping",
@@ -200,7 +200,7 @@ _FLOAT_RE = re.compile(
 _MAX_INT_LITERAL_LEN = len(str(_MAX_SAFE_INT)) + 1  # sign + 16 digits
 
 
-def _construct_manifest_string(loader: _ManifestLoader, node: yaml.Node) -> str:
+def _construct_manifest_string(loader: _ManifestLoader, node: yaml.ScalarNode) -> str:
     value = loader.construct_scalar(node)
     if re.search(r"[\ud800-\udfff]", value):
         raise ConstructorError(
@@ -212,7 +212,7 @@ def _construct_manifest_string(loader: _ManifestLoader, node: yaml.Node) -> str:
     return value
 
 
-def _construct_int_base10(loader: _ManifestLoader, node: yaml.Node) -> int:
+def _construct_int_base10(loader: _ManifestLoader, node: yaml.ScalarNode) -> int:
     """Construct integers as base-10 with a magnitude guard.
 
     The implicit resolver only tags ``^[-+]?[0-9]+$`` scalars as ints, so an
@@ -244,7 +244,7 @@ def _construct_int_base10(loader: _ManifestLoader, node: yaml.Node) -> int:
     return result
 
 
-def _construct_float_strict(loader: _ManifestLoader, node: yaml.Node) -> float:
+def _construct_float_strict(loader: _ManifestLoader, node: yaml.ScalarNode) -> float:
     """``!!float`` held to the JSON-shaped grammar: no ``.inf``/``.nan``, no
     sexagesimal, no underscores — and never a bare ``ValueError`` from
     ``float()`` (#122)."""
@@ -259,7 +259,7 @@ def _construct_float_strict(loader: _ManifestLoader, node: yaml.Node) -> float:
     return float(value)
 
 
-def _construct_null_strict(loader: _ManifestLoader, node: yaml.Node) -> None:
+def _construct_null_strict(loader: _ManifestLoader, node: yaml.ScalarNode) -> None:
     value = loader.construct_scalar(node)
     if not _NULL_RE.fullmatch(value):
         raise ConstructorError(
@@ -271,7 +271,7 @@ def _construct_null_strict(loader: _ManifestLoader, node: yaml.Node) -> None:
     return None
 
 
-def _construct_bool_strict(loader: _ManifestLoader, node: yaml.Node) -> bool:
+def _construct_bool_strict(loader: _ManifestLoader, node: yaml.ScalarNode) -> bool:
     """``!!bool`` held to the YAML 1.2 core set: ``true``/``false`` and their
     capitalised forms only — never ``yes``/``no``, never a ``KeyError``."""
     value = loader.construct_scalar(node)

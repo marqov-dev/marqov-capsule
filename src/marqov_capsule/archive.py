@@ -22,7 +22,6 @@ import tarfile
 import unicodedata
 import warnings
 from pathlib import Path, PurePosixPath
-from typing import Optional, Union
 
 import yaml
 
@@ -43,8 +42,8 @@ _PACKABLE_STATES = ("sealed", "archived")
 
 
 def pack_capsule(
-    capsule_dir: Union[str, Path],
-    output_path: Optional[Union[str, Path]] = None,
+    capsule_dir: str | Path,
+    output_path: str | Path | None = None,
     overwrite: bool = False,
 ) -> Path:
     """Create a deterministic gzipped tarball from a sealed capsule directory.
@@ -153,9 +152,9 @@ def pack_capsule(
 
 
 def unpack_capsule(
-    archive_path: Union[str, Path],
-    output_dir: Optional[Union[str, Path]] = None,
-    max_bytes: Optional[int] = MAX_UNPACK_BYTES,
+    archive_path: str | Path,
+    output_dir: str | Path | None = None,
+    max_bytes: int | None = MAX_UNPACK_BYTES,
 ) -> Path:
     """Extract a capsule archive to a directory.
 
@@ -245,7 +244,7 @@ class _open_archive:
 
     def __init__(self, archive_path: Path):
         self.archive_path = archive_path
-        self._tf: Optional[tarfile.TarFile] = None
+        self._tf: tarfile.TarFile | None = None
 
     def __enter__(self) -> tarfile.TarFile:
         try:
@@ -298,7 +297,7 @@ def _single_root_layout(tf: tarfile.TarFile) -> tuple[str, dict[str, tarfile.Tar
     return roots.pop(), members_by_name
 
 
-def payload_digest(capsule_dir_or_archive: Union[str, Path]) -> str:
+def payload_digest(capsule_dir_or_archive: str | Path) -> str:
     """SHA-256 of the ``.checksums`` bytes, as ``sha256:<hex>``.
 
     This is the digest of the *payload set*, not an identifier for the
@@ -347,7 +346,7 @@ def payload_digest(capsule_dir_or_archive: Union[str, Path]) -> str:
     return f"sha256:{digest}"
 
 
-def _lifecycle_state(capsule_dir: Path) -> Optional[str]:
+def _lifecycle_state(capsule_dir: Path) -> str | None:
     """The ``lifecycle_state`` declared by ``capsule_dir/capsule.yaml``."""
     manifest_path = capsule_dir / "capsule.yaml"
     if manifest_path.is_symlink() or not manifest_path.is_file():

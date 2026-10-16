@@ -30,10 +30,10 @@ def _json_domain_errors(value, path="", ancestors=frozenset()):
         items = value.items() if isinstance(value, dict) else enumerate(value)
         normalized_keys = set()
         for key, child in items:
-            if isinstance(value, dict) and not isinstance(key, str):
-                yield error("manifest object keys must be strings")
-                continue
             if isinstance(value, dict):
+                if not isinstance(key, str):
+                    yield error("manifest object keys must be strings")
+                    continue
                 normalized = unicodedata.normalize("NFC", key)
                 if normalized in normalized_keys:
                     yield error("manifest keys collide after Unicode normalization")

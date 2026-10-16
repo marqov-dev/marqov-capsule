@@ -150,8 +150,6 @@ def test_capsule_allow_suppresses_name_pattern(tmp_path):
 
 
 def _notebook(cells):
-    import json
-
     return json.dumps({"cells": cells, "metadata": {}, "nbformat": 4, "nbformat_minor": 5})
 
 

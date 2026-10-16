@@ -7,7 +7,7 @@ import click
 from marqov_capsule.cli._manifest import load_manifest_or_exit
 
 
-def _safe_echo(value):
+def _safe_echo(value: object) -> None:
     """Display untrusted metadata without terminal commands or forged lines."""
     text = str(value)
     click.echo(
@@ -21,7 +21,7 @@ def _safe_echo(value):
 @click.command()
 @click.argument("capsule", type=click.Path(exists=True, file_okay=False))
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
-def inspect_cmd(capsule, as_json):
+def inspect_cmd(capsule: str, as_json: bool) -> None:
     """Show human-readable summary of a capsule."""
     manifest_path = Path(capsule) / "capsule.yaml"
     cap = load_manifest_or_exit(manifest_path, as_json)

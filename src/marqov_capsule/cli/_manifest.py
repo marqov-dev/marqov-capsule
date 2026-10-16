@@ -28,7 +28,7 @@ def fail(message: str, as_json: bool, **extra: Any) -> NoReturn:
     sys.exit(1)
 
 
-def check_expected_id(ctx, param, value):
+def check_expected_id(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
     """Click callback for ``--id``: a string that is not a capsule ID is a
     usage error (exit 2), not a tamper verdict (#114)."""
     if value is None:
@@ -38,7 +38,7 @@ def check_expected_id(ctx, param, value):
     except ValueError:
         raise click.BadParameter(
             f"{value!r} is not a capsule ID (expected mqc:<version>:<64 lowercase hex>)"
-        )
+        ) from None
     return value
 
 
