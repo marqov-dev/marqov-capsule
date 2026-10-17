@@ -13,10 +13,15 @@ from marqov_capsule.verifier import CapsuleVerifier
 
 @click.command()
 @click.argument("capsule", type=click.Path(exists=True))
-@click.option("--id", "expected_id", default=None, callback=check_expected_id,
-              help="Trusted capsule ID to verify the manifest against (spec §6 layer 3)")
+@click.option(
+    "--id",
+    "expected_id",
+    default=None,
+    callback=check_expected_id,
+    help="Trusted capsule ID to verify the manifest against (spec §6 layer 3)",
+)
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
-def verify(capsule, expected_id, as_json):
+def verify(capsule: str, expected_id: str | None, as_json: bool) -> None:
     """Verify the integrity of a sealed capsule directory or archive.
 
     This checks that the artifact is unchanged since sealing. To test whether
@@ -45,7 +50,9 @@ def verify(capsule, expected_id, as_json):
             unpacked = unpack_capsule(path, output_dir=tmp)
         except (ValueError, OSError, tarfile.TarError, EOFError) as e:
             if as_json:
-                click.echo(json.dumps({"status": "fail", "errors": [f"could not unpack archive: {e}"]}))
+                click.echo(
+                    json.dumps({"status": "fail", "errors": [f"could not unpack archive: {e}"]})
+                )
             else:
                 click.echo(f"Error: could not unpack {path}: {e}", err=True)
             sys.exit(1)
@@ -56,7 +63,7 @@ def verify(capsule, expected_id, as_json):
         sys.exit(0 if result["status"] == "pass" else 1)
 
 
-def _payload_digest_or_none(capsule_dir: Path):
+def _payload_digest_or_none(capsule_dir: Path) -> str | None:
     """The payload digest of an unsealed or malformed capsule is meaningless."""
     try:
         return payload_digest(capsule_dir)
@@ -83,5 +90,7 @@ def _report(result: dict, as_json: bool) -> None:
     for err in result.get("errors", []):
         click.echo(f"  {err}")
     if result["status"] == "pass" and not result["manifest_authenticated"]:
-        click.echo("  Note: manifest is not authenticated — nothing on disk can "
-                   "attest to it. Pass --id <trusted-id> to check layer 3.")
+        click.echo(
+            "  Note: manifest is not authenticated — nothing on disk can "
+            "attest to it. Pass --id <trusted-id> to check layer 3."
+        )

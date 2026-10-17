@@ -3,6 +3,7 @@ that on Windows by reading: native path separators in capsule-relative paths
 (#113) and platform-default text encodings (#103). The Windows and macOS CI
 legs are the end-to-end check; these fail on any OS.
 """
+
 import json
 import re
 import warnings
@@ -27,21 +28,28 @@ def _source_lines():
 
 
 def test_no_capsule_relative_path_uses_the_native_separator():
-    offenders = [where for where, line in _source_lines()
-                 if re.search(r"str\([^()]*\.relative_to\(", line)]
+    offenders = [
+        where for where, line in _source_lines() if re.search(r"str\([^()]*\.relative_to\(", line)
+    ]
     assert offenders == [], "use .as_posix(), not str(), for capsule-relative paths"
 
 
 def test_every_text_read_and_write_names_its_encoding():
-    offenders = [where for where, line in _source_lines()
-                 if re.search(r"\.(read_text|write_text)\(", line) and "encoding=" not in line]
+    offenders = [
+        where
+        for where, line in _source_lines()
+        if re.search(r"\.(read_text|write_text)\(", line) and "encoding=" not in line
+    ]
     assert offenders == []
 
 
 def test_no_text_mode_open_without_an_encoding():
-    offenders = [where for where, line in _source_lines()
-                 if re.search(r"(?<![.\w`])open\(", line)
-                 and not re.search(r"""["'][rwxa]?b[rwxa+]?["']|encoding=|"wb" if""", line)]
+    offenders = [
+        where
+        for where, line in _source_lines()
+        if re.search(r"(?<![.\w`])open\(", line)
+        and not re.search(r"""["'][rwxa]?b[rwxa+]?["']|encoding=|"wb" if""", line)
+    ]
     assert offenders == []
 
 
@@ -84,12 +92,15 @@ def test_compare_reports_a_non_utf8_counts_file_cleanly(tmp_path):
     good = tmp_path / "new.json"
     good.write_text('{"00": 1}', encoding="utf-8")
     result = CliRunner().invoke(cli, ["compare", str(bad), str(good)])
-    assert result.exception is None or isinstance(result.exception, SystemExit), repr(result.exception)
+    assert result.exception is None or isinstance(result.exception, SystemExit), repr(
+        result.exception
+    )
     assert result.exit_code != 0
     assert "UTF-8" in result.output
 
 
 # --- #102: the verifier does not pretend to use a schema path ------------------
+
 
 def test_verifier_schema_path_is_deprecated_and_not_loaded(tmp_path):
     schema = tmp_path / "schema.json"

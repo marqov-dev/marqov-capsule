@@ -1,7 +1,9 @@
 """``.checksums`` is untrusted input: a hostile path must be a FAIL verdict,
 never an exception out of the verifier (#123).
 """
+
 import os
+
 import pytest
 from click.testing import CliRunner
 
@@ -26,8 +28,9 @@ HOSTILE_PATHS = [
 
 def _capsule_with_checksums(tmp_path, line: str):
     (tmp_path / "capsule.yaml").write_text(
-        "version: '1.0.0'\nname: t\nlifecycle_state: sealed\n"
-        f"checksums_digest: {DIGEST}\n", encoding="utf-8")
+        f"version: '1.0.0'\nname: t\nlifecycle_state: sealed\nchecksums_digest: {DIGEST}\n",
+        encoding="utf-8",
+    )
     (tmp_path / ".checksums").write_bytes(line.encode("utf-8", "surrogateescape"))
     return tmp_path
 
@@ -38,7 +41,7 @@ def test_verify_checksums_fails_closed_on_hostile_path(path, tmp_path):
     result = CapsuleVerifier.verify_checksums(tmp_path)
     assert result["status"] == "fail"
     assert result["passed"] is False
-    if any(ord(c) < 0x20 or ord(c) == 0x7f for c in path):
+    if any(ord(c) < 0x20 or ord(c) == 0x7F for c in path):
         # The writer never emits a raw control character: parse-time rejection.
         assert "malformed" in result["error"], result
 
@@ -55,7 +58,9 @@ def test_cli_exits_1_without_traceback_on_hostile_path(command, path, tmp_path):
     _capsule_with_checksums(tmp_path, f"{DIGEST}  {path}\n")
     result = CliRunner().invoke(cli, [command, str(tmp_path)])
     assert result.exit_code == 1, result.output
-    assert result.exception is None or isinstance(result.exception, SystemExit), repr(result.exception)
+    assert result.exception is None or isinstance(result.exception, SystemExit), repr(
+        result.exception
+    )
 
 
 @pytest.mark.skipif(os.name == "nt", reason="filename cannot exist on this filesystem")

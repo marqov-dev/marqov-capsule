@@ -19,7 +19,7 @@ _ARCHIVE_ERRORS = (FileNotFoundError, ValueError, OSError, tarfile.TarError, EOF
 @click.option("--output", "-o", default=None, help="Archive path (default: <name>.capsule)")
 @click.option("--force", is_flag=True, help="Replace an existing archive at the output path")
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
-def pack(directory, output, force, as_json):
+def pack(directory: str, output: str | None, force: bool, as_json: bool) -> None:
     """Pack a sealed capsule directory into a deterministic archive.
 
     The archive is byte-reproducible: packing the same capsule twice yields
@@ -41,11 +41,16 @@ def pack(directory, output, force, as_json):
         fail(str(e), as_json)
 
     if as_json:
-        click.echo(json.dumps({
-            "path": str(archive_path),
-            "capsule_id": capsule_id,
-            "payload_digest": digest,
-        }, indent=2))
+        click.echo(
+            json.dumps(
+                {
+                    "path": str(archive_path),
+                    "capsule_id": capsule_id,
+                    "payload_digest": digest,
+                },
+                indent=2,
+            )
+        )
     else:
         click.echo(f"Packed: {archive_path}")
         click.echo(f"  Capsule ID:     {capsule_id}")
@@ -56,7 +61,7 @@ def pack(directory, output, force, as_json):
 @click.argument("archive", type=click.Path(exists=True, dir_okay=False))
 @click.option("--output", "-o", default=None, help="Destination directory")
 @click.option("--json", "as_json", is_flag=True, help="Output JSON")
-def unpack(archive, output, as_json):
+def unpack(archive: str, output: str | None, as_json: bool) -> None:
     """Unpack a capsule archive into a directory."""
     dest = Path(output) if output else Path.cwd()
     try:

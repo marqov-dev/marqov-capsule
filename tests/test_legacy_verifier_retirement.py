@@ -1,4 +1,5 @@
 """Legacy false-success cases must produce explicit migration errors."""
+
 import pytest
 import yaml
 
@@ -6,12 +7,25 @@ from marqov_capsule import CapsuleVerifier
 
 
 @pytest.mark.parametrize("method", [None, "deterministic", "statistical", "verification-only"])
-@pytest.mark.parametrize("capsule,reference", [
-    ({}, {"unrelated": 1}),
-    ({"digests": dict.fromkeys(["workflow", "environment", "backends", "provenance"], "claim")}, None),
-    ({"lifecycle_state": "sealed", "name": "test", "digests": {"any": "claim"}, "tasks": []}, None),
-    ({"reproducibility_tier": "unknown"}, {}),
-])
+@pytest.mark.parametrize(
+    "capsule,reference",
+    [
+        ({}, {"unrelated": 1}),
+        (
+            {
+                "digests": dict.fromkeys(
+                    ["workflow", "environment", "backends", "provenance"], "claim"
+                )
+            },
+            None,
+        ),
+        (
+            {"lifecycle_state": "sealed", "name": "test", "digests": {"any": "claim"}, "tasks": []},
+            None,
+        ),
+        ({"reproducibility_tier": "unknown"}, {}),
+    ],
+)
 def test_legacy_verification_never_returns_a_verdict(method, capsule, reference):
     with pytest.raises(NotImplementedError, match="verify_integrity"):
         CapsuleVerifier().verify_capsule(capsule, method=method, reference_results=reference)

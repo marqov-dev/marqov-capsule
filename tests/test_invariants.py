@@ -1,4 +1,5 @@
 """Cross-cutting invariant checks — these run in CI on every PR."""
+
 import json
 from pathlib import Path
 
@@ -39,8 +40,7 @@ def test_capsule_id_is_deterministic():
 def test_capsule_id_stable_across_timestamp_quoting():
     """Core guarantee of load_manifest_yaml: unquoted and quoted timestamps are equal."""
     unquoted = load_manifest_yaml(
-        "version: '1.0.0'\nname: test\nlifecycle_state: draft\n"
-        "created_at: 2026-06-11T00:00:00Z\n"
+        "version: '1.0.0'\nname: test\nlifecycle_state: draft\ncreated_at: 2026-06-11T00:00:00Z\n"
     )
     quoted = load_manifest_yaml(
         "version: '1.0.0'\nname: test\nlifecycle_state: draft\n"
@@ -72,8 +72,12 @@ def test_capsule_id_changes_with_content(tmp_path):
         b.seal_capsule(capsule_dir=cap_dir, sealed_by="test")
         b.save_capsule(cap_dir)
 
-    id0 = compute_capsule_id(load_manifest_yaml((tmp_path / "cap0.capsule/capsule.yaml").read_text()))
-    id1 = compute_capsule_id(load_manifest_yaml((tmp_path / "cap1.capsule/capsule.yaml").read_text()))
+    id0 = compute_capsule_id(
+        load_manifest_yaml((tmp_path / "cap0.capsule/capsule.yaml").read_text())
+    )
+    id1 = compute_capsule_id(
+        load_manifest_yaml((tmp_path / "cap1.capsule/capsule.yaml").read_text())
+    )
     assert id0 != id1
 
 
@@ -118,8 +122,11 @@ def test_derived_capsule_chain():
 # Invariant 9b: the capsule ID is self-describing — mqc:<version>:<64-hex>
 def test_capsule_id_is_versioned():
     import re
+
     import pytest
+
     from marqov_capsule._canonical import parse_capsule_id
+
     cap = load_manifest_yaml((FIXTURE_DIR / "valid_capsule/capsule.yaml").read_text())
     cid = compute_capsule_id(cap)
     assert re.fullmatch(r"mqc:1:[0-9a-f]{64}", cid), cid
@@ -133,7 +140,9 @@ def test_capsule_id_is_versioned():
 # Invariant 10: CLI commands exit non-zero on error paths
 def test_validate_exits_nonzero_on_invalid():
     from click.testing import CliRunner
+
     from marqov_capsule.cli.main import cli
+
     runner = CliRunner()
     result = runner.invoke(cli, ["validate", str(FIXTURE_DIR / "invalid_capsule/capsule.yaml")])
     assert result.exit_code != 0
@@ -141,7 +150,9 @@ def test_validate_exits_nonzero_on_invalid():
 
 def test_verify_exits_nonzero_on_tampered(tmp_path):
     import shutil
+
     from click.testing import CliRunner
+
     from marqov_capsule.cli.main import cli
 
     # Copy valid capsule and tamper with a payload file

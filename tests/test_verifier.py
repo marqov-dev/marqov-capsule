@@ -1,12 +1,16 @@
 import hashlib
 from pathlib import Path
+
 import pytest
+
 from marqov_capsule.verifier import CapsuleVerifier
+
 
 @pytest.fixture
 def statistical_dependencies():
     pytest.importorskip("numpy")
     pytest.importorskip("scipy")
+
 
 FIXTURE_DIR = Path(__file__).parent.parent / "spec/v1/conformance"
 
@@ -126,7 +130,12 @@ def test_calibration_drift_uses_epsilon_drift():
     drift_result = verifier.verify_statistical(
         ref_counts=ref,
         new_counts=new,
-        verification_settings={"epsilon": 0.02, "epsilon_drift": 0.10, "min_shots": 100, "tolerance_regime": "calibration_drift"},
+        verification_settings={
+            "epsilon": 0.02,
+            "epsilon_drift": 0.10,
+            "min_shots": 100,
+            "tolerance_regime": "calibration_drift",
+        },
     )
     assert drift_result["metrics"]["epsilon_used"] == 0.10
     # Drift regime must not be stricter
@@ -273,12 +282,22 @@ def test_valid_alpha_is_honoured():
     loose = verifier.verify_statistical(
         ref_counts=counts,
         new_counts=counts,
-        verification_settings={"epsilon": 0.5, "min_shots": 100, "tolerance_regime": "strict", "alpha": 0.5},
+        verification_settings={
+            "epsilon": 0.5,
+            "min_shots": 100,
+            "tolerance_regime": "strict",
+            "alpha": 0.5,
+        },
     )
     tight = verifier.verify_statistical(
         ref_counts=counts,
         new_counts=counts,
-        verification_settings={"epsilon": 0.5, "min_shots": 100, "tolerance_regime": "strict", "alpha": 0.01},
+        verification_settings={
+            "epsilon": 0.5,
+            "min_shots": 100,
+            "tolerance_regime": "strict",
+            "alpha": 0.01,
+        },
     )
     assert loose["metrics"]["alpha"] == pytest.approx(0.5)
     assert tight["metrics"]["alpha"] == pytest.approx(0.01)
@@ -346,6 +365,7 @@ def test_energy_distance_uses_hamming_metric():
 
 def test_verify_checksums_pass(tmp_path):
     import yaml
+
     capsule_dir = tmp_path / "test.capsule"
     capsule_dir.mkdir()
     payload = capsule_dir / "payload"
@@ -362,6 +382,7 @@ def test_verify_checksums_pass(tmp_path):
 
 def test_verify_checksums_fail_on_tampered_file(tmp_path):
     import yaml
+
     capsule_dir = tmp_path / "test.capsule"
     capsule_dir.mkdir()
     payload = capsule_dir / "payload"
@@ -396,9 +417,11 @@ def test_deterministic_verification_mismatch():
 
 # --- Path-traversal hardening (#31) ---
 
+
 def test_verify_checksums_rejects_parent_traversal_key(tmp_path):
     """A .checksums key that escapes the capsule root must fail without reading the outside file."""
     import yaml
+
     secret = tmp_path / "secret.txt"
     secret.write_text("outside-the-capsule")
     secret_digest = "sha256:" + hashlib.sha256(secret.read_bytes()).hexdigest()
@@ -407,7 +430,9 @@ def test_verify_checksums_rejects_parent_traversal_key(tmp_path):
     capsule_dir.mkdir()
     # Key escapes the root; digest is the *real* hash of the outside file, so a
     # naive implementation would report match=True and status=pass.
-    (capsule_dir / ".checksums").write_text(yaml.dump({"../secret.txt": secret_digest}, sort_keys=True))
+    (capsule_dir / ".checksums").write_text(
+        yaml.dump({"../secret.txt": secret_digest}, sort_keys=True)
+    )
 
     result = CapsuleVerifier.verify_checksums(capsule_dir)
     assert result["status"] == "fail"
@@ -417,9 +442,12 @@ def test_verify_checksums_rejects_parent_traversal_key(tmp_path):
 def test_verify_checksums_rejects_absolute_path_key(tmp_path):
     """A .checksums key with an absolute path must fail (path traversal)."""
     import yaml
+
     capsule_dir = tmp_path / "test.capsule"
     capsule_dir.mkdir()
-    (capsule_dir / ".checksums").write_text(yaml.dump({"/etc/hosts": "sha256:" + "0" * 64}, sort_keys=True))
+    (capsule_dir / ".checksums").write_text(
+        yaml.dump({"/etc/hosts": "sha256:" + "0" * 64}, sort_keys=True)
+    )
 
     result = CapsuleVerifier.verify_checksums(capsule_dir)
     assert result["status"] == "fail"
@@ -428,9 +456,11 @@ def test_verify_checksums_rejects_absolute_path_key(tmp_path):
 
 # --- Symlink hardening (#32) ---
 
+
 def test_verify_checksums_does_not_follow_symlink_entry(tmp_path):
     """A .checksums entry that is a symlink must not be dereferenced."""
     import yaml
+
     secret = tmp_path / "id_rsa"
     secret.write_text("PRIVATE KEY CONTENT")
     secret_digest = "sha256:" + hashlib.sha256(secret.read_bytes()).hexdigest()
@@ -440,7 +470,9 @@ def test_verify_checksums_does_not_follow_symlink_entry(tmp_path):
     payload = capsule_dir / "payload"
     payload.mkdir()
     (payload / "link.txt").symlink_to(secret)
-    (capsule_dir / ".checksums").write_text(yaml.dump({"payload/link.txt": secret_digest}, sort_keys=True))
+    (capsule_dir / ".checksums").write_text(
+        yaml.dump({"payload/link.txt": secret_digest}, sort_keys=True)
+    )
 
     result = CapsuleVerifier.verify_checksums(capsule_dir)
     assert result["status"] == "fail"
@@ -450,6 +482,7 @@ def test_verify_checksums_does_not_follow_symlink_entry(tmp_path):
 def test_verify_checksums_flags_unlisted_symlink(tmp_path):
     """A symlink present in the tree but absent from .checksums must still fail verification."""
     import yaml
+
     secret = tmp_path / "id_rsa"
     secret.write_text("PRIVATE KEY CONTENT")
 
@@ -461,7 +494,9 @@ def test_verify_checksums_flags_unlisted_symlink(tmp_path):
     real.write_text('{"counts": {"00": 1}}')
     digest = "sha256:" + hashlib.sha256(real.read_bytes()).hexdigest()
     (payload / "link.txt").symlink_to(secret)  # not listed in .checksums
-    (capsule_dir / ".checksums").write_text(yaml.dump({"payload/results.json": digest}, sort_keys=True))
+    (capsule_dir / ".checksums").write_text(
+        yaml.dump({"payload/results.json": digest}, sort_keys=True)
+    )
 
     result = CapsuleVerifier.verify_checksums(capsule_dir)
     assert result["status"] == "fail"

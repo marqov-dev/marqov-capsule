@@ -1,4 +1,5 @@
 """CapsuleVerifier — integrity verification and equivalence testing."""
+
 from __future__ import annotations
 
 import hashlib
@@ -9,7 +10,7 @@ import unicodedata
 import warnings
 from numbers import Integral
 from pathlib import Path
-from typing import Any, NoReturn, Optional, Union
+from typing import Any, NoReturn
 
 import yaml
 
@@ -58,7 +59,9 @@ _MAX_SAMPLE_SHOTS = 2**53 - 1
 def _normalise_counts(counts: dict, name: str) -> dict[str, int]:
     """Accept integral scalar types, with totals safe for float diagnostics."""
     if not isinstance(counts, dict):
-        raise ValueError(f"{name} must be a mapping of string outcomes to non-negative integer counts")
+        raise ValueError(
+            f"{name} must be a mapping of string outcomes to non-negative integer counts"
+        )
     normalised = {}
     total = 0
     for outcome, count in counts.items():
@@ -108,14 +111,20 @@ def _parse_normative_checksums(raw: str) -> dict[str, str]:
             algorithm, sep, digest = token.partition(":")
             if not sep or algorithm != "sha256":
                 raise _ChecksumsGrammarError(
-                    line_no, f"unrecognised digest algorithm prefix {algorithm[:20]!r} (expected 'sha256')")
+                    line_no,
+                    f"unrecognised digest algorithm prefix {algorithm[:20]!r} (expected 'sha256')",
+                )
             if not re.fullmatch(r"[0-9a-f]{64}", digest):
                 raise _ChecksumsGrammarError(line_no, "digest must be 64 lowercase hex characters")
             # A CR or other control character also lands here: '.' does not
             # match a line break, and the path check below would reject it.
             if _CONTROL_CHAR_RE.search(line):
-                raise _ChecksumsGrammarError(line_no, "control character (lines end with a single LF)")
-            raise _ChecksumsGrammarError(line_no, "digest and path must be separated by exactly two spaces")
+                raise _ChecksumsGrammarError(
+                    line_no, "control character (lines end with a single LF)"
+                )
+            raise _ChecksumsGrammarError(
+                line_no, "digest and path must be separated by exactly two spaces"
+            )
         name = m.group(1)
         # The writer percent-encodes LF/CR and never emits any other control
         # character; a raw one here is a file the reference writer did not
@@ -142,12 +151,12 @@ def _require_numpy():
     try:
         import numpy as np
         import scipy.stats as ss
+
         return np, ss
-    except ImportError:
+    except ImportError as exc:
         raise ImportError(
-            "Statistical verification requires numpy and scipy: "
-            "pip install numpy scipy"
-        )
+            "Statistical verification requires numpy and scipy: pip install numpy scipy"
+        ) from exc
 
 
 def _tvd_point(ref_counts: dict, new_counts: dict, n_ref: int, n_new: int) -> float:
@@ -270,7 +279,9 @@ def _compute_energy_distance(ref_counts: dict, new_counts: dict):
     for i in range(n):
         for j in range(n):
             if i != j:
-                d[i, j] = sum(a != b for a, b in zip(all_keys[i], all_keys[j])) / key_len
+                d[i, j] = (
+                    sum(a != b for a, b in zip(all_keys[i], all_keys[j], strict=False)) / key_len
+                )
 
     e_pq = float(ref_probs @ d @ new_probs)
     e_pp = float(ref_probs @ d @ ref_probs)
@@ -278,8 +289,9 @@ def _compute_energy_distance(ref_counts: dict, new_counts: dict):
     return 2.0 * e_pq - e_pp - e_qq
 
 
-def _check_entry(rel_path, expected_digest, capsule_path, resolved_root,
-                 actual_paths, colliding_paths):
+def _check_entry(
+    rel_path, expected_digest, capsule_path, resolved_root, actual_paths, colliding_paths
+):
     """Check one ``.checksums`` entry against the filesystem.
 
     Returns ``(kind, record)`` where ``kind`` is one of ``match``,
@@ -289,6 +301,7 @@ def _check_entry(rel_path, expected_digest, capsule_path, resolved_root,
     embedded NUL, a component past NAME_MAX); the caller records that as an
     ``invalid`` entry (#123).
     """
+
     def record(error=None, actual=None, match=False):
         detail = {"expected": expected_digest, "actual": actual, "match": match}
         if error:
@@ -331,7 +344,7 @@ def _check_entry(rel_path, expected_digest, capsule_path, resolved_root,
 class CapsuleVerifier:
     """Verify capsule integrity and equivalence."""
 
-    def __init__(self, schema_path: Optional[Path] = None):
+    def __init__(self, schema_path: Path | None = None):
         """
         Args:
             schema_path: Deprecated and ignored. The verifier never validated
@@ -475,6 +488,7 @@ class CapsuleVerifier:
         new_data: Any,
     ) -> dict[str, Any]:
         """Digest equality for deterministic (classical) results."""
+
         def _digest(obj):
             s = json.dumps(obj, sort_keys=True, default=str)
             return "sha256:" + hashlib.sha256(s.encode()).hexdigest()
@@ -493,7 +507,7 @@ class CapsuleVerifier:
     # -------------------------------------------------------------------------
 
     @staticmethod
-    def verify_checksums(capsule_dir: Union[str, Path]) -> dict[str, Any]:
+    def verify_checksums(capsule_dir: str | Path) -> dict[str, Any]:
         """Verify SHA-256 checksums for all files in capsule directory.
 
         Returns a dict with:
@@ -600,8 +614,12 @@ class CapsuleVerifier:
             # Keys must be strings; a non-string mapping key (e.g. YAML null or a
             # nested list) must fail, never raise from a path operation (#61).
             if not isinstance(rel_path, str):
-                files[str(rel_path)] = {"expected": expected_digest, "actual": None,
-                                        "match": False, "error": "non-string .checksums key"}
+                files[str(rel_path)] = {
+                    "expected": expected_digest,
+                    "actual": None,
+                    "match": False,
+                    "error": "non-string .checksums key",
+                }
                 invalid.append(str(rel_path))
                 all_match = False
                 continue
@@ -612,12 +630,20 @@ class CapsuleVerifier:
             # any such entry is invalid, never a traceback (#123).
             try:
                 outcome = _check_entry(
-                    rel_path, expected_digest, capsule_path, resolved_root,
-                    actual_paths, colliding_paths,
+                    rel_path,
+                    expected_digest,
+                    capsule_path,
+                    resolved_root,
+                    actual_paths,
+                    colliding_paths,
                 )
             except (OSError, ValueError):
-                files[rel_path] = {"expected": expected_digest, "actual": None,
-                                   "match": False, "error": "path could not be checked"}
+                files[rel_path] = {
+                    "expected": expected_digest,
+                    "actual": None,
+                    "match": False,
+                    "error": "path could not be checked",
+                }
                 invalid.append(rel_path)
                 all_match = False
                 continue
@@ -676,8 +702,8 @@ class CapsuleVerifier:
 
     @staticmethod
     def verify_integrity(
-        capsule_dir: Union[str, Path],
-        expected_id: Optional[str] = None,
+        capsule_dir: str | Path,
+        expected_id: str | None = None,
     ) -> dict[str, Any]:
         """Full spec §6 integrity check — all three layers.
 
@@ -723,16 +749,18 @@ class CapsuleVerifier:
         if checksums["status"] != "pass":
             errors.append("payload does not match .checksums")
 
-        checksums_digest_match: Optional[bool] = None
-        capsule_id: Optional[str] = None
-        capsule_id_match: Optional[bool] = None
+        checksums_digest_match: bool | None = None
+        capsule_id: str | None = None
+        capsule_id_match: bool | None = None
         if expected_id is not None and not expected_id_usable:
             capsule_id_match = False
 
         manifest_path = capsule_path / "capsule.yaml"
-        manifest: Optional[dict] = None
+        manifest: dict | None = None
         if manifest_path.is_symlink() or not manifest_path.is_file():
-            errors.append("capsule.yaml missing or not a regular file — no manifest to anchor .checksums to")
+            errors.append(
+                "capsule.yaml missing or not a regular file — no manifest to anchor .checksums to"
+            )
         else:
             # The manifest is untrusted input: a corrupt or hostile one must fail
             # verification, never raise out of the verifier.
@@ -754,7 +782,9 @@ class CapsuleVerifier:
                 errors.append("manifest has no checksums_digest — capsule is not sealed")
             elif checksums_file.is_symlink() or not checksums_file.is_file():
                 checksums_digest_match = False
-                errors.append(".checksums missing or not a regular file but manifest declares checksums_digest")
+                errors.append(
+                    ".checksums missing or not a regular file but manifest declares checksums_digest"
+                )
             else:
                 try:
                     actual = "sha256:" + hashlib.sha256(checksums_file.read_bytes()).hexdigest()
@@ -775,9 +805,7 @@ class CapsuleVerifier:
             try:
                 capsule_id = compute_capsule_id(manifest)
             except Exception as exc:
-                errors.append(
-                    f"capsule ID could not be computed: {exc.__class__.__name__}"
-                )
+                errors.append(f"capsule ID could not be computed: {exc.__class__.__name__}")
             else:
                 if expected_id_usable:
                     capsule_id_match = capsule_id == expected_id
@@ -813,7 +841,7 @@ class CapsuleVerifier:
     # Pre-release legacy API migration guards
     # -------------------------------------------------------------------------
 
-    def load_capsule(self, filepath: Union[str, Path]) -> dict[str, Any]:
+    def load_capsule(self, filepath: str | Path) -> dict[str, Any]:
         """Parse a manifest using the capsule YAML profile; does not verify it."""
         manifest = load_manifest_yaml(Path(filepath).read_text(encoding="utf-8"))
         if not isinstance(manifest, dict):
@@ -823,8 +851,8 @@ class CapsuleVerifier:
     def verify_capsule(
         self,
         capsule: dict[str, Any],
-        method: Optional[str] = None,
-        reference_results: Optional[dict[str, Any]] = None,
+        method: str | None = None,
+        reference_results: dict[str, Any] | None = None,
         tolerance: float = 0.01,
         significance_level: float = 0.05,
     ) -> NoReturn:
@@ -858,8 +886,8 @@ class CapsuleVerifier:
 
     def compare_capsules(
         self,
-        capsule1_path: Union[str, Path],
-        capsule2_path: Union[str, Path],
+        capsule1_path: str | Path,
+        capsule2_path: str | Path,
         method: str = "statistical",
         tolerance: float = 0.01,
     ) -> NoReturn:

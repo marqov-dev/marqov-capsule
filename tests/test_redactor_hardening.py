@@ -1,6 +1,7 @@
 """Redactor robustness: malformed notebooks scan to nothing (#125), the two
 quadratic rules are linear (#126), and ``seal --warn-only`` actually warns (#105).
 """
+
 import json
 import time
 
@@ -17,18 +18,26 @@ GITHUB_TOKEN = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 # --- #125 ---------------------------------------------------------------------
 
-@pytest.mark.parametrize("notebook", [
-    '{"cells": 1}',
-    '{"cells": true}',
-    '{"cells": "abc"}',
-    '{"cells": [1, "x", null]}',
-    '{"cells": [{"outputs": 1}]}',
-    '{"cells": [{"outputs": "abc"}]}',
-    '{"cells": [{"source": 5, "outputs": [{"output_type": "stream", "text": 7}]}]}',
-    '{"cells": [{"outputs": [{"output_type": "execute_result", "data": 3}]}]}',
-    '{"cells": [{"outputs": [{"output_type": "error", "traceback": 3, "evalue": {}}]}]}',
-    '[]', '"str"', '5', 'null', '{',
-])
+
+@pytest.mark.parametrize(
+    "notebook",
+    [
+        '{"cells": 1}',
+        '{"cells": true}',
+        '{"cells": "abc"}',
+        '{"cells": [1, "x", null]}',
+        '{"cells": [{"outputs": 1}]}',
+        '{"cells": [{"outputs": "abc"}]}',
+        '{"cells": [{"source": 5, "outputs": [{"output_type": "stream", "text": 7}]}]}',
+        '{"cells": [{"outputs": [{"output_type": "execute_result", "data": 3}]}]}',
+        '{"cells": [{"outputs": [{"output_type": "error", "traceback": 3, "evalue": {}}]}]}',
+        "[]",
+        '"str"',
+        "5",
+        "null",
+        "{",
+    ],
+)
 def test_malformed_notebook_scans_to_nothing(notebook):
     assert _scan_notebook("nb.ipynb", notebook) == []
 
@@ -47,6 +56,7 @@ def test_cli_dry_run_on_malformed_notebook_exits_0(tmp_path):
 
 
 # --- #126 ---------------------------------------------------------------------
+
 
 def _timed(text):
     started = time.perf_counter()
@@ -95,12 +105,14 @@ def test_constructor_with_variable_token_is_not_flagged():
 
 # --- #105 ---------------------------------------------------------------------
 
+
 def _draft_with_token(tmp_path):
     d = tmp_path / "cap"
     d.mkdir()
     (d / "capsule.yaml").write_text(
         "version: '1.0.0'\nname: t\nlifecycle_state: draft\n"
-        "requirements:\n  paradigm: [gate-based]\n  max_qubit_count: 2\ntask_executions: []\n")
+        "requirements:\n  paradigm: [gate-based]\n  max_qubit_count: 2\ntask_executions: []\n"
+    )
     (d / "run.py").write_text(f'token = "{GITHUB_TOKEN}"\n')
     return d
 
@@ -137,7 +149,8 @@ def test_cli_seal_prints_tier_b_warnings_in_default_mode(tmp_path):
     d.mkdir()
     (d / "capsule.yaml").write_text(
         "version: '1.0.0'\nname: t\nlifecycle_state: draft\n"
-        "requirements:\n  paradigm: [gate-based]\n  max_qubit_count: 2\ntask_executions: []\n")
+        "requirements:\n  paradigm: [gate-based]\n  max_qubit_count: 2\ntask_executions: []\n"
+    )
     (d / "config.py").write_text('SERVICE_API_KEY = "abc123xyz789qrs456"\n')
     result = CliRunner().invoke(cli, ["seal", str(d)])
     assert result.exit_code == 0, result.output  # Tier B never blocks
@@ -150,7 +163,8 @@ def test_cli_seal_clean_capsule_prints_no_warning_block(tmp_path):
     d.mkdir()
     (d / "capsule.yaml").write_text(
         "version: '1.0.0'\nname: t\nlifecycle_state: draft\n"
-        "requirements:\n  paradigm: [gate-based]\n  max_qubit_count: 2\ntask_executions: []\n")
+        "requirements:\n  paradigm: [gate-based]\n  max_qubit_count: 2\ntask_executions: []\n"
+    )
     (d / "data.txt").write_text("hello\n")
     result = CliRunner().invoke(cli, ["seal", "--json", str(d)])
     assert result.exit_code == 0, result.output

@@ -3,6 +3,7 @@
 Each test here pins one guard the Fable review found uncovered: deleting or
 inverting the guarded line must turn the test red.
 """
+
 import io
 import tarfile
 
@@ -26,11 +27,14 @@ def test_non_positive_declared_epsilon_falls_back_to_policy_ceiling(declared):
 
 
 # M4 — builder.py: sealing needs BOTH paradigm and max_qubit_count.
-@pytest.mark.parametrize("requirements", [
-    {"paradigm": ["gate-based"]},
-    {"max_qubit_count": 2},
-    {},
-])
+@pytest.mark.parametrize(
+    "requirements",
+    [
+        {"paradigm": ["gate-based"]},
+        {"max_qubit_count": 2},
+        {},
+    ],
+)
 def test_seal_requires_both_paradigm_and_max_qubit_count(requirements, tmp_path):
     builder = CapsuleBuilder().start_capsule(name="t", requirements=requirements)
     with pytest.raises(ValueError, match="paradigm.*max_qubit_count"):
@@ -94,9 +98,17 @@ def test_shot_floor_uses_the_smaller_arm():
 
 
 # M42 — _canonical.py: non-string keys stringify by the JSON value rule.
-@pytest.mark.parametrize("key,spelling", [
-    (True, "true"), (False, "false"), (None, "null"), (1, "1"), (2.5, "2.5"), (100.0, "100"),
-])
+@pytest.mark.parametrize(
+    "key,spelling",
+    [
+        (True, "true"),
+        (False, "false"),
+        (None, "null"),
+        (1, "1"),
+        (2.5, "2.5"),
+        (100.0, "100"),
+    ],
+)
 def test_non_string_keys_use_json_literal_spelling(key, spelling):
     assert _stringify_key(key) == spelling
     assert compute_capsule_id({key: 1}) == compute_capsule_id({spelling: 1})

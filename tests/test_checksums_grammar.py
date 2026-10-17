@@ -6,6 +6,7 @@ compared (#114).
 The legacy YAML-mapping form stays readable: marqov-platform's vendored
 builder still writes it (D5 precondition checked 2026-10-03).
 """
+
 import pytest
 import yaml
 from click.testing import CliRunner
@@ -48,8 +49,16 @@ def _variant(text: str, kind: str) -> str:
     raise AssertionError(kind)
 
 
-GRAMMAR_VARIANTS = ["no-trailing-lf", "blank-lines", "sha512-prefix", "uppercase-hex",
-                    "bom", "crlf", "single-space-separator", "short-digest"]
+GRAMMAR_VARIANTS = [
+    "no-trailing-lf",
+    "blank-lines",
+    "sha512-prefix",
+    "uppercase-hex",
+    "bom",
+    "crlf",
+    "single-space-separator",
+    "short-digest",
+]
 
 
 @pytest.mark.parametrize("kind", GRAMMAR_VARIANTS)
@@ -108,8 +117,19 @@ def test_legacy_yaml_mapping_still_reads_and_is_labelled(tmp_path):
 
 # --- #114: --id is parsed, not string-compared -------------------------------
 
-@pytest.mark.parametrize("bad_id", ["0" * 64, "", "MQC:1:" + "a" * 64, "mqc:1:" + "A" * 64,
-                                    "mqc:1:" + "a" * 63, "sha256:" + "a" * 64, "mqc::" + "a" * 64])
+
+@pytest.mark.parametrize(
+    "bad_id",
+    [
+        "0" * 64,
+        "",
+        "MQC:1:" + "a" * 64,
+        "mqc:1:" + "A" * 64,
+        "mqc:1:" + "a" * 63,
+        "sha256:" + "a" * 64,
+        "mqc::" + "a" * 64,
+    ],
+)
 def test_malformed_expected_id_is_reported_as_such(bad_id, tmp_path):
     d, _ = _sealed(tmp_path)
     result = CapsuleVerifier.verify_integrity(d, expected_id=bad_id)
@@ -124,7 +144,9 @@ def test_unsupported_id_version_is_rejected_not_compared(tmp_path):
     d, _ = _sealed(tmp_path)
     result = CapsuleVerifier.verify_integrity(d, expected_id="mqc:2:" + "a" * 64)
     assert result["status"] == "fail"
-    assert any("version 2" in e and "not supported" in e for e in result["errors"]), result["errors"]
+    assert any("version 2" in e and "not supported" in e for e in result["errors"]), result[
+        "errors"
+    ]
     assert not any("mismatch" in e for e in result["errors"])
 
 

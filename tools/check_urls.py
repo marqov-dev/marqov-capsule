@@ -4,6 +4,7 @@
 Static policy failures block release. Network failures are inconclusive warnings,
 not evidence of domain ownership. Use --offline for the deterministic CI gate.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -27,8 +28,7 @@ IDENTIFIERS = {"https://marqov.ai/schemas/capsule/v1/capsule-schema.json"}
 
 
 def tracked_files(root: Path = ROOT) -> list[str]:
-    out = subprocess.run(["git", "ls-files", "-z"], cwd=root,
-                         capture_output=True, check=True)
+    out = subprocess.run(["git", "ls-files", "-z"], cwd=root, capture_output=True, check=True)
     return [os.fsdecode(path) for path in out.stdout.split(b"\0") if path]
 
 
@@ -60,13 +60,22 @@ def normalize(url: str) -> str:
     if ":" in host:
         ipaddress.IPv6Address(host)
         host = "[" + host + "]"
-    elif (len(host) > 253 or any(not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
-                               for label in host.rstrip(".").split("."))):
+    elif len(host) > 253 or any(
+        not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
+        for label in host.rstrip(".").split(".")
+    ):
         raise ValueError("invalid hostname")
     if port is not None:
         host += f":{port}"
-    return urlunsplit((parsed.scheme, host, quote(parsed.path, safe="/%:@+~!$&'()*;,=-._"),
-                       quote(parsed.query, safe="=&?/%:@+~!$'()*;,.-_"), ""))
+    return urlunsplit(
+        (
+            parsed.scheme,
+            host,
+            quote(parsed.path, safe="/%:@+~!$&'()*;,=-._"),
+            quote(parsed.query, safe="=&?/%:@+~!$'()*;,.-_"),
+            "",
+        )
+    )
 
 
 def policy_error(url: str) -> str | None:
@@ -80,8 +89,10 @@ def probe(url: str) -> str | None:
     """Network failures remain warnings; HEAD restrictions retry using GET."""
     for method in ("HEAD", "GET"):
         try:
-            with urlopen(Request(url, method=method, headers={"User-Agent": "marqov-capsule-link-check"}),
-                         timeout=TIMEOUT):
+            with urlopen(
+                Request(url, method=method, headers={"User-Agent": "marqov-capsule-link-check"}),
+                timeout=TIMEOUT,
+            ):
                 return None
         except HTTPError as error:
             code = error.code
@@ -116,7 +127,7 @@ def main(argv=None) -> int:
         print(f"FAIL: {raw!r}: {reason}; in {', '.join(sorted(files))}")
     if not args.offline:
         with ThreadPoolExecutor(max_workers=8) as pool:
-            for url, warning in zip(network, pool.map(probe, network)):
+            for url, warning in zip(network, pool.map(probe, network), strict=False):
                 if warning:
                     print(f"WARN: {url!r}: {warning}; review availability/access manually")
         print("Network results do not establish ownership or release readiness.")

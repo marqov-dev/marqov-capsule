@@ -1,11 +1,13 @@
 """The measurement harness must fail when restoration or refusal is broken."""
+
 import importlib.util
 from pathlib import Path
 
 import pytest
 
 SPEC = importlib.util.spec_from_file_location(
-    "capsule_evaluation", Path(__file__).parents[1] / "tools/evaluation/run.py")
+    "capsule_evaluation", Path(__file__).parents[1] / "tools/evaluation/run.py"
+)
 evaluation = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(evaluation)
 
@@ -14,7 +16,12 @@ def test_corpus_and_bounded_scaling(tmp_path):
     report = evaluation.run(tmp_path / "evidence", repeats=1)
     assert report["status"] == "pass"
     assert {c["case"] for c in report["cases"]} == {
-        "bell", "ghz", "parameter-sweep", "classical", "multi-result"}
+        "bell",
+        "ghz",
+        "parameter-sweep",
+        "classical",
+        "multi-result",
+    }
     assert sum(len(c["refused"]) for c in report["cases"]) == 30
     assert len(report["scaling"]) == 9
     for case in report["scaling"]:

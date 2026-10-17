@@ -3,16 +3,17 @@
 Run with Python 3.12+ and pip installed. Supply a built capsule wheel and a new
 output directory. Installation and demonstration on the target remain offline.
 """
+
 import argparse
-from email.parser import BytesParser
 import hashlib
 import json
-from pathlib import Path
 import platform
 import shutil
 import subprocess
 import sys
 import zipfile
+from email.parser import BytesParser
+from pathlib import Path
 
 
 def prepare(wheel: Path, output: Path):
@@ -24,16 +25,29 @@ def prepare(wheel: Path, output: Path):
     output.mkdir(parents=True, exist_ok=False)
     wheels = output / "wheels"
     wheels.mkdir()
-    subprocess.run([
-        sys.executable, "-m", "pip", "download", "--disable-pip-version-check",
-        "--only-binary=:all:", "--dest", str(wheels), str(wheel), "marqov==0.5.1",
-    ], check=True)
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "download",
+            "--disable-pip-version-check",
+            "--only-binary=:all:",
+            "--dest",
+            str(wheels),
+            str(wheel),
+            "marqov==0.5.1",
+        ],
+        check=True,
+    )
 
     requirements = []
     packages = {}
     for artifact in sorted(wheels.glob("*.whl")):
         with zipfile.ZipFile(artifact) as archive:
-            metadata_files = [name for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
+            metadata_files = [
+                name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
+            ]
             if len(metadata_files) != 1:
                 raise ValueError(f"Expected one package metadata file in {artifact}")
             metadata = BytesParser().parsebytes(archive.read(metadata_files[0]))
@@ -51,11 +65,15 @@ def prepare(wheel: Path, output: Path):
     for name in ("LICENSE-CODE", "LICENSE-SPEC"):
         shutil.copyfile(root / name, output / name)
     metadata = {
-        "python": platform.python_version(), "system": platform.system(),
-        "machine": platform.machine(), "platform": platform.platform(),
+        "python": platform.python_version(),
+        "system": platform.system(),
+        "machine": platform.machine(),
+        "platform": platform.platform(),
         "packages": packages,
     }
-    (output / "environment.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+    (output / "environment.json").write_text(
+        json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+    )
     instructions = """# Offline conference demonstration
 
 Prepared for the Python minor version, OS and architecture in environment.json.
@@ -91,11 +109,17 @@ replication. Capsule is an unpublished local build. Third-party wheels retain
 their own licenses.
 """
     python_command = f"python{sys.version_info.major}.{sys.version_info.minor}"
-    (output / "README.md").write_text(instructions.replace("python3.12", python_command), encoding="utf-8")
+    (output / "README.md").write_text(
+        instructions.replace("python3.12", python_command), encoding="utf-8"
+    )
     files = sorted(path for path in output.rglob("*") if path.is_file())
-    (output / "SHA256SUMS").write_text("".join(
-        f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(output).as_posix()}\n"
-        for path in files), encoding="utf-8")
+    (output / "SHA256SUMS").write_text(
+        "".join(
+            f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(output).as_posix()}\n"
+            for path in files
+        ),
+        encoding="utf-8",
+    )
     print(f"Prepared {len(packages)} pinned wheels in {output.resolve()}")
 
 

@@ -1,4 +1,5 @@
 """CapsuleValidator — validates capsule.yaml against spec/v1/capsule-schema.json."""
+
 from __future__ import annotations
 
 import importlib.resources as _pkg_resources
@@ -8,9 +9,8 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 import jsonschema
+import yaml
 from jsonschema import Draft202012Validator
 
 _schema_cache: dict | None = None
@@ -18,8 +18,10 @@ _schema_cache: dict | None = None
 
 def _json_domain_errors(value, path="", ancestors=frozenset()):
     """Reject YAML/Python values that cannot participate in the spec JSON model."""
+
     def error(message):
         return {"path": path or "/", "message": message}
+
     if isinstance(value, (dict, list)):
         if id(value) in ancestors:
             yield error("cyclic values are not permitted in a capsule manifest")
@@ -28,10 +30,10 @@ def _json_domain_errors(value, path="", ancestors=frozenset()):
         items = value.items() if isinstance(value, dict) else enumerate(value)
         normalized_keys = set()
         for key, child in items:
-            if isinstance(value, dict) and not isinstance(key, str):
-                yield error("manifest object keys must be strings")
-                continue
             if isinstance(value, dict):
+                if not isinstance(key, str):
+                    yield error("manifest object keys must be strings")
+                    continue
                 normalized = unicodedata.normalize("NFC", key)
                 if normalized in normalized_keys:
                     yield error("manifest keys collide after Unicode normalization")
@@ -91,6 +93,7 @@ class CapsuleValidator:
                 # validator_value is the list of required fields; extract the
                 # missing one from the message "'{name}' is a required property"
                 import re
+
                 m = re.search(r"'([^']+)'", err.message)
                 if m:
                     parts.append(m.group(1))
@@ -107,20 +110,43 @@ class CapsuleValidator:
             {"valid": bool, "errors": [{"path": str, "message": str}]}
         """
         from marqov_capsule._canonical import load_manifest_yaml
+
         try:
             capsule = load_manifest_yaml(Path(filepath).read_text(encoding="utf-8"))
         except FileNotFoundError:
-            return {"valid": False, "errors": [{"path": "/", "message": f"File not found: {filepath}"}]}
+            return {
+                "valid": False,
+                "errors": [{"path": "/", "message": f"File not found: {filepath}"}],
+            }
         except IsADirectoryError:
-            return {"valid": False, "errors": [{"path": "/", "message": f"Expected a capsule.yaml file, got a directory: {filepath}"}]}
+            return {
+                "valid": False,
+                "errors": [
+                    {
+                        "path": "/",
+                        "message": f"Expected a capsule.yaml file, got a directory: {filepath}",
+                    }
+                ],
+            }
         except UnicodeDecodeError:
-            return {"valid": False, "errors": [{"path": "/", "message": "capsule.yaml must be UTF-8 text"}]}
+            return {
+                "valid": False,
+                "errors": [{"path": "/", "message": "capsule.yaml must be UTF-8 text"}],
+            }
         except OSError as e:
-            return {"valid": False, "errors": [{"path": "/", "message": f"capsule.yaml could not be read: {type(e).__name__}"}]}
+            return {
+                "valid": False,
+                "errors": [
+                    {"path": "/", "message": f"capsule.yaml could not be read: {type(e).__name__}"}
+                ],
+            }
         except yaml.YAMLError as e:
             return {"valid": False, "errors": [{"path": "/", "message": f"YAML parse error: {e}"}]}
 
         if not isinstance(capsule, dict):
-            return {"valid": False, "errors": [{"path": "/", "message": "capsule.yaml must be a YAML mapping"}]}
+            return {
+                "valid": False,
+                "errors": [{"path": "/", "message": "capsule.yaml must be a YAML mapping"}],
+            }
 
         return cls.validate(capsule)

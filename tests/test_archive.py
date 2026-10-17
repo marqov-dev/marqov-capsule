@@ -11,7 +11,7 @@ import pytest
 
 from marqov_capsule import CapsuleBuilder
 from marqov_capsule import archive as archive_mod
-from marqov_capsule.archive import payload_digest, pack_capsule, unpack_capsule
+from marqov_capsule.archive import pack_capsule, payload_digest, unpack_capsule
 
 
 def _make_sealed_capsule_dir(parent: Path, name: str = "test-capsule") -> Path:
@@ -25,11 +25,15 @@ def _make_sealed_capsule_dir(parent: Path, name: str = "test-capsule") -> Path:
     capsule_dir = parent / f"{name}.capsule"
     (capsule_dir / "payload").mkdir(parents=True)
     (capsule_dir / "payload" / "results.json").write_text('{"counts": {"00": 42}}')
-    CapsuleBuilder.from_manifest({
-        "version": "1.0.0", "name": name, "lifecycle_state": "draft",
-        "requirements": {"paradigm": ["gate-based"], "max_qubit_count": 2},
-        "task_executions": [],
-    }).seal(capsule_dir=capsule_dir, sealed_by="test")
+    CapsuleBuilder.from_manifest(
+        {
+            "version": "1.0.0",
+            "name": name,
+            "lifecycle_state": "draft",
+            "requirements": {"paradigm": ["gate-based"], "max_qubit_count": 2},
+            "task_executions": [],
+        }
+    ).seal(capsule_dir=capsule_dir, sealed_by="test")
     return capsule_dir
 
 
@@ -57,12 +61,8 @@ class TestPackCapsule:
         with tempfile.TemporaryDirectory() as tmpdir:
             capsule_dir = _make_sealed_capsule_dir(Path(tmpdir))
 
-            archive1 = pack_capsule(
-                capsule_dir, output_path=Path(tmpdir) / "a1.capsule"
-            )
-            archive2 = pack_capsule(
-                capsule_dir, output_path=Path(tmpdir) / "a2.capsule"
-            )
+            archive1 = pack_capsule(capsule_dir, output_path=Path(tmpdir) / "a1.capsule")
+            archive2 = pack_capsule(capsule_dir, output_path=Path(tmpdir) / "a2.capsule")
 
             assert archive1.read_bytes() == archive2.read_bytes()
 
@@ -113,9 +113,7 @@ class TestUnpackCapsule:
                     rel = f.relative_to(capsule_dir)
                     original_files[str(rel)] = f.read_bytes()
 
-            archive_path = pack_capsule(
-                capsule_dir, output_path=tmpdir / "packed.capsule"
-            )
+            archive_path = pack_capsule(capsule_dir, output_path=tmpdir / "packed.capsule")
 
             # Unpack into a separate directory
             out_dir = tmpdir / "unpacked"
@@ -165,9 +163,7 @@ class TestPayloadDigest:
             capsule_dir = _make_sealed_capsule_dir(tmpdir)
             dir_cid = payload_digest(capsule_dir)
 
-            archive_path = pack_capsule(
-                capsule_dir, output_path=tmpdir / "test.capsule"
-            )
+            archive_path = pack_capsule(capsule_dir, output_path=tmpdir / "test.capsule")
             archive_cid = payload_digest(archive_path)
 
             assert archive_cid == dir_cid
@@ -186,7 +182,7 @@ class TestPayloadDigest:
             capsule_dir = _make_sealed_capsule_dir(Path(tmpdir))
             cid = payload_digest(capsule_dir)
             assert cid.startswith("sha256:")
-            hex_part = cid[len("sha256:"):]
+            hex_part = cid[len("sha256:") :]
             assert len(hex_part) == 64
             # Verify it's valid hex
             int(hex_part, 16)
@@ -343,9 +339,7 @@ class TestDefaultOutputLocation:
 class TestExtractFilterFallback:
     """#61 — unpack must survive interpreters without extractall(filter=)."""
 
-    def test_unpack_without_filter_support_still_extracts(
-        self, tmp_path, monkeypatch
-    ):
+    def test_unpack_without_filter_support_still_extracts(self, tmp_path, monkeypatch):
         capsule_dir = _make_sealed_capsule_dir(tmp_path, name="fb")
         archive = pack_capsule(capsule_dir, output_path=tmp_path / "packed.capsule")
 

@@ -1,9 +1,10 @@
 """Command-level regressions for verified capsule delivery."""
+
 import io
 import json
 import os
-from pathlib import Path
 import tarfile
+from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
@@ -16,9 +17,14 @@ from marqov_capsule.cli.main import cli
 def sealed(path):
     path.mkdir()
     (path / "result.json").write_text('{"value":1}\n')
-    return CapsuleBuilder().start_capsule(
-        name="delivery", requirements={"paradigm": ["classical"], "max_qubit_count": 0},
-    ).seal(path)
+    return (
+        CapsuleBuilder()
+        .start_capsule(
+            name="delivery",
+            requirements={"paradigm": ["classical"], "max_qubit_count": 0},
+        )
+        .seal(path)
+    )
 
 
 @pytest.mark.parametrize("kind", ["symlink", "directory", "fifo"])
@@ -38,9 +44,11 @@ def test_verify_does_not_read_rejected_checksum_metadata(tmp_path, monkeypatch, 
             pytest.skip("this platform has no FIFOs")
         os.mkfifo(metadata)
     original = Path.read_bytes
+
     def guarded(path):
         assert path != metadata, "must not read rejected checksum metadata"
         return original(path)
+
     monkeypatch.setattr(Path, "read_bytes", guarded)
     with pytest.raises(ValueError):
         payload_digest(capsule)
@@ -84,8 +92,9 @@ def test_open_refuses_existing_destination_without_modifying_it(tmp_path, existi
     sentinel.write_text("existing result")
     if existing == "symlink":
         target.symlink_to(preserved, target_is_directory=True)
-    result = CliRunner().invoke(cli, ["open", str(source), "--dest", str(destination),
-                                      "--id", trusted, "--json"])
+    result = CliRunner().invoke(
+        cli, ["open", str(source), "--dest", str(destination), "--id", trusted, "--json"]
+    )
     assert result.exit_code == 1
     assert json.loads(result.output)["status"] == "error"
     assert sentinel.read_text() == "existing result"
@@ -96,6 +105,11 @@ def test_open_fresh_destination_preserves_trusted_identity(tmp_path):
     source = tmp_path / "capsule"
     trusted = sealed(source)
     destination = tmp_path / "destination"
-    result = CliRunner().invoke(cli, ["open", str(source), "--dest", str(destination), "--id", trusted])
+    result = CliRunner().invoke(
+        cli, ["open", str(source), "--dest", str(destination), "--id", trusted]
+    )
     assert result.exit_code == 0, result.output
-    assert CapsuleVerifier.verify_integrity(destination / "capsule", expected_id=trusted)["status"] == "pass"
+    assert (
+        CapsuleVerifier.verify_integrity(destination / "capsule", expected_id=trusted)["status"]
+        == "pass"
+    )
