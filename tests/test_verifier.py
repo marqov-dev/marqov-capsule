@@ -1,3 +1,4 @@
+import datetime
 import hashlib
 from pathlib import Path
 
@@ -404,6 +405,19 @@ def test_deterministic_verification_exact_match():
         new_data={"value": 42},
     )
     assert result["verdict"] == "VERIFIED"
+
+
+# Mutation B5: digest comparison is key-order independent (sort_keys=True)
+def test_deterministic_verification_ignores_key_order():
+    result = CapsuleVerifier.verify_deterministic({"a": 1, "b": 2}, {"b": 2, "a": 1})
+    assert result["verdict"] == "VERIFIED"
+
+
+# Mutation B5: non-JSON values (datetime) are compared via default=str, not a TypeError
+def test_deterministic_verification_handles_datetime_values():
+    ref = {"t": datetime.datetime(2026, 1, 1)}
+    new = {"t": datetime.datetime(2026, 1, 1)}
+    assert CapsuleVerifier.verify_deterministic(ref, new)["verdict"] == "VERIFIED"
 
 
 def test_deterministic_verification_mismatch():

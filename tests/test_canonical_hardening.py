@@ -14,6 +14,7 @@ import yaml
 
 from marqov_capsule._canonical import (
     canonical_bytes,
+    coerce_for_canonical,
     compute_capsule_id,
     load_manifest_yaml,
 )
@@ -139,3 +140,9 @@ def test_float_key_matches_float_value_form():
 
 def test_int_key_uses_canonical_number_form():
     assert canonical_bytes({5: "x"}) == jcs.canonicalize({"5": "x"})
+
+
+# Mutation B13: an integer mapping key outside the RFC 8785 safe range fails closed
+def test_unsafe_int_key_rejected_by_coerce():
+    with pytest.raises(ValueError):
+        coerce_for_canonical({2**53: 1})

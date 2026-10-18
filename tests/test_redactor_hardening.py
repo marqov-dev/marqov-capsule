@@ -10,7 +10,7 @@ from click.testing import CliRunner
 
 from marqov_capsule.builder import CapsuleBuilder
 from marqov_capsule.cli.main import cli
-from marqov_capsule.redactor import _scan_notebook, _scan_text
+from marqov_capsule.redactor import CapsuleRedactor, _scan_notebook, _scan_text
 
 REQUIREMENTS = {"paradigm": ["gate-based"], "max_qubit_count": 2}
 GITHUB_TOKEN = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -171,3 +171,68 @@ def test_cli_seal_clean_capsule_prints_no_warning_block(tmp_path):
     assert json.loads(result.output)["findings"] == []
     text = CliRunner().invoke(cli, ["inspect", str(d)])
     assert "warning" not in text.output.lower()
+
+
+# Mutation C*: Tier B entropy detection emits a non-blocking high_entropy_base64 finding
+def test_high_entropy_base64_literal_is_a_tier_b_warning():
+    findings = _scan_text('secret = "Zq9Kp2Lm8Rt4Vx7Wn3Yb6Hc1Jd5Fg0Sa"', "x.py")
+    assert [f["reason"] for f in findings] == ["high_entropy_base64"]
+    assert findings[0]["blocking"] is False
+
+
+# --- mutation gaps (docs/MUTATION-REPORT-2026-10-15.md) -----------------------
+
+AWS_KEY_LINE = "k = 'AKIAIOSFODNN7EXAMPLE'\n"
+
+
+# Mutation B12: scan must continue past skipped entries (binary, symlink, ignored, unreadable)
+def test_scan_continues_past_every_kind_of_skipped_entry(tmp_path):
+    (tmp_path / "0.bin").write_bytes(b"\x00\x01")
+    (tmp_path / "1link").symlink_to(tmp_path / "does-not-exist")
+    unreadable = tmp_path / "2unreadable"
+    unreadable.write_text("nothing\n", encoding="utf-8")
+    unreadable.chmod(0)
+    (tmp_path / "__pycache__").mkdir()
+    (tmp_path / "__pycache__" / "3.pyc").write_text("x\n", encoding="utf-8")
+    (tmp_path / "z.py").write_text(AWS_KEY_LINE, encoding="utf-8")
+    try:
+        result = CapsuleRedactor(tmp_path).scan()
+    finally:
+        unreadable.chmod(0o600)
+    assert [f["file"] for f in result["findings"]] == ["z.py"]
+    assert result["skipped_binary"] == ["0.bin"]
+
+
+# Mutation B10: notebook scan must continue past a malformed cell / outputs / output
+@pytest.mark.parametrize(
+    "notebook",
+    [
+        {"cells": [1, {"source": AWS_KEY_LINE}]},
+        {"cells": [{"source": "", "outputs": 5}, {"source": AWS_KEY_LINE}]},
+        {"cells": [{"outputs": [7, {"output_type": "stream", "text": AWS_KEY_LINE}]}]},
+    ],
+    ids=["non-dict-cell", "non-list-outputs", "non-dict-output"],
+)
+def test_notebook_scan_continues_past_malformed_entries(notebook):
+    findings = _scan_notebook("n.ipynb", json.dumps(notebook))
+    assert [f["reason"] for f in findings] == ["aws_access_key_id"]
+
+
+# Mutation B7: capsule:allow after a comma does not reach back past it
+def test_capsule_allow_after_a_comma_does_not_suppress_an_earlier_literal():
+    findings = _scan_text('key = "AKIAIOSFODNN7EXAMPLE", other = 1  # capsule:allow', "x.py")
+    assert [f["reason"] for f in findings] == ["aws_access_key_id"]
+
+
+# Mutation B11: capsule:allow on a later line does not suppress a PEM block
+def test_pem_block_allow_annotation_on_a_later_line_is_not_honoured():
+    text = (
+        "-----BEGIN PRIVATE KEY-----\nAAAAAAAAAAAAAAAAAAAAAAAA\n-----END PRIVATE KEY-----\n"
+        "# capsule:allow\n"
+    )
+    assert [f["reason"] for f in _scan_text(text, "key.txt")] == ["private_key_block"]
+
+
+# Mutation B9: a known credential name assigned from os.environ is not an embedded value
+def test_known_name_assigned_from_environ_is_not_embedded():
+    assert _scan_text('IBM_QUANTUM_TOKEN = os.environ["IBM_QUANTUM_TOKEN"]\n', "x.py") == []
