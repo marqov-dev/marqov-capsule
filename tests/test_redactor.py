@@ -614,3 +614,10 @@ def test_env_local_bak_and_uppercase_pem_are_credential_files(tmp_path):
     reasons = [f["reason"] for f in CapsuleRedactor(tmp_path).scan()["findings"]]
     assert reasons.count("credential_file") == 3, reasons
     assert _blocks(tmp_path)
+
+
+# Mutation B8: an exact credential filename (id_rsa) is a credential_file finding
+def test_id_rsa_is_a_credential_file(tmp_path):
+    (tmp_path / "id_rsa").write_text("not really a key\n", encoding="utf-8")
+    findings = CapsuleRedactor(tmp_path).scan()["findings"]
+    assert [f["reason"] for f in findings] == ["credential_file"]
