@@ -53,6 +53,21 @@ The rules, chosen to match Qiskit, Cirq, PennyLane and the Braket SDK:
   the lines a PR touches to be exercised by the suite. There is **no global
   coverage floor** and **no complexity cap**; reviewers judge those.
 
+### When hosted CI is unavailable
+
+`tools/local_ci.sh` replicates every job in `.github/workflows/ci.yml` except
+`test-windows`, each in a fresh uv-managed virtualenv (Python 3.10, 3.11 and
+3.12, wheel build and isolated install, base install without the `[dev]`
+extra, lowest declared dependency versions, the Node conformance checker and
+the offline link check). Run it against the branch you want to merge, from
+any checkout, and paste its summary table into the PR before merging:
+
+```bash
+tools/local_ci.sh path/to/worktree origin/main
+```
+
+It takes about three minutes and needs `uv` and `npm` on the PATH.
+
 The one-time formatting sweep is listed in `.git-blame-ignore-revs`. To keep
 `git blame` pointing at the real authors, run once per clone:
 
