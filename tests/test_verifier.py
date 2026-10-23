@@ -552,7 +552,7 @@ def _append_checksums_line(d, digest: str, path: str) -> None:
     # Bytes, not text mode: write_text would emit CRLF on Windows, and the
     # strict grammar rejects the carriage return before the key is checked.
     data = (d / ".checksums").read_bytes()
-    (d / ".checksums").write_bytes(data + f"{digest}  {path}\n".encode("utf-8"))
+    (d / ".checksums").write_bytes(data + f"{digest}  {path}\n".encode())
 
 
 # The untouched payload record, identical in every perturbed-capsule verdict.
