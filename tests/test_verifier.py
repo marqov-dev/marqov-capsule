@@ -549,8 +549,10 @@ def _golden_capsule(tmp_path):
 
 
 def _append_checksums_line(d, digest: str, path: str) -> None:
-    text = (d / ".checksums").read_text(encoding="utf-8")
-    (d / ".checksums").write_text(f"{text}{digest}  {path}\n", encoding="utf-8")
+    # Bytes, not text mode: write_text would emit CRLF on Windows, and the
+    # strict grammar rejects the carriage return before the key is checked.
+    data = (d / ".checksums").read_bytes()
+    (d / ".checksums").write_bytes(data + f"{digest}  {path}\n".encode("utf-8"))
 
 
 # The untouched payload record, identical in every perturbed-capsule verdict.
