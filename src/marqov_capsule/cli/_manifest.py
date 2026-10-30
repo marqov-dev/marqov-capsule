@@ -7,6 +7,7 @@ Python traceback (#95). Every command now goes through this one helper so the
 error contract is identical: exit 1, a one-line message on stderr, or a
 ``{"status": "error"}`` document when ``--json`` was asked for.
 """
+
 import json
 import sys
 from pathlib import Path
@@ -27,7 +28,7 @@ def fail(message: str, as_json: bool, **extra: Any) -> NoReturn:
     sys.exit(1)
 
 
-def check_expected_id(ctx, param, value):
+def check_expected_id(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
     """Click callback for ``--id``: a string that is not a capsule ID is a
     usage error (exit 2), not a tamper verdict (#114)."""
     if value is None:
@@ -36,7 +37,8 @@ def check_expected_id(ctx, param, value):
         parse_capsule_id(value)
     except ValueError:
         raise click.BadParameter(
-            f"{value!r} is not a capsule ID (expected mqc:<version>:<64 lowercase hex>)")
+            f"{value!r} is not a capsule ID (expected mqc:<version>:<64 lowercase hex>)"
+        ) from None
     return value
 
 
@@ -58,6 +60,9 @@ def load_manifest_or_exit(manifest_path: Path, as_json: bool) -> dict[str, Any]:
         detail = " ".join(str(exc).split())
         fail(f"{manifest_path} could not be parsed: {detail}", as_json)
     if not isinstance(manifest, dict):
-        fail(f"{manifest_path} must be a YAML mapping, got "
-             f"{'an empty document' if manifest is None else type(manifest).__name__}", as_json)
+        fail(
+            f"{manifest_path} must be a YAML mapping, got "
+            f"{'an empty document' if manifest is None else type(manifest).__name__}",
+            as_json,
+        )
     return manifest

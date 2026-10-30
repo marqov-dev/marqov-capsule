@@ -1,8 +1,9 @@
 import json
 from pathlib import Path
-import pytest
-from marqov_capsule.redactor import CapsuleRedactor, RedactorError
 
+import pytest
+
+from marqov_capsule.redactor import CapsuleRedactor, RedactorError
 
 FIXTURE_DIR = Path(__file__).parent.parent / "spec/v1/conformance"
 
@@ -46,7 +47,9 @@ def test_detects_constructor_pattern(tmp_path):
 def test_detects_key_suffix(tmp_path):
     src = tmp_path / "source"
     src.mkdir()
-    (src / "config.json").write_text('{"AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}\n')
+    (src / "config.json").write_text(
+        '{"AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}\n'
+    )
     redactor = CapsuleRedactor(tmp_path)
     result = redactor.scan()
     assert result["has_secrets"] is True
@@ -145,66 +148,127 @@ def test_capsule_allow_suppresses_name_pattern(tmp_path):
 # _scan_notebook walked only `outputs`. A researcher pastes a live token into a
 # *source* cell, which is where it actually happens, and seal gates on this scan.
 
+
 def _notebook(cells):
-    import json
     return json.dumps({"cells": cells, "metadata": {}, "nbformat": 4, "nbformat_minor": 5})
 
 
 def test_detects_secret_in_code_cell_source(tmp_path):
-    (tmp_path / "run.ipynb").write_text(_notebook([{
-        "cell_type": "code", "source": ["IBM_QUANTUM_TOKEN = \"abc123\"\n"],
-        "outputs": [], "execution_count": 1, "metadata": {},
-    }]))
+    (tmp_path / "run.ipynb").write_text(
+        _notebook(
+            [
+                {
+                    "cell_type": "code",
+                    "source": ['IBM_QUANTUM_TOKEN = "abc123"\n'],
+                    "outputs": [],
+                    "execution_count": 1,
+                    "metadata": {},
+                }
+            ]
+        )
+    )
     result = CapsuleRedactor(tmp_path).scan()
     assert result["has_secrets"], result
 
 
 def test_detects_secret_in_markdown_cell_source(tmp_path):
-    (tmp_path / "notes.ipynb").write_text(_notebook([{
-        "cell_type": "markdown", "source": ["Use `IBM_QUANTUM_TOKEN = \"abc\"` to run.\n"],
-        "metadata": {},
-    }]))
+    (tmp_path / "notes.ipynb").write_text(
+        _notebook(
+            [
+                {
+                    "cell_type": "markdown",
+                    "source": ['Use `IBM_QUANTUM_TOKEN = "abc"` to run.\n'],
+                    "metadata": {},
+                }
+            ]
+        )
+    )
     result = CapsuleRedactor(tmp_path).scan()
     assert result["has_secrets"], result
 
 
 def test_detects_secret_in_error_traceback(tmp_path):
     """Tracebacks routinely echo the offending line, tokens included."""
-    (tmp_path / "boom.ipynb").write_text(_notebook([{
-        "cell_type": "code", "source": ["connect()\n"], "execution_count": 1, "metadata": {},
-        "outputs": [{
-            "output_type": "error", "ename": "ValueError", "evalue": "bad token",
-            "traceback": ["Traceback...", "  IBM_QUANTUM_TOKEN = \"abc123\""],
-        }],
-    }]))
+    (tmp_path / "boom.ipynb").write_text(
+        _notebook(
+            [
+                {
+                    "cell_type": "code",
+                    "source": ["connect()\n"],
+                    "execution_count": 1,
+                    "metadata": {},
+                    "outputs": [
+                        {
+                            "output_type": "error",
+                            "ename": "ValueError",
+                            "evalue": "bad token",
+                            "traceback": ["Traceback...", '  IBM_QUANTUM_TOKEN = "abc123"'],
+                        }
+                    ],
+                }
+            ]
+        )
+    )
     result = CapsuleRedactor(tmp_path).scan()
     assert result["has_secrets"], result
 
 
 def test_notebook_source_as_plain_string(tmp_path):
     """nbformat allows `source` to be a string rather than a list of lines."""
-    (tmp_path / "s.ipynb").write_text(_notebook([{
-        "cell_type": "code", "source": "IBM_QUANTUM_TOKEN = \"abc123\"\n",
-        "outputs": [], "execution_count": 1, "metadata": {},
-    }]))
+    (tmp_path / "s.ipynb").write_text(
+        _notebook(
+            [
+                {
+                    "cell_type": "code",
+                    "source": 'IBM_QUANTUM_TOKEN = "abc123"\n',
+                    "outputs": [],
+                    "execution_count": 1,
+                    "metadata": {},
+                }
+            ]
+        )
+    )
     assert CapsuleRedactor(tmp_path).scan()["has_secrets"]
 
 
 def test_notebook_stream_output_still_scanned(tmp_path):
     """Regression: output scanning must survive the source-cell fix."""
-    (tmp_path / "o.ipynb").write_text(_notebook([{
-        "cell_type": "code", "source": ["print(tok)\n"], "execution_count": 1, "metadata": {},
-        "outputs": [{"output_type": "stream", "name": "stdout",
-                     "text": ["IBM_QUANTUM_TOKEN = \"abc123\"\n"]}],
-    }]))
+    (tmp_path / "o.ipynb").write_text(
+        _notebook(
+            [
+                {
+                    "cell_type": "code",
+                    "source": ["print(tok)\n"],
+                    "execution_count": 1,
+                    "metadata": {},
+                    "outputs": [
+                        {
+                            "output_type": "stream",
+                            "name": "stdout",
+                            "text": ['IBM_QUANTUM_TOKEN = "abc123"\n'],
+                        }
+                    ],
+                }
+            ]
+        )
+    )
     assert CapsuleRedactor(tmp_path).scan()["has_secrets"]
 
 
 def test_clean_notebook_not_flagged(tmp_path):
-    (tmp_path / "clean.ipynb").write_text(_notebook([{
-        "cell_type": "code", "source": ["from qiskit import QuantumCircuit\n"],
-        "outputs": [], "execution_count": 1, "metadata": {},
-    }]))
+    (tmp_path / "clean.ipynb").write_text(
+        _notebook(
+            [
+                {
+                    "cell_type": "code",
+                    "source": ["from qiskit import QuantumCircuit\n"],
+                    "outputs": [],
+                    "execution_count": 1,
+                    "metadata": {},
+                }
+            ]
+        )
+    )
     assert not CapsuleRedactor(tmp_path).scan()["has_secrets"]
 
 
@@ -215,18 +279,30 @@ def test_malformed_notebook_does_not_crash(tmp_path):
 
 
 def test_notebook_reports_the_notebook_path(tmp_path):
-    (tmp_path / "run.ipynb").write_text(_notebook([{
-        "cell_type": "code", "source": ["IBM_QUANTUM_TOKEN = \"abc\"\n"],
-        "outputs": [], "execution_count": 1, "metadata": {},
-    }]))
+    (tmp_path / "run.ipynb").write_text(
+        _notebook(
+            [
+                {
+                    "cell_type": "code",
+                    "source": ['IBM_QUANTUM_TOKEN = "abc"\n'],
+                    "outputs": [],
+                    "execution_count": 1,
+                    "metadata": {},
+                }
+            ]
+        )
+    )
     findings = CapsuleRedactor(tmp_path).scan()["findings"]
     assert findings and findings[0]["file"] == "run.ipynb"
+
+
 # --- Ignore-file trust and credential-shaped files (#34) --------------------
 # Two distinct holes. (1) .capsuleignore is read from inside the capsule and
 # REPLACED the whole default ignore set, so a capsule carrying one containing
 # `source` silently disabled scanning for that subtree. (2) .env/*.pem/*.key
 # were excluded from *scanning* while save_checksums still packaged them, so a
 # directory holding secrets scanned clean and sealed with them inside.
+
 
 def test_env_file_is_a_finding_not_an_exclusion(tmp_path):
     (tmp_path / ".env").write_text("AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n")
@@ -253,14 +329,19 @@ def test_capsuleignore_cannot_suppress_a_credential_file(tmp_path):
 
 def test_seal_is_blocked_by_a_credential_file(tmp_path):
     from marqov_capsule.builder import CapsuleBuilder
+
     (tmp_path / "payload").mkdir()
     (tmp_path / "payload" / "results.json").write_text('{"counts": {"00": 1}}')
     (tmp_path / ".env").write_text("AWS_SECRET_ACCESS_KEY=abc\n")
-    b = CapsuleBuilder.from_manifest({
-        "version": "1.0.0", "name": "t", "lifecycle_state": "draft",
-        "requirements": {"paradigm": ["gate-based"], "max_qubit_count": 2},
-        "task_executions": [],
-    })
+    b = CapsuleBuilder.from_manifest(
+        {
+            "version": "1.0.0",
+            "name": "t",
+            "lifecycle_state": "draft",
+            "requirements": {"paradigm": ["gate-based"], "max_qubit_count": 2},
+            "task_executions": [],
+        }
+    )
     with pytest.raises(RedactorError):
         b.seal(capsule_dir=tmp_path, sealed_by="test")
 
@@ -298,11 +379,14 @@ def test_scan_reports_no_capsuleignore_patterns_when_absent(tmp_path):
 
 def test_seal_dry_run_reports_narrowed_scope(tmp_path):
     from click.testing import CliRunner
+
     from marqov_capsule.cli.main import cli
+
     (tmp_path / "capsule.yaml").write_text(
         "version: 1.0.0\nname: t\nlifecycle_state: draft\n"
         "requirements:\n  paradigm: [gate-based]\n  max_qubit_count: 2\n"
-        "task_executions: []\n")
+        "task_executions: []\n"
+    )
     (tmp_path / ".capsuleignore").write_text("source\n")
     (tmp_path / "source").mkdir()
     (tmp_path / "source" / "circuit.py").write_text("IBM_QUANTUM_TOKEN = 'abc'\n")
@@ -314,11 +398,14 @@ def test_seal_dry_run_reports_narrowed_scope(tmp_path):
 def test_real_seal_also_reports_narrowed_scope(tmp_path):
     """--dry-run is the path people skip. The gate itself must say so too."""
     from click.testing import CliRunner
+
     from marqov_capsule.cli.main import cli
+
     (tmp_path / "capsule.yaml").write_text(
         "version: 1.0.0\nname: t\nlifecycle_state: draft\n"
         "requirements:\n  paradigm: [gate-based]\n  max_qubit_count: 2\n"
-        "task_executions: []\n")
+        "task_executions: []\n"
+    )
     (tmp_path / ".capsuleignore").write_text("source\n")
     (tmp_path / "source").mkdir()
     (tmp_path / "source" / "circuit.py").write_text("print(1)\n")
@@ -347,8 +434,7 @@ def test_credential_file_error_advises_removal_not_annotation(tmp_path):
 
 # A well-distributed 64-char hex value (IBM Quantum token shape). Written as
 # 8-char groups so the length is guaranteed correct by construction.
-HEX64 = ("7e2a91c4" "f0b8d63e" "5a1f8c02" "d94b7e6a"
-         "3f5c8091" "b2d4e6f7" "a0c1b3d5" "e7f9a2c4")
+HEX64 = "7e2a91c4f0b8d63e5a1f8c02d94b7e6a3f5c8091b2d4e6f7a0c1b3d5e7f9a2c4"
 assert len(HEX64) == 64
 
 
@@ -386,7 +472,7 @@ def test_bare_64hex_checksum_does_not_block(tmp_path):
     not block (the research's central warning against a bare 64-hex rule)."""
     src = tmp_path / "source"
     src.mkdir()
-    (src / "manifest.txt").write_text(f'{HEX64}  results.json\n')
+    (src / "manifest.txt").write_text(f"{HEX64}  results.json\n")
     assert not _blocks(tmp_path)
 
 
@@ -409,9 +495,12 @@ def test_various_shape_rules_block(tmp_path):
         "stripe.py": 'k = "sk_live_' + "c" * 24 + '"\n',
         "slack.py": 'k = "xoxb-1234567890-0987654321-' + "d" * 24 + '"\n',
         "jwt.py": 'k = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
-                  'eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ.abcDEFghiJKL"\n',
-        "pem.py": ('-----BEGIN RSA PRIVATE KEY-----\n' + 'MIIBOwIBAAJB' * 8
-                   + '\n-----END RSA PRIVATE KEY-----\n'),
+        'eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ.abcDEFghiJKL"\n',
+        "pem.py": (
+            "-----BEGIN RSA PRIVATE KEY-----\n"
+            + "MIIBOwIBAAJB" * 8
+            + "\n-----END RSA PRIVATE KEY-----\n"
+        ),
     }
     for name, body in samples.items():
         (src / name).write_text(body)
@@ -429,6 +518,7 @@ def test_base64_statevector_payload_is_not_flagged(tmp_path):
     from a base64 secret. The length cap (safe now that Tier A catches long
     structured secrets) must skip it -> no false positive. See note §1, §9."""
     import base64
+
     np = pytest.importorskip("numpy")  # numpy-free base install must skip, not fail
     rng = np.random.default_rng(0)
     payload = tmp_path / "payload"
@@ -463,8 +553,7 @@ def test_minified_json_capsule_allow_does_not_disable_whole_file(tmp_path):
     the literal must not disable scanning of a real token elsewhere on it."""
     src = tmp_path / "source"
     src.mkdir()
-    line = ('{"note": "# capsule:allow", '
-            '"AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE", "x": "y"}')
+    line = '{"note": "# capsule:allow", "AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE", "x": "y"}'
     (src / "data.json").write_text(line + "\n")
     result = CapsuleRedactor(tmp_path).scan()
     assert result["has_secrets"] is True, result
@@ -525,3 +614,10 @@ def test_env_local_bak_and_uppercase_pem_are_credential_files(tmp_path):
     reasons = [f["reason"] for f in CapsuleRedactor(tmp_path).scan()["findings"]]
     assert reasons.count("credential_file") == 3, reasons
     assert _blocks(tmp_path)
+
+
+# Mutation B8: an exact credential filename (id_rsa) is a credential_file finding
+def test_id_rsa_is_a_credential_file(tmp_path):
+    (tmp_path / "id_rsa").write_text("not really a key\n", encoding="utf-8")
+    findings = CapsuleRedactor(tmp_path).scan()["findings"]
+    assert [f["reason"] for f in findings] == ["credential_file"]

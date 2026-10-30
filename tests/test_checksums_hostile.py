@@ -1,7 +1,10 @@
 """``.checksums`` is untrusted input: a hostile path must be a FAIL verdict,
 never an exception out of the verifier (#123).
 """
+
+import hashlib
 import os
+
 import pytest
 from click.testing import CliRunner
 
@@ -26,8 +29,9 @@ HOSTILE_PATHS = [
 
 def _capsule_with_checksums(tmp_path, line: str):
     (tmp_path / "capsule.yaml").write_text(
-        "version: '1.0.0'\nname: t\nlifecycle_state: sealed\n"
-        f"checksums_digest: {DIGEST}\n", encoding="utf-8")
+        f"version: '1.0.0'\nname: t\nlifecycle_state: sealed\nchecksums_digest: {DIGEST}\n",
+        encoding="utf-8",
+    )
     (tmp_path / ".checksums").write_bytes(line.encode("utf-8", "surrogateescape"))
     return tmp_path
 
@@ -38,7 +42,7 @@ def test_verify_checksums_fails_closed_on_hostile_path(path, tmp_path):
     result = CapsuleVerifier.verify_checksums(tmp_path)
     assert result["status"] == "fail"
     assert result["passed"] is False
-    if any(ord(c) < 0x20 or ord(c) == 0x7f for c in path):
+    if any(ord(c) < 0x20 or ord(c) == 0x7F for c in path):
         # The writer never emits a raw control character: parse-time rejection.
         assert "malformed" in result["error"], result
 
@@ -55,7 +59,9 @@ def test_cli_exits_1_without_traceback_on_hostile_path(command, path, tmp_path):
     _capsule_with_checksums(tmp_path, f"{DIGEST}  {path}\n")
     result = CliRunner().invoke(cli, [command, str(tmp_path)])
     assert result.exit_code == 1, result.output
-    assert result.exception is None or isinstance(result.exception, SystemExit), repr(result.exception)
+    assert result.exception is None or isinstance(result.exception, SystemExit), repr(
+        result.exception
+    )
 
 
 @pytest.mark.skipif(os.name == "nt", reason="filename cannot exist on this filesystem")
@@ -73,3 +79,68 @@ def test_control_character_in_path_is_noncanonical_even_when_file_exists(tmp_pat
     (sealed / "ok.txt").rename(sealed / "ok\t.txt")
     result = CapsuleVerifier.verify_checksums(sealed)
     assert result["status"] == "fail"
+
+
+# --- mutation gaps (docs/MUTATION-REPORT-2026-10-15.md) -----------------------
+
+
+def _digest_of(path) -> str:
+    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+# Mutation B1: the early returns for a missing / undecodable .checksums pin status and passed
+def test_missing_or_undecodable_checksums_is_a_fail_verdict(tmp_path):
+    result = CapsuleVerifier.verify_checksums(tmp_path)
+    assert (result["status"], result["passed"]) == ("fail", False)
+    (tmp_path / ".checksums").write_bytes(b"\xff\xfe\x00")
+    result = CapsuleVerifier.verify_checksums(tmp_path)
+    assert (result["status"], result["passed"]) == ("fail", False)
+
+
+# Mutation B2: a non-string key in a legacy .checksums fails the verdict on its own
+def test_legacy_checksums_non_string_key_fails_even_when_every_file_matches(tmp_path):
+    payload = tmp_path / "payload"
+    payload.mkdir()
+    (payload / "r.json").write_text("{}", encoding="utf-8")
+    (tmp_path / ".checksums").write_text(
+        f"? ~\n: {DIGEST}\npayload/r.json: {_digest_of(payload / 'r.json')}\n",
+        encoding="utf-8",
+    )
+    result = CapsuleVerifier.verify_checksums(tmp_path)
+    assert result["format"] == "legacy-yaml"
+    assert result["status"] == "fail"
+    assert result["invalid"] == ["None"]
+    assert result["files"]["None"]["match"] is False
+    assert result["files"]["payload/r.json"]["match"] is True
+
+
+# Mutation B3: two NFC-equivalent keys in a legacy .checksums are a duplicate, not a pass
+def test_legacy_checksums_nfc_duplicate_keys_fail(tmp_path):
+    nfc = "\u00e9.txt"
+    nfd = "e\u0301.txt"
+    (tmp_path / nfc).write_text("x", encoding="utf-8")
+    digest = _digest_of(tmp_path / nfc)
+    (tmp_path / ".checksums").write_text(f"{nfc}: {digest}\n{nfd}: {digest}\n", encoding="utf-8")
+    result = CapsuleVerifier.verify_checksums(tmp_path)
+    assert result["format"] == "legacy-yaml"
+    assert result["status"] == "fail"
+    assert nfc in result["invalid"]
+
+
+# Mutation B4: checksums_digest_match is False when a digest is declared but .checksums is absent
+def test_declared_digest_without_checksums_file_reports_no_match(tmp_path):
+    (tmp_path / "capsule.yaml").write_text(
+        f"version: '1.0.0'\nname: t\nlifecycle_state: sealed\nchecksums_digest: {DIGEST}\n",
+        encoding="utf-8",
+    )
+    result = CapsuleVerifier.verify_integrity(tmp_path)
+    assert result["status"] == "fail"
+    assert result["checksums_digest_match"] is False
+
+
+# Mutation B6: a malformed line with a valid digest and a control character returns a verdict
+def test_control_character_on_malformed_line_is_a_grammar_error(tmp_path):
+    _capsule_with_checksums(tmp_path, f"{DIGEST} payload\rx\n")
+    result = CapsuleVerifier.verify_checksums(tmp_path)
+    assert result["status"] == "fail"
+    assert "control character" in result["error"]

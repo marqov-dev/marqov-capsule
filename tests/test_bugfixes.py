@@ -4,6 +4,7 @@ Covers issues #57, #59, and the #20 determinism defects (YAML 1.1 coercion,
 datetime on-disk agreement, non-string mapping keys, and the .checksums
 on-disk format).
 """
+
 import datetime
 import hashlib
 import json
@@ -17,7 +18,6 @@ from marqov_capsule._canonical import compute_capsule_id, load_manifest_yaml
 from marqov_capsule.builder import CapsuleBuilder, CapsuleStateError
 from marqov_capsule.redactor import RedactorError
 from marqov_capsule.verifier import CapsuleVerifier
-
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -62,15 +62,14 @@ def _parse_spec_checksums(text: str) -> dict[str, str]:
 # #57 — credential scan must cover the in-memory manifest
 # ---------------------------------------------------------------------------
 
+
 def test_manifest_borne_secret_is_blocked_via_python_api(tmp_path):
     """A token carried only in the in-memory manifest (not on disk) must still
     block sealing through from_manifest().seal(). Before the fix the scan ran
     before capsule.yaml was written, so this sealed clean. (#57)"""
     capsule_dir = tmp_path / "leak.capsule"
     _populate(capsule_dir)
-    b = CapsuleBuilder.from_manifest(
-        _draft(parameters={"IBM_QUANTUM_TOKEN": _A64})
-    )
+    b = CapsuleBuilder.from_manifest(_draft(parameters={"IBM_QUANTUM_TOKEN": _A64}))
     with pytest.raises(RedactorError):
         b.seal(capsule_dir=capsule_dir, sealed_by="test")
 
@@ -86,6 +85,7 @@ def test_clean_manifest_still_seals_via_python_api(tmp_path):
 # ---------------------------------------------------------------------------
 # #59 — no silent re-seal of an already-sealed capsule
 # ---------------------------------------------------------------------------
+
 
 def test_reseal_refused_python_api(tmp_path):
     """Seal, mutate a payload file, seal again -> must be refused. (#59)"""
@@ -105,6 +105,7 @@ def test_reseal_refused_python_api(tmp_path):
 def test_reseal_refused_cli(tmp_path):
     """The CLI must refuse to re-seal a sealed capsule, with a clean exit 1. (#59)"""
     from click.testing import CliRunner
+
     from marqov_capsule.cli.main import cli
 
     _populate(tmp_path)
@@ -129,6 +130,7 @@ def test_reseal_refused_cli(tmp_path):
 # #20 — YAML 1.1 coercions must not fire (scalars read as strings)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "raw,expected",
     [
@@ -152,9 +154,7 @@ def test_yaml_1_1_coercions_round_trip_as_string(raw, expected):
 
 def test_json_scalars_still_typed():
     """The fix must not turn legitimate JSON scalars into strings."""
-    parsed = load_manifest_yaml(
-        "i: 256\nf: 0.05\nb: true\nn: null\ns: 1.0.0\n"
-    )
+    parsed = load_manifest_yaml("i: 256\nf: 0.05\nb: true\nn: null\ns: 1.0.0\n")
     assert parsed["i"] == 256 and isinstance(parsed["i"], int)
     assert parsed["f"] == 0.05 and isinstance(parsed["f"], float)
     assert parsed["b"] is True
@@ -165,6 +165,7 @@ def test_json_scalars_still_typed():
 # ---------------------------------------------------------------------------
 # #20 — datetime on-disk serialization must agree with the canonical ID
 # ---------------------------------------------------------------------------
+
 
 def test_datetime_parameter_id_round_trips_from_disk(tmp_path):
     """Seal with a datetime parameter; the ID recomputed from the written
@@ -183,6 +184,7 @@ def test_datetime_parameter_id_round_trips_from_disk(tmp_path):
 # ---------------------------------------------------------------------------
 # #20 / _canonical.py:66 — non-string mapping keys must not crash
 # ---------------------------------------------------------------------------
+
 
 def test_non_string_mapping_keys_do_not_crash():
     """Typed (int/bool) mapping keys never raise a bare exception out of jcs
@@ -213,6 +215,7 @@ def test_verify_integrity_survives_non_string_key(tmp_path):
 # ---------------------------------------------------------------------------
 # #20 / builder.py:237 — .checksums on-disk format is the spec line format
 # ---------------------------------------------------------------------------
+
 
 def test_checksums_written_in_spec_line_format(tmp_path):
     """Builder must emit newline-delimited 'sha256:<hex>  <path>' lines, sorted

@@ -4,6 +4,7 @@ The estimator itself is covered in test_verifier.py; these tests cover the
 command wiring: how counts are read, which verdict maps to which exit code,
 and that a base install without numpy/scipy fails cleanly.
 """
+
 import json
 
 import pytest
@@ -47,6 +48,7 @@ def _run(*args):
 
 # --- input shapes ---------------------------------------------------------
 
+
 @pytest.mark.usefixtures("statistical_dependencies")
 def test_reads_bare_counts_mapping(tmp_path):
     ref = _write(tmp_path / "ref.json", _balanced(50_000))
@@ -81,6 +83,7 @@ def test_missing_counts_key_errors_cleanly(tmp_path):
 
 
 # --- verdicts -------------------------------------------------------------
+
 
 @pytest.mark.usefixtures("statistical_dependencies")
 def test_high_shot_equivalence_is_verified(tmp_path):
@@ -142,6 +145,7 @@ def test_zero_shots_is_inconclusive(tmp_path):
 
 # --- policy flags ---------------------------------------------------------
 
+
 @pytest.mark.usefixtures("statistical_dependencies")
 def test_epsilon_flag_changes_the_verdict(tmp_path):
     # For identical inputs the bound is pure slack, ~sqrt(ln(1/alpha)/2 * 2/n).
@@ -162,6 +166,7 @@ def test_reports_the_epsilon_actually_used(tmp_path):
 
 
 # --- malformed input ------------------------------------------------------
+
 
 def test_malformed_json_errors_cleanly(tmp_path):
     bad = tmp_path / "bad.json"
@@ -197,6 +202,7 @@ def test_missing_file_errors_cleanly(tmp_path):
 
 # --- json output ----------------------------------------------------------
 
+
 @pytest.mark.usefixtures("statistical_dependencies")
 def test_json_output_carries_verdict_and_metrics(tmp_path):
     ref = _write(tmp_path / "ref.json", _balanced(50_000))
@@ -219,6 +225,7 @@ def test_json_output_on_error_is_still_json(tmp_path):
 
 # --- dependency guard -----------------------------------------------------
 
+
 def test_missing_numpy_fails_cleanly(tmp_path, monkeypatch):
     # The base install ships without numpy/scipy. The verifier already raises
     # a guiding ImportError; the CLI must surface it, not a traceback.
@@ -239,6 +246,7 @@ def test_missing_numpy_fails_cleanly(tmp_path, monkeypatch):
 
 
 # --- stale help text ------------------------------------------------------
+
 
 def test_verify_help_no_longer_says_comparison_is_unavailable():
     result = CliRunner().invoke(cli, ["verify", "--help"])

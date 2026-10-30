@@ -1,14 +1,19 @@
 """Writer/readback and public rejection behavior for the common YAML profile."""
+
 import pytest
 import yaml
 
-from marqov_capsule._canonical import (
-    compute_capsule_id, dump_manifest_yaml, load_manifest_yaml,
-)
 from marqov_capsule import CapsuleBuilder, CapsuleVerifier
+from marqov_capsule._canonical import (
+    compute_capsule_id,
+    dump_manifest_yaml,
+    load_manifest_yaml,
+)
 
 
-@pytest.mark.parametrize("value", ["x\x00y", "x\x7fy", "x\x80y", "x\u0085y", "x\u2028y", "x\u2029y"])
+@pytest.mark.parametrize(
+    "value", ["x\x00y", "x\x7fy", "x\x80y", "x\u0085y", "x\u2028y", "x\u2029y"]
+)
 def test_writer_escapes_restricted_raw_characters_without_changing_identity(value):
     manifest = {"name": value, value: "key too", "nested": [value]}
     rendered = dump_manifest_yaml(manifest)
@@ -21,8 +26,11 @@ def test_writer_escapes_restricted_raw_characters_without_changing_identity(valu
 @pytest.mark.parametrize("value", ["note\u0085line", "note\u2028line", "note\u2029line"])
 def test_sealed_manifest_with_line_separator_value_still_verifies(tmp_path, value):
     (tmp_path / "payload.txt").write_bytes(b"fixture\n")
-    ident = CapsuleBuilder().start_capsule(name=value, requirements={
-        "paradigm": ["classical"], "max_qubit_count": 0}).seal(tmp_path)
+    ident = (
+        CapsuleBuilder()
+        .start_capsule(name=value, requirements={"paradigm": ["classical"], "max_qubit_count": 0})
+        .seal(tmp_path)
+    )
     result = CapsuleVerifier.verify_integrity(tmp_path, expected_id=ident)
     assert result["status"] == "pass" and result["manifest_authenticated"]
 

@@ -8,6 +8,7 @@ in-repo CLI rather than an installed TestPyPI wheel (there's nothing to
 install from during a normal test run) — it only guards the command
 sequence itself, not the published package.
 """
+
 import re
 from pathlib import Path
 
@@ -23,15 +24,9 @@ def _validation_block() -> list[str]:
     in order, with the X.Y.Z placeholder version stripped out (there's no
     real published version to seal/pack against here)."""
     text = RELEASING.read_text()
-    block = re.search(
-        r"Validate the PUBLISHED artifact.*?```\n(.*?)```", text, re.S
-    )
+    block = re.search(r"Validate the PUBLISHED artifact.*?```\n(.*?)```", text, re.S)
     assert block, "RELEASING.md has no fenced block under the artifact-validation step"
-    parts = (
-        part.strip()
-        for line in block.group(1).splitlines()
-        for part in line.split("&&")
-    )
+    parts = (part.strip() for line in block.group(1).splitlines() for part in line.split("&&"))
     return [part for part in parts if part.startswith("marqov-capsule ")]
 
 

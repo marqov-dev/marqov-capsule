@@ -9,6 +9,7 @@ Covers:
   #61 — malformed .checksums and un-canonicalisable manifests must yield a
         FAIL verdict, never an uncaught traceback
 """
+
 import hashlib
 import json
 import os
@@ -47,6 +48,7 @@ def _seal(capsule_dir) -> str:
 
 # --- #54: arbitrary file read via a symlinked parent directory --------------
 
+
 def test_verify_checksums_rejects_symlinked_parent_dir(tmp_path):
     """A .checksums key whose *parent* is a symlink out of the capsule must
     NOT be read/hashed (offline file-read oracle)."""
@@ -74,6 +76,7 @@ def test_verify_checksums_rejects_symlinked_parent_dir(tmp_path):
 
 
 # --- #56: non-regular files bypass the closed-set injected-file check --------
+
 
 def test_injected_fifo_fails_verification(tmp_path):
     capsule_dir = tmp_path / "test.capsule"
@@ -110,6 +113,7 @@ def test_injected_fifo_fails_full_integrity(tmp_path):
 
 
 # --- #60: verify . false tamper alarm on an untampered capsule --------------
+
 
 def test_verify_checksums_dot_path_untampered_passes(tmp_path, monkeypatch):
     capsule_dir = tmp_path / "test.capsule"
@@ -149,6 +153,7 @@ def test_cli_verify_dot_path_passes(tmp_path, monkeypatch):
 
 # --- #58: surface authentication state in JSON and on open ------------------
 
+
 def test_verify_json_unauthenticated_has_warning(tmp_path):
     from click.testing import CliRunner
 
@@ -174,9 +179,7 @@ def test_open_json_surfaces_authentication_warning(tmp_path):
     _seal(capsule_dir)
     dest = tmp_path / "out"
 
-    result = CliRunner().invoke(
-        cli, ["open", "--json", str(capsule_dir), "--dest", str(dest)]
-    )
+    result = CliRunner().invoke(cli, ["open", "--json", str(capsule_dir), "--dest", str(dest)])
     assert result.exit_code == 0, result.output
     data = json.loads(result.output)
     assert data.get("warning"), "unauthenticated open --json must carry a warning field"
@@ -199,12 +202,11 @@ def test_open_on_nonregular_capsule_fails_cleanly(tmp_path):
     )
     assert result.exit_code == 1
     # Clean failure — no uncaught traceback (e.g. shutil.Error).
-    assert result.exception is None or isinstance(result.exception, SystemExit), (
-        result.exception
-    )
+    assert result.exception is None or isinstance(result.exception, SystemExit), result.exception
 
 
 # --- #61: hostile input yields a FAIL verdict, not a traceback --------------
+
 
 def test_malformed_legacy_checksums_fails_not_crashes(tmp_path):
     capsule_dir = tmp_path / "test.capsule"

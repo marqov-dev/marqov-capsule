@@ -1,6 +1,23 @@
 # Changelog
 
-## Unreleased
+## [0.2.2] — 2026-10-21
+
+### Added
+
+- A `lint` CI job (ruff format and lint, mypy on `src/`, a typed CLI package)
+  and a changed-lines coverage check on pull requests; the repository is
+  formatted to a 100-character line length (#139). A local replica of the CI
+  workflow, `tools/local_ci.sh`, for qualifying changes when hosted CI is
+  unavailable (#142).
+- Twenty-eight tests from a mutation-testing pass over `_canonical.py`,
+  `verifier.py` and `redactor.py`: seventeen pin guards that could previously
+  be removed with the suite still green (checksum verdicts for missing or
+  undecodable `.checksums`, non-string and NFC-duplicate legacy keys, the
+  `# capsule:allow` scope, notebook and directory scans continuing past
+  malformed or skipped entries, `verify_deterministic` key-order
+  independence), and eleven pin the `verify_checksums` result contract (#140).
+  The mutation baseline and per-function scores are in
+  `docs/MUTATION-REPORT-2026-10-15.md`.
 
 ### Fixed
 

@@ -13,6 +13,7 @@ The CLI surface this policy serves is `marqov-capsule compare` (#15, #86):
 its thresholds come from the command line and this policy's defaults, never
 from a capsule's own declaration.
 """
+
 from marqov_capsule.policy import VerificationPolicy
 
 
@@ -91,12 +92,4 @@ def test_resolution_reports_what_was_clamped():
 # --- The #30 attack, end to end -------------------------------------------
 
 
-
-
-
-
-
 # --- --against must not skip integrity ------------------------------------
-
-
-

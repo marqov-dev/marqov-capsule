@@ -5,6 +5,7 @@ on an install without that package. The base-install CI job exists precisely
 to run the suite without numpy/scipy, and it silently lost 56 items this way.
 Skips belong in fixtures applied to the tests that need the dependency.
 """
+
 import re
 from pathlib import Path
 
@@ -14,7 +15,8 @@ MODULE_LEVEL_IMPORTORSKIP = re.compile(r"^pytest\.importorskip\(", re.MULTILINE)
 
 def test_no_module_level_importorskip():
     offenders = sorted(
-        p.name for p in TESTS.glob("test_*.py")
+        p.name
+        for p in TESTS.glob("test_*.py")
         if MODULE_LEVEL_IMPORTORSKIP.search(p.read_text(encoding="utf-8"))
     )
     assert offenders == [], (

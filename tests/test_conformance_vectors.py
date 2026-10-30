@@ -1,8 +1,9 @@
 """Fixed public vectors: never regenerate expected values during a test."""
-import re
-import os
+
 import hashlib
 import json
+import os
+import re
 import unicodedata
 from pathlib import Path
 from urllib.parse import unquote
@@ -33,15 +34,22 @@ def test_fixed_fixture_outputs(vector, tmp_path):
     assert sorted(e["path"] for e in validation["errors"]) == vector["schema_error_paths"]
     scan = CapsuleRedactor(directory).scan()
     assert scan["has_secrets"] == vector["has_secrets"]
-    assert sorted(
-        ({"file": f["file"], "line": f["line"]} for f in scan["findings"]),
-        key=lambda f: (f["file"], f["line"]),
-    ) == vector["secret_locations"]
+    assert (
+        sorted(
+            ({"file": f["file"], "line": f["line"]} for f in scan["findings"]),
+            key=lambda f: (f["file"], f["line"]),
+        )
+        == vector["secret_locations"]
+    )
     if vector["checksums_digest"] is not None:
         assert manifest["checksums_digest"] == vector["checksums_digest"]
-        assert CapsuleVerifier.verify_integrity(directory, expected_id=vector["capsule_id"])["status"] == "pass"
+        assert (
+            CapsuleVerifier.verify_integrity(directory, expected_id=vector["capsule_id"])["status"]
+            == "pass"
+        )
         # Also exercise the writer against fixed checksum bytes, not just reader.
         import shutil
+
         copy = tmp_path / "capsule"
         shutil.copytree(directory, copy)
         CapsuleBuilder().save_checksums(copy)
@@ -57,8 +65,12 @@ def test_independent_fixture_digest_chain(vector):
     implementation (floating-point extremes and UTF-16 sorting differ).
     """
     data = (GOLDEN / vector["canonical_file"]).read_bytes()
-    assert json.dumps(json.loads(data), ensure_ascii=False, sort_keys=True,
-                      separators=(",", ":")).encode() == data
+    assert (
+        json.dumps(
+            json.loads(data), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode()
+        == data
+    )
     assert "mqc:1:" + hashlib.sha256(data).hexdigest() == vector["capsule_id"]
     if vector["checksums_digest"] is None:
         return
@@ -72,29 +84,43 @@ def test_independent_fixture_digest_chain(vector):
         paths.append(path)
         assert "sha256:" + hashlib.sha256((directory / path).read_bytes()).hexdigest() == digest
     assert paths == sorted(paths, key=lambda p: p.encode())
-    assert set(paths) == {p.relative_to(directory).as_posix() for p in directory.rglob("*")
-                          if p.is_file() and p.name not in {"capsule.yaml", ".checksums"}}
+    assert set(paths) == {
+        p.relative_to(directory).as_posix()
+        for p in directory.rglob("*")
+        if p.is_file() and p.name not in {"capsule.yaml", ".checksums"}
+    }
 
 
 def test_versioned_derived_id_does_not_hide_same_line_credential(tmp_path):
     parent = next(v["capsule_id"] for v in VECTORS if v["fixture"] == "derived_capsule/parent")
-    (tmp_path / "capsule.yaml").write_text(json.dumps({
-        "derived_from": parent, "IBM_QUANTUM_TOKEN": "synthetic-not-a-real-secret",
-    }))
+    (tmp_path / "capsule.yaml").write_text(
+        json.dumps(
+            {
+                "derived_from": parent,
+                "IBM_QUANTUM_TOKEN": "synthetic-not-a-real-secret",
+            }
+        )
+    )
     findings = CapsuleRedactor(tmp_path).scan()["findings"]
     assert any(f["blocking"] and f["reason"] == "name_pattern" for f in findings)
 
 
-@pytest.mark.parametrize("vector", json.loads(
-    (GOLDEN / "canonical-edge-cases.json").read_text(encoding="utf-8")), ids=lambda v: v["name"])
+@pytest.mark.parametrize(
+    "vector",
+    json.loads((GOLDEN / "canonical-edge-cases.json").read_text(encoding="utf-8")),
+    ids=lambda v: v["name"],
+)
 def test_canonical_edge_vectors(vector):
     if vector.get("reject"):
         # A reject vector has no capsule ID: decoding, parsing or
         # canonicalising it must fail. ``bytes_hex`` vectors are files that
         # are not UTF-8 text at all.
         with pytest.raises((ValueError, TypeError, yaml.YAMLError)):
-            text = (bytes.fromhex(vector["bytes_hex"]).decode("utf-8")
-                    if "bytes_hex" in vector else vector["yaml"])
+            text = (
+                bytes.fromhex(vector["bytes_hex"]).decode("utf-8")
+                if "bytes_hex" in vector
+                else vector["yaml"]
+            )
             compute_capsule_id(load_manifest_yaml(text))
         return
     manifest = load_manifest_yaml(vector["yaml"])
@@ -119,6 +145,7 @@ def test_digest_field_does_not_hide_same_line_credential(tmp_path):
 
 def test_normalized_collision_is_integrity_failure(tmp_path):
     import shutil
+
     shutil.copytree(ROOT / "valid_capsule", tmp_path / "capsule")
     manifest = tmp_path / "capsule/capsule.yaml"
     with manifest.open("a") as stream:
@@ -133,11 +160,15 @@ def _not_a_windows_filename(path: str) -> bool:
     space or dot cannot appear in a filename (``:`` silently names a stream)."""
     return os.name == "nt" and any(
         re.search(r'[\x00-\x1f\\:*?"<>|]', part) or part.endswith((" ", "."))
-        for part in path.split("/"))
+        for part in path.split("/")
+    )
 
 
-@pytest.mark.parametrize("vector", json.loads(
-    (GOLDEN / "checksum-path-cases.json").read_text(encoding="utf-8")), ids=lambda v: v["name"])
+@pytest.mark.parametrize(
+    "vector",
+    json.loads((GOLDEN / "checksum-path-cases.json").read_text(encoding="utf-8")),
+    ids=lambda v: v["name"],
+)
 def test_checksum_path_vectors(vector, tmp_path):
     if any(_not_a_windows_filename(file["path"]) for file in vector["files"]):
         pytest.skip("vector uses a filename this filesystem cannot hold")
@@ -145,6 +176,7 @@ def test_checksum_path_vectors(vector, tmp_path):
         # Materialize NFC names so these vectors are filesystem-independent;
         # the vector's NFD input is checked directly by the path encoder too.
         from marqov_capsule.builder import _checksum_path
+
         name = unicodedata.normalize("NFC", file["path"])
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -156,7 +188,9 @@ def test_checksum_path_vectors(vector, tmp_path):
     assert CapsuleVerifier.verify_checksums(tmp_path)["status"] == "pass"
 
 
-@pytest.mark.parametrize("encoded", ["payload/%2E%2E/outside", "payload/%2Fetc", "payload/%0a.txt", "payload/%zz.txt"])
+@pytest.mark.parametrize(
+    "encoded", ["payload/%2E%2E/outside", "payload/%2Fetc", "payload/%0a.txt", "payload/%zz.txt"]
+)
 def test_noncanonical_checksum_escapes_fail(tmp_path, encoded):
     (tmp_path / ".checksums").write_text("sha256:" + "0" * 64 + "  " + encoded + "\n")
     assert CapsuleVerifier.verify_checksums(tmp_path)["status"] == "fail"
@@ -166,9 +200,13 @@ def test_legacy_yaml_paths_are_not_percent_decoded(tmp_path):
     name = "literal%0A.txt"
     content = b"legacy payload"
     (tmp_path / name).write_bytes(content)
-    (tmp_path / ".checksums").write_text(yaml.safe_dump({
-        name: "sha256:" + hashlib.sha256(content).hexdigest(),
-    }))
+    (tmp_path / ".checksums").write_text(
+        yaml.safe_dump(
+            {
+                name: "sha256:" + hashlib.sha256(content).hexdigest(),
+            }
+        )
+    )
     assert CapsuleVerifier.verify_checksums(tmp_path)["status"] == "pass"
 
 
@@ -183,6 +221,7 @@ def test_encoded_paths_survive_sealed_archive_roundtrip(tmp_path):
     if os.name == "nt":
         pytest.skip("these filenames cannot exist on this filesystem")
     from marqov_capsule.archive import pack_capsule, unpack_capsule
+
     capsule = tmp_path / "capsule"
     capsule.mkdir()
     for name in ["percent%0A.txt", "line\nbreak.txt", "back\\slash.txt", "trailing "]:

@@ -24,11 +24,12 @@ direction, so there is no single "declared may only tighten" rule:
   never read from the capsule at all — ``resolve`` always emits the
   policy's own ``alpha``.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Any
 
 DEFAULT_EPSILON = 0.02
 DEFAULT_EPSILON_DRIFT = 0.08
@@ -36,7 +37,7 @@ DEFAULT_MIN_SHOTS = 100
 DEFAULT_ALPHA = 0.05
 
 
-def _usable_threshold(value: Any) -> Optional[float]:
+def _usable_threshold(value: Any) -> float | None:
     """Return ``value`` as a float if it is a usable threshold, else ``None``.
 
     Rejects strings, ``None``, containers, booleans (``bool`` is an ``int``
@@ -55,7 +56,7 @@ def _usable_threshold(value: Any) -> Optional[float]:
     return v
 
 
-def _usable_alpha(value: Any) -> Optional[float]:
+def _usable_alpha(value: Any) -> float | None:
     """Return ``value`` as a float if it is a usable confidence-bound alpha, else ``None``.
 
     Alpha is an error rate, not a threshold: it must be a real number strictly
@@ -106,14 +107,26 @@ class VerificationPolicy:
         producing an always-VERIFIED or never-VERIFIED comparison (#99)."""
         for name in ("epsilon", "epsilon_drift"):
             value = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not (0.0 < value < 1.0):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not (0.0 < value < 1.0)
+            ):
                 raise ValueError(f"{name} must be in (0, 1), got {value!r}")
-        if isinstance(self.alpha, bool) or not isinstance(self.alpha, (int, float)) or not (0.0 < self.alpha < 1.0):
+        if (
+            isinstance(self.alpha, bool)
+            or not isinstance(self.alpha, (int, float))
+            or not (0.0 < self.alpha < 1.0)
+        ):
             raise ValueError(f"alpha must be in (0, 1), got {self.alpha!r}")
-        if isinstance(self.min_shots, bool) or not isinstance(self.min_shots, int) or self.min_shots < 1:
+        if (
+            isinstance(self.min_shots, bool)
+            or not isinstance(self.min_shots, int)
+            or self.min_shots < 1
+        ):
             raise ValueError(f"min_shots must be an integer >= 1, got {self.min_shots!r}")
 
-    def resolve(self, declared: Optional[dict]) -> dict[str, Any]:
+    def resolve(self, declared: dict | None) -> dict[str, Any]:
         """Resolve effective settings from this policy and a capsule's declaration.
 
         Returns a dict accepted by ``CapsuleVerifier.verify_statistical`` plus
@@ -141,7 +154,9 @@ class VerificationPolicy:
             "alpha": self.alpha,
             "tolerance_regime": "strict",
             # provenance — not consumed by the verifier, reported to the user
-            "epsilon_declared": raw if isinstance(raw, (int, float)) and not isinstance(raw, bool) else None,
+            "epsilon_declared": raw
+            if isinstance(raw, (int, float)) and not isinstance(raw, bool)
+            else None,
             "epsilon_ceiling": ceiling,
             "epsilon_clamped": wanted is not None and wanted > ceiling,
             "calibration_drift_declared": regime_declared,

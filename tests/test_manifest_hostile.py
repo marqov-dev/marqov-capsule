@@ -2,6 +2,7 @@
 structured YAMLError (and a fail verdict / clean exit downstream), never an
 arbitrary Python exception, a stall, or a traceback (#110, #122, #93).
 """
+
 import time
 
 import pytest
@@ -52,7 +53,10 @@ HOSTILE = [
     ("local-tag", "a: !custom 1\n"),
     ("deep-flow-sequence", "a: " + "[" * 1000 + "]" * 1000 + "\n"),
     ("deep-flow-mapping", "a: " + "{b: " * 1000 + "1" + "}" * 1000 + "\n"),
-    ("deep-block-mapping", "".join("  " * i + f"k{i}:\n" for i in range(300)) + "  " * 300 + "v: 1\n"),
+    (
+        "deep-block-mapping",
+        "".join("  " * i + f"k{i}:\n" for i in range(300)) + "  " * 300 + "v: 1\n",
+    ),
     ("int-4300-digits", "big: " + "9" * 5000 + "\n"),
     ("int-tagged-huge", "big: !!int " + "9" * 5000 + "\n"),
 ]
@@ -124,7 +128,9 @@ def test_cli_commands_exit_1_without_traceback(command, text, tmp_path):
     result = CliRunner().invoke(cli, args)
     assert time.perf_counter() - started < 5.0
     assert result.exit_code == 1, result.output
-    assert result.exception is None or isinstance(result.exception, SystemExit), repr(result.exception)
+    assert result.exception is None or isinstance(result.exception, SystemExit), repr(
+        result.exception
+    )
     assert "Traceback" not in result.output
 
 
@@ -155,11 +161,14 @@ def hypothesis_available():
 @pytest.mark.usefixtures("hypothesis_available")
 def test_validate_file_never_raises_on_arbitrary_text(tmp_path):
     """Tripwire: whatever the text, validate_file returns a verdict."""
-    from hypothesis import HealthCheck, given, settings, strategies as st
+    from hypothesis import HealthCheck, given, settings
+    from hypothesis import strategies as st
 
     counter = {"n": 0}
 
-    @settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    @settings(
+        max_examples=200, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture]
+    )
     @given(st.text())
     def check(text):
         counter["n"] += 1

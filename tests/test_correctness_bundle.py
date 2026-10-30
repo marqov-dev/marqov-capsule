@@ -1,4 +1,5 @@
 """Regression cases from the 0.2.0 publication readiness review."""
+
 import os
 
 import pytest
@@ -6,7 +7,6 @@ import pytest
 from marqov_capsule.builder import CapsuleBuilder, CapsuleStateError
 from marqov_capsule.redactor import CapsuleRedactor, RedactorError
 from marqov_capsule.verifier import CapsuleVerifier
-
 
 REQUIREMENTS = {"paradigm": ["gate-based"], "max_qubit_count": 2}
 # Deliberately synthetic shape accepted by the credential detector.
@@ -44,8 +44,9 @@ def test_warn_only_scans_the_written_sealed_manifest(tmp_path, monkeypatch, fiel
 
     monkeypatch.setattr(CapsuleRedactor, "scan_and_raise", record_scan)
     builder = CapsuleBuilder().start_capsule(name="test", requirements=REQUIREMENTS)
-    builder.seal_capsule(tmp_path, **{field: TOKEN}, warn_only=True,
-                         validate=field != "derived_from")
+    builder.seal_capsule(
+        tmp_path, **{field: TOKEN}, warn_only=True, validate=field != "derived_from"
+    )
     builder.save_capsule(tmp_path)
     written = (tmp_path / "capsule.yaml").read_text()
     assert TOKEN in written
@@ -60,10 +61,11 @@ def test_nested_inputs_and_exports_cannot_change_sealed_record(tmp_path):
     backend = {"provider": "local", "name": "sim", "shots": 1000}
     settings = {"epsilon": 0.02, "min_shots": 100, "tolerance_regime": "strict"}
     builder = CapsuleBuilder().start_capsule(
-        name="test", requirements=requirements, parameters=parameters, tags=tags)
+        name="test", requirements=requirements, parameters=parameters, tags=tags
+    )
     builder.add_task_execution(
-        "550e8400-e29b-41d4-a716-446655440000", "success", "probabilistic",
-        backend, settings)
+        "550e8400-e29b-41d4-a716-446655440000", "success", "probabilistic", backend, settings
+    )
     exported_before_seal = builder.to_dict()
     capsule_id = builder.seal(tmp_path)
     written = (tmp_path / "capsule.yaml").read_bytes()
@@ -103,11 +105,20 @@ def test_unsupported_filename_refuses_seal_before_writes(tmp_path, char):
 
 
 @pytest.mark.parametrize("arm", ["ref_counts", "new_counts"])
-@pytest.mark.parametrize("invalid", [
-    {"0": 1100, "1": -100}, {"0": 1000.5}, {"0": True},
-    {"0": float("nan")}, {"0": float("inf")}, {"0": "1000"},
-    {0: 1000}, None, [1000],
-])
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        {"0": 1100, "1": -100},
+        {"0": 1000.5},
+        {"0": True},
+        {"0": float("nan")},
+        {"0": float("inf")},
+        {"0": "1000"},
+        {0: 1000},
+        None,
+        [1000],
+    ],
+)
 def test_statistical_api_rejects_invalid_counts_before_verdict(arm, invalid):
     inputs = {"ref_counts": {"0": 1000}, "new_counts": {"0": 1000}}
     inputs[arm] = invalid

@@ -4,6 +4,7 @@ Restored with #48. The original was deleted alongside `archive.py` when the
 monolithic `cli.py` was replaced — losing the caller made the module look like
 dead code, and the tests that would have said otherwise went in the same commit.
 """
+
 import json
 import tarfile
 from pathlib import Path
@@ -18,11 +19,15 @@ def _sealed(parent: Path, name: str = "bell") -> Path:
     capsule_dir = parent / f"{name}.capsule"
     (capsule_dir / "payload").mkdir(parents=True)
     (capsule_dir / "payload" / "results.json").write_text('{"counts": {"00": 512}}')
-    CapsuleBuilder.from_manifest({
-        "version": "1.0.0", "name": name, "lifecycle_state": "draft",
-        "requirements": {"paradigm": ["gate-based"], "max_qubit_count": 2},
-        "task_executions": [],
-    }).seal(capsule_dir=capsule_dir, sealed_by="test")
+    CapsuleBuilder.from_manifest(
+        {
+            "version": "1.0.0",
+            "name": name,
+            "lifecycle_state": "draft",
+            "requirements": {"paradigm": ["gate-based"], "max_qubit_count": 2},
+            "task_executions": [],
+        }
+    ).seal(capsule_dir=capsule_dir, sealed_by="test")
     return capsule_dir
 
 
@@ -132,10 +137,10 @@ def test_payload_digest_agrees_between_directory_and_archive(tmp_path):
     directory it came from name the same thing."""
     d = _sealed(tmp_path)
     archive = tmp_path / "a.capsule"
-    packed = json.loads(CliRunner().invoke(
-        cli, ["pack", str(d), "-o", str(archive), "--json"]).output)
-    verified = json.loads(CliRunner().invoke(
-        cli, ["verify", str(archive), "--json"]).output)
+    packed = json.loads(
+        CliRunner().invoke(cli, ["pack", str(d), "-o", str(archive), "--json"]).output
+    )
+    verified = json.loads(CliRunner().invoke(cli, ["verify", str(archive), "--json"]).output)
     assert verified["payload_digest"] == packed["payload_digest"]
 
 
@@ -152,15 +157,20 @@ def test_verify_rejects_a_tampered_archive(tmp_path):
 
 # --- archive identity must cover the manifest (#48) -------------------------
 
+
 def _sealed_as(parent: Path, name: str, sealed_by: str) -> Path:
     d = parent / f"{name}.capsule"
     (d / "payload").mkdir(parents=True)
     (d / "payload" / "results.json").write_text('{"counts": {"00": 512}}')
-    CapsuleBuilder.from_manifest({
-        "version": "1.0.0", "name": name, "lifecycle_state": "draft",
-        "requirements": {"paradigm": ["gate-based"], "max_qubit_count": 2},
-        "task_executions": [],
-    }).seal(capsule_dir=d, sealed_by=sealed_by)
+    CapsuleBuilder.from_manifest(
+        {
+            "version": "1.0.0",
+            "name": name,
+            "lifecycle_state": "draft",
+            "requirements": {"paradigm": ["gate-based"], "max_qubit_count": 2},
+            "task_executions": [],
+        }
+    ).seal(capsule_dir=d, sealed_by=sealed_by)
     return d
 
 
@@ -169,15 +179,21 @@ def test_payload_digest_is_named_honestly_not_as_content_id(tmp_path):
     capsule — it identifies the payload set. Calling it a content ID would
     reintroduce the layer-1-only identity that #14 was about."""
     from marqov_capsule import archive
+
     assert hasattr(archive, "payload_digest"), dir(archive)
     assert not hasattr(archive, "content_id"), "overclaiming name still exported"
 
 
 def test_pack_reports_the_capsule_id_as_identity(tmp_path):
     d = _sealed(tmp_path)
-    out = json.loads(CliRunner().invoke(
-        cli, ["pack", str(d), "-o", str(tmp_path / "a.capsule"), "--json"]).output)
-    assert out["capsule_id"].startswith("mqc:1:") and len(out["capsule_id"].split(":")[-1]) == 64, out
+    out = json.loads(
+        CliRunner()
+        .invoke(cli, ["pack", str(d), "-o", str(tmp_path / "a.capsule"), "--json"])
+        .output
+    )
+    assert out["capsule_id"].startswith("mqc:1:") and len(out["capsule_id"].split(":")[-1]) == 64, (
+        out
+    )
     assert out["payload_digest"].startswith("sha256:"), out
 
 
@@ -187,8 +203,12 @@ def test_two_capsules_differing_only_in_manifest_get_distinct_identities(tmp_pat
     a = _sealed_as(tmp_path, "alpha", "alice")
     b = _sealed_as(tmp_path, "beta", "mallory")
     runner = CliRunner()
-    oa = json.loads(runner.invoke(cli, ["pack", str(a), "-o", str(tmp_path / "a.cap"), "--json"]).output)
-    ob = json.loads(runner.invoke(cli, ["pack", str(b), "-o", str(tmp_path / "b.cap"), "--json"]).output)
+    oa = json.loads(
+        runner.invoke(cli, ["pack", str(a), "-o", str(tmp_path / "a.cap"), "--json"]).output
+    )
+    ob = json.loads(
+        runner.invoke(cli, ["pack", str(b), "-o", str(tmp_path / "b.cap"), "--json"]).output
+    )
 
     assert oa["payload_digest"] == ob["payload_digest"], "precondition: payloads are identical"
     assert oa["capsule_id"] != ob["capsule_id"], "distinct capsules must have distinct IDs"

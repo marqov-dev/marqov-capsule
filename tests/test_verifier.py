@@ -1,12 +1,20 @@
+import datetime
 import hashlib
+import os
 from pathlib import Path
+
 import pytest
+import yaml
+
+from marqov_capsule.builder import CapsuleBuilder
 from marqov_capsule.verifier import CapsuleVerifier
+
 
 @pytest.fixture
 def statistical_dependencies():
     pytest.importorskip("numpy")
     pytest.importorskip("scipy")
+
 
 FIXTURE_DIR = Path(__file__).parent.parent / "spec/v1/conformance"
 
@@ -126,7 +134,12 @@ def test_calibration_drift_uses_epsilon_drift():
     drift_result = verifier.verify_statistical(
         ref_counts=ref,
         new_counts=new,
-        verification_settings={"epsilon": 0.02, "epsilon_drift": 0.10, "min_shots": 100, "tolerance_regime": "calibration_drift"},
+        verification_settings={
+            "epsilon": 0.02,
+            "epsilon_drift": 0.10,
+            "min_shots": 100,
+            "tolerance_regime": "calibration_drift",
+        },
     )
     assert drift_result["metrics"]["epsilon_used"] == 0.10
     # Drift regime must not be stricter
@@ -273,12 +286,22 @@ def test_valid_alpha_is_honoured():
     loose = verifier.verify_statistical(
         ref_counts=counts,
         new_counts=counts,
-        verification_settings={"epsilon": 0.5, "min_shots": 100, "tolerance_regime": "strict", "alpha": 0.5},
+        verification_settings={
+            "epsilon": 0.5,
+            "min_shots": 100,
+            "tolerance_regime": "strict",
+            "alpha": 0.5,
+        },
     )
     tight = verifier.verify_statistical(
         ref_counts=counts,
         new_counts=counts,
-        verification_settings={"epsilon": 0.5, "min_shots": 100, "tolerance_regime": "strict", "alpha": 0.01},
+        verification_settings={
+            "epsilon": 0.5,
+            "min_shots": 100,
+            "tolerance_regime": "strict",
+            "alpha": 0.01,
+        },
     )
     assert loose["metrics"]["alpha"] == pytest.approx(0.5)
     assert tight["metrics"]["alpha"] == pytest.approx(0.01)
@@ -346,6 +369,7 @@ def test_energy_distance_uses_hamming_metric():
 
 def test_verify_checksums_pass(tmp_path):
     import yaml
+
     capsule_dir = tmp_path / "test.capsule"
     capsule_dir.mkdir()
     payload = capsule_dir / "payload"
@@ -362,6 +386,7 @@ def test_verify_checksums_pass(tmp_path):
 
 def test_verify_checksums_fail_on_tampered_file(tmp_path):
     import yaml
+
     capsule_dir = tmp_path / "test.capsule"
     capsule_dir.mkdir()
     payload = capsule_dir / "payload"
@@ -385,6 +410,19 @@ def test_deterministic_verification_exact_match():
     assert result["verdict"] == "VERIFIED"
 
 
+# Mutation B5: digest comparison is key-order independent (sort_keys=True)
+def test_deterministic_verification_ignores_key_order():
+    result = CapsuleVerifier.verify_deterministic({"a": 1, "b": 2}, {"b": 2, "a": 1})
+    assert result["verdict"] == "VERIFIED"
+
+
+# Mutation B5: non-JSON values (datetime) are compared via default=str, not a TypeError
+def test_deterministic_verification_handles_datetime_values():
+    ref = {"t": datetime.datetime(2026, 1, 1)}
+    new = {"t": datetime.datetime(2026, 1, 1)}
+    assert CapsuleVerifier.verify_deterministic(ref, new)["verdict"] == "VERIFIED"
+
+
 def test_deterministic_verification_mismatch():
     verifier = CapsuleVerifier()
     result = verifier.verify_deterministic(
@@ -396,9 +434,11 @@ def test_deterministic_verification_mismatch():
 
 # --- Path-traversal hardening (#31) ---
 
+
 def test_verify_checksums_rejects_parent_traversal_key(tmp_path):
     """A .checksums key that escapes the capsule root must fail without reading the outside file."""
     import yaml
+
     secret = tmp_path / "secret.txt"
     secret.write_text("outside-the-capsule")
     secret_digest = "sha256:" + hashlib.sha256(secret.read_bytes()).hexdigest()
@@ -407,7 +447,9 @@ def test_verify_checksums_rejects_parent_traversal_key(tmp_path):
     capsule_dir.mkdir()
     # Key escapes the root; digest is the *real* hash of the outside file, so a
     # naive implementation would report match=True and status=pass.
-    (capsule_dir / ".checksums").write_text(yaml.dump({"../secret.txt": secret_digest}, sort_keys=True))
+    (capsule_dir / ".checksums").write_text(
+        yaml.dump({"../secret.txt": secret_digest}, sort_keys=True)
+    )
 
     result = CapsuleVerifier.verify_checksums(capsule_dir)
     assert result["status"] == "fail"
@@ -417,9 +459,12 @@ def test_verify_checksums_rejects_parent_traversal_key(tmp_path):
 def test_verify_checksums_rejects_absolute_path_key(tmp_path):
     """A .checksums key with an absolute path must fail (path traversal)."""
     import yaml
+
     capsule_dir = tmp_path / "test.capsule"
     capsule_dir.mkdir()
-    (capsule_dir / ".checksums").write_text(yaml.dump({"/etc/hosts": "sha256:" + "0" * 64}, sort_keys=True))
+    (capsule_dir / ".checksums").write_text(
+        yaml.dump({"/etc/hosts": "sha256:" + "0" * 64}, sort_keys=True)
+    )
 
     result = CapsuleVerifier.verify_checksums(capsule_dir)
     assert result["status"] == "fail"
@@ -428,9 +473,11 @@ def test_verify_checksums_rejects_absolute_path_key(tmp_path):
 
 # --- Symlink hardening (#32) ---
 
+
 def test_verify_checksums_does_not_follow_symlink_entry(tmp_path):
     """A .checksums entry that is a symlink must not be dereferenced."""
     import yaml
+
     secret = tmp_path / "id_rsa"
     secret.write_text("PRIVATE KEY CONTENT")
     secret_digest = "sha256:" + hashlib.sha256(secret.read_bytes()).hexdigest()
@@ -440,7 +487,9 @@ def test_verify_checksums_does_not_follow_symlink_entry(tmp_path):
     payload = capsule_dir / "payload"
     payload.mkdir()
     (payload / "link.txt").symlink_to(secret)
-    (capsule_dir / ".checksums").write_text(yaml.dump({"payload/link.txt": secret_digest}, sort_keys=True))
+    (capsule_dir / ".checksums").write_text(
+        yaml.dump({"payload/link.txt": secret_digest}, sort_keys=True)
+    )
 
     result = CapsuleVerifier.verify_checksums(capsule_dir)
     assert result["status"] == "fail"
@@ -450,6 +499,7 @@ def test_verify_checksums_does_not_follow_symlink_entry(tmp_path):
 def test_verify_checksums_flags_unlisted_symlink(tmp_path):
     """A symlink present in the tree but absent from .checksums must still fail verification."""
     import yaml
+
     secret = tmp_path / "id_rsa"
     secret.write_text("PRIVATE KEY CONTENT")
 
@@ -461,8 +511,275 @@ def test_verify_checksums_flags_unlisted_symlink(tmp_path):
     real.write_text('{"counts": {"00": 1}}')
     digest = "sha256:" + hashlib.sha256(real.read_bytes()).hexdigest()
     (payload / "link.txt").symlink_to(secret)  # not listed in .checksums
-    (capsule_dir / ".checksums").write_text(yaml.dump({"payload/results.json": digest}, sort_keys=True))
+    (capsule_dir / ".checksums").write_text(
+        yaml.dump({"payload/results.json": digest}, sort_keys=True)
+    )
 
     result = CapsuleVerifier.verify_checksums(capsule_dir)
     assert result["status"] == "fail"
     assert "payload/link.txt" in result.get("symlinks", [])
+
+
+# --- Golden output contract for verify_checksums ------------------------------
+#
+# The whole result dict is the contract, not just ``status``: the CLI's JSON
+# output and marqov-platform's vendored builder read ``passed``, ``mismatched``
+# and the per-file records. docs/MUTATION-REPORT-2026-10-15.md (c2) found the
+# lists and record fields could be emptied or renamed with the suite green, so
+# each verdict kind below pins its complete dict with ``==``.
+
+_GOLDEN_REQUIREMENTS = {"paradigm": ["gate-based"], "max_qubit_count": 2}
+_NOTES = b"n\n"
+_RESULTS = b'{"counts": {"00": 1}}'
+_ZERO_DIGEST = "sha256:" + "0" * 64
+
+
+def _sha256(data: bytes) -> str:
+    return "sha256:" + hashlib.sha256(data).hexdigest()
+
+
+def _golden_capsule(tmp_path):
+    """Seal a two-payload-file capsule with the reference writer."""
+    d = tmp_path / "cap"
+    (d / "payload").mkdir(parents=True)
+    (d / "payload" / "results.json").write_bytes(_RESULTS)
+    (d / "notes.txt").write_bytes(_NOTES)
+    CapsuleBuilder().start_capsule(name="cap", requirements=_GOLDEN_REQUIREMENTS).seal(d)
+    return d
+
+
+def _append_checksums_line(d, digest: str, path: str) -> None:
+    # Bytes, not text mode: write_text would emit CRLF on Windows, and the
+    # strict grammar rejects the carriage return before the key is checked.
+    data = (d / ".checksums").read_bytes()
+    (d / ".checksums").write_bytes(data + f"{digest}  {path}\n".encode())
+
+
+# The untouched payload record, identical in every perturbed-capsule verdict.
+_RESULTS_OK = {"expected": _sha256(_RESULTS), "actual": _sha256(_RESULTS), "match": True}
+
+
+def test_verify_checksums_golden_pass(tmp_path):
+    d = _golden_capsule(tmp_path)
+    assert CapsuleVerifier.verify_checksums(d) == {
+        "status": "pass",
+        "passed": True,
+        "format": "normative",
+        "files": {
+            "notes.txt": {"expected": _sha256(_NOTES), "actual": _sha256(_NOTES), "match": True},
+            "payload/results.json": _RESULTS_OK,
+        },
+        "mismatched": [],
+        "missing": [],
+        "invalid": [],
+        "symlinks": [],
+        "extra": [],
+    }
+
+
+def test_verify_checksums_golden_mismatch(tmp_path):
+    d = _golden_capsule(tmp_path)
+    (d / "notes.txt").write_bytes(b"tampered\n")
+    assert CapsuleVerifier.verify_checksums(d) == {
+        "status": "fail",
+        "passed": False,
+        "format": "normative",
+        "files": {
+            "notes.txt": {
+                "expected": _sha256(_NOTES),
+                "actual": _sha256(b"tampered\n"),
+                "match": False,
+            },
+            "payload/results.json": _RESULTS_OK,
+        },
+        "mismatched": ["notes.txt"],
+        "missing": [],
+        "invalid": [],
+        "symlinks": [],
+        "extra": [],
+    }
+
+
+def test_verify_checksums_golden_missing(tmp_path):
+    d = _golden_capsule(tmp_path)
+    (d / "notes.txt").unlink()
+    assert CapsuleVerifier.verify_checksums(d) == {
+        "status": "fail",
+        "passed": False,
+        "format": "normative",
+        "files": {
+            "notes.txt": {"expected": _sha256(_NOTES), "actual": None, "match": False},
+            "payload/results.json": _RESULTS_OK,
+        },
+        "mismatched": [],
+        "missing": ["notes.txt"],
+        "invalid": [],
+        "symlinks": [],
+        "extra": [],
+    }
+
+
+def test_verify_checksums_golden_symlink_entry(tmp_path):
+    d = _golden_capsule(tmp_path)
+    outside = tmp_path / "outside.txt"
+    outside.write_bytes(_NOTES)  # same bytes: a dereferencing reader would say match
+    (d / "notes.txt").unlink()
+    (d / "notes.txt").symlink_to(outside)
+    assert CapsuleVerifier.verify_checksums(d) == {
+        "status": "fail",
+        "passed": False,
+        "format": "normative",
+        "files": {
+            "notes.txt": {
+                "expected": _sha256(_NOTES),
+                "actual": None,
+                "match": False,
+                "error": "symlink not permitted",
+            },
+            "payload/results.json": _RESULTS_OK,
+        },
+        "mismatched": [],
+        "missing": [],
+        "invalid": [],
+        "symlinks": ["notes.txt"],
+        "extra": [],
+    }
+
+
+def test_verify_checksums_golden_extra_file(tmp_path):
+    d = _golden_capsule(tmp_path)
+    (d / "payload" / "injected.bin").write_bytes(b"x")
+    assert CapsuleVerifier.verify_checksums(d) == {
+        "status": "fail",
+        "passed": False,
+        "format": "normative",
+        "files": {
+            "notes.txt": {"expected": _sha256(_NOTES), "actual": _sha256(_NOTES), "match": True},
+            "payload/results.json": _RESULTS_OK,
+        },
+        "mismatched": [],
+        "missing": [],
+        "invalid": [],
+        "symlinks": [],
+        "extra": ["payload/injected.bin"],
+    }
+
+
+@pytest.mark.skipif(os.name == "nt", reason="NAME_MAX refusal is a POSIX behaviour")
+def test_verify_checksums_golden_invalid_hostile_path(tmp_path):
+    # A component past NAME_MAX passes the grammar but the OS refuses to stat
+    # it: recorded as invalid, never raised (#123).
+    d = _golden_capsule(tmp_path)
+    hostile = "x" * 300
+    _append_checksums_line(d, _ZERO_DIGEST, hostile)
+    assert CapsuleVerifier.verify_checksums(d) == {
+        "status": "fail",
+        "passed": False,
+        "format": "normative",
+        "files": {
+            "notes.txt": {"expected": _sha256(_NOTES), "actual": _sha256(_NOTES), "match": True},
+            "payload/results.json": _RESULTS_OK,
+            hostile: {
+                "expected": _ZERO_DIGEST,
+                "actual": None,
+                "match": False,
+                "error": "path could not be checked",
+            },
+        },
+        "mismatched": [],
+        "missing": [],
+        "invalid": [hostile],
+        "symlinks": [],
+        "extra": [],
+    }
+
+
+def test_verify_checksums_golden_invalid_escaping_key(tmp_path):
+    d = _golden_capsule(tmp_path)
+    _append_checksums_line(d, _ZERO_DIGEST, "../outside.txt")
+    assert CapsuleVerifier.verify_checksums(d) == {
+        "status": "fail",
+        "passed": False,
+        "format": "normative",
+        "files": {
+            "../outside.txt": {
+                "expected": _ZERO_DIGEST,
+                "actual": None,
+                "match": False,
+                "error": "path escapes capsule root",
+            },
+            "notes.txt": {"expected": _sha256(_NOTES), "actual": _sha256(_NOTES), "match": True},
+            "payload/results.json": _RESULTS_OK,
+        },
+        "mismatched": [],
+        "missing": [],
+        "invalid": ["../outside.txt"],
+        "symlinks": [],
+        "extra": [],
+    }
+
+
+def test_verify_checksums_golden_legacy_yaml(tmp_path):
+    d = _golden_capsule(tmp_path)
+    legacy = {"notes.txt": _sha256(_NOTES), "payload/results.json": _sha256(_RESULTS)}
+    (d / ".checksums").write_text(yaml.safe_dump(legacy, sort_keys=True), encoding="utf-8")
+    assert CapsuleVerifier.verify_checksums(d) == {
+        "status": "pass",
+        "passed": True,
+        "format": "legacy-yaml",
+        "files": {
+            "notes.txt": {"expected": _sha256(_NOTES), "actual": _sha256(_NOTES), "match": True},
+            "payload/results.json": _RESULTS_OK,
+        },
+        "mismatched": [],
+        "missing": [],
+        "invalid": [],
+        "symlinks": [],
+        "extra": [],
+    }
+
+
+def test_verify_checksums_golden_no_checksums_file(tmp_path):
+    d = _golden_capsule(tmp_path)
+    (d / ".checksums").unlink()
+    assert CapsuleVerifier.verify_checksums(d) == {
+        "status": "fail",
+        "passed": False,
+        "error": ".checksums missing or not a regular file",
+        "files": {},
+        "mismatched": [],
+        "missing": [],
+        "extra": [],
+    }
+
+
+def test_verify_checksums_golden_undecodable_bytes(tmp_path):
+    d = _golden_capsule(tmp_path)
+    (d / ".checksums").write_bytes(b"\xff\xfe\x00")
+    assert CapsuleVerifier.verify_checksums(d) == {
+        "status": "fail",
+        "passed": False,
+        "error": ".checksums could not be read as text",
+        "files": {},
+        "mismatched": [],
+        "missing": [],
+        "extra": [],
+    }
+
+
+def test_verify_checksums_golden_grammar_error(tmp_path):
+    d = _golden_capsule(tmp_path)
+    (d / ".checksums").write_text(f"sha512:{'0' * 64}  notes.txt\n", encoding="utf-8")
+    assert CapsuleVerifier.verify_checksums(d) == {
+        "status": "fail",
+        "passed": False,
+        "error": (
+            ".checksums is malformed: grammar error at line 1: "
+            "unrecognised digest algorithm prefix 'sha512' (expected 'sha256')"
+        ),
+        "format": "normative",
+        "files": {},
+        "mismatched": [],
+        "missing": [],
+        "extra": [],
+    }

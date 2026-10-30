@@ -23,17 +23,17 @@ Two tiers, following the arrangement every upstream scanner uses (#18):
   the candidate's own charset and a length cap. Tier B is reported but never
   blocks — entropy cannot reliably separate a secret from a numerical payload.
 """
+
 from __future__ import annotations
 
-import math
 import json
+import math
 import re
 import string
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from marqov_capsule._canonical import load_manifest_yaml
-
 
 # ---------------------------------------------------------------------------
 # Tier A — distinctive value-shape rules (block). Prefix-anchored, low FP.
@@ -41,20 +41,21 @@ from marqov_capsule._canonical import load_manifest_yaml
 # secret is group("val") where present, else group(0).
 # ---------------------------------------------------------------------------
 _SHAPE_RULES: list[tuple[str, re.Pattern[str]]] = [
-    ("aws_access_key_id",
-     re.compile(r"\b(?P<val>(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16})\b")),
-    ("github_token",
-     re.compile(r"\b(?P<val>gh[pousr]_[0-9A-Za-z]{36})\b")),
-    ("github_fine_grained_pat",
-     re.compile(r"\b(?P<val>github_pat_\w{82})\b")),
-    ("google_api_key",
-     re.compile(r"\b(?P<val>AIza[0-9A-Za-z_\-]{35})\b")),
-    ("stripe_key",
-     re.compile(r"\b(?P<val>(?:sk|rk)_(?:test|live|prod)_[0-9A-Za-z]{10,99})\b")),
-    ("slack_token",
-     re.compile(r"(?P<val>xox[baprs]-[0-9]{10,13}-[0-9A-Za-z-]{10,})")),
-    ("jwt",
-     re.compile(r"\b(?P<val>ey[0-9A-Za-z]{10,}\.ey[0-9A-Za-z/\\_-]{10,}\.[0-9A-Za-z/\\_.+-]{5,})")),
+    (
+        "aws_access_key_id",
+        re.compile(r"\b(?P<val>(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16})\b"),
+    ),
+    ("github_token", re.compile(r"\b(?P<val>gh[pousr]_[0-9A-Za-z]{36})\b")),
+    ("github_fine_grained_pat", re.compile(r"\b(?P<val>github_pat_\w{82})\b")),
+    ("google_api_key", re.compile(r"\b(?P<val>AIza[0-9A-Za-z_\-]{35})\b")),
+    ("stripe_key", re.compile(r"\b(?P<val>(?:sk|rk)_(?:test|live|prod)_[0-9A-Za-z]{10,99})\b")),
+    ("slack_token", re.compile(r"(?P<val>xox[baprs]-[0-9]{10,13}-[0-9A-Za-z-]{10,})")),
+    (
+        "jwt",
+        re.compile(
+            r"\b(?P<val>ey[0-9A-Za-z]{10,}\.ey[0-9A-Za-z/\\_-]{10,}\.[0-9A-Za-z/\\_.+-]{5,})"
+        ),
+    ),
 ]
 
 # PEM private-key block — a multi-line shape, scanned against the whole file
@@ -101,7 +102,8 @@ _CONSTRUCTOR_KW_RE = re.compile(
     re.IGNORECASE,
 )
 _CONSTRUCTOR_NAME_RE = re.compile(
-    r"(?:QiskitRuntimeService|IBMProvider|IBMQ|AWSSession)\s*$", re.IGNORECASE,
+    r"(?:QiskitRuntimeService|IBMProvider|IBMQ|AWSSession)\s*$",
+    re.IGNORECASE,
 )
 _CONSTRUCTOR_WINDOW = 300  # chars of argument list allowed before the keyword
 
@@ -169,7 +171,12 @@ _ALLOW_RE = re.compile(r"#\s*capsule:allow", re.IGNORECASE)
 # but never remove from it — otherwise a capsule could un-skip nothing useful
 # while narrowing scope elsewhere.
 _SCAN_SKIP_DEFAULTS = {
-    ".git", "__pycache__", "*.pyc", "venv", ".venv", "node_modules",
+    ".git",
+    "__pycache__",
+    "*.pyc",
+    "venv",
+    ".venv",
+    "node_modules",
 }
 
 # Credential-shaped filenames. These were previously in the ignore set, which
@@ -254,10 +261,7 @@ def _load_capsuleignore(capsule_dir: Path) -> set[str]:
         lines = ignore_file.read_text(encoding="utf-8", errors="replace").splitlines()
     except Exception:
         return set()
-    return {
-        line.strip() for line in lines
-        if line.strip() and not line.strip().startswith("#")
-    }
+    return {line.strip() for line in lines if line.strip() and not line.strip().startswith("#")}
 
 
 def _is_ignored(rel_path: str, ignores: set[str]) -> bool:
@@ -326,7 +330,7 @@ def _iter_entropy_candidates(line: str):
         tok = m.group(0)
         if not (_MIN_ENTROPY_LEN <= len(tok) <= _MAX_ENTROPY_LEN):
             continue
-        before = line[:m.start()].rstrip()
+        before = line[: m.start()].rstrip()
         if not before or before[-1] not in "'\"=:":
             continue  # not quoted / not an assignment RHS
         reason = _entropy_reason(tok)
@@ -343,6 +347,7 @@ def _iter_private_key_blocks(text: str):
     BEGIN markers that fall inside an accepted block are skipped.
     """
     import bisect
+
     ends = [(m.start(), m.end()) for m in _PEM_END_RE.finditer(text)]
     end_starts = [s for s, _ in ends]
     resume = 0
@@ -364,7 +369,7 @@ def _iter_constructor_literals(line: str):
     call: ``Name(`` with no ``)`` between it and the keyword, within
     ``_CONSTRUCTOR_WINDOW`` chars. Linear in the line length."""
     for kw in _CONSTRUCTOR_KW_RE.finditer(line):
-        window = line[max(0, kw.start() - _CONSTRUCTOR_WINDOW):kw.start()]
+        window = line[max(0, kw.start() - _CONSTRUCTOR_WINDOW) : kw.start()]
         open_paren = window.rfind("(")
         if open_paren == -1 or ")" in window[open_paren:]:
             continue
@@ -390,17 +395,19 @@ def _scan_text(text: str, filepath: str, *, honor_allow: bool = True) -> list[di
     for start, end in _iter_private_key_blocks(text):
         line_no = text.count("\n", 0, start) + 1
         newline = text.find("\n", start)
-        begin_line = text[start:newline if newline != -1 else len(text)]
+        begin_line = text[start : newline if newline != -1 else len(text)]
         if honor_allow and _ALLOW_RE.search(begin_line):
             continue
-        findings.append({
-            "file": filepath,
-            "line": line_no,
-            "match": _redact_value(text[start:end]),
-            "reason": "private_key_block",
-            "blocking": True,
-            "tier": "A",
-        })
+        findings.append(
+            {
+                "file": filepath,
+                "line": line_no,
+                "match": _redact_value(text[start:end]),
+                "reason": "private_key_block",
+                "blocking": True,
+                "tier": "A",
+            }
+        )
 
     for i, line in enumerate(text.splitlines(), 1):
         for match in reversed(list(_DERIVED_ID_RE.finditer(line))):
@@ -413,15 +420,24 @@ def _scan_text(text: str, filepath: str, *, honor_allow: bool = True) -> list[di
         # (start, end, finding) for this line, deduped and allow-filtered below.
         candidates: list[tuple[int, int, dict]] = []
 
+        # `add` is called only within this loop iteration, so the `candidates`
+        # and `i` it closes over are always the current line's (B023 is a
+        # false positive here).
         def add(start: int, end: int, reason: str, value: str, blocking: bool, tier: str):
-            candidates.append((start, end, {
-                "file": filepath,
-                "line": i,
-                "match": _redact_value(value),
-                "reason": reason,
-                "blocking": blocking,
-                "tier": tier,
-            }))
+            candidates.append(  # noqa: B023
+                (
+                    start,
+                    end,
+                    {
+                        "file": filepath,
+                        "line": i,  # noqa: B023
+                        "match": _redact_value(value),
+                        "reason": reason,
+                        "blocking": blocking,
+                        "tier": tier,
+                    },
+                )
+            )
 
         # --- Tier A: distinctive value shapes (block) ---
         for reason, rx in _SHAPE_RULES:
@@ -444,8 +460,7 @@ def _scan_text(text: str, filepath: str, *, honor_allow: bool = True) -> list[di
 
         # --- Tier A: SDK constructor handed a literal token (block) ---
         for m in _iter_constructor_literals(line):
-            add(m.start("val"), m.end("val"), "constructor_pattern",
-                m.group("val"), True, "A")
+            add(m.start("val"), m.end("val"), "constructor_pattern", m.group("val"), True, "A")
 
         # --- Tier B: generic key-name family + value entropy (warn) ---
         for m in _GENERIC_NAME_RE.finditer(line):
@@ -496,6 +511,7 @@ def _scan_notebook(nb_path: str, content: str) -> list[dict]:
     hand-edited or truncated; a malformed one must scan to nothing, not raise.
     """
     import json as _json
+
     try:
         nb = _json.loads(content)
     except Exception:
@@ -576,12 +592,17 @@ def _scan_manifest_values(content: str, existing: list[dict]) -> list[dict]:
             for index, child in enumerate(value):
                 visit(child, keys, path + [str(index)])
         elif isinstance(value, str):
-            if keys and keys[-1] == "derived_from" and re.fullmatch(r"mqc:[0-9]+:[0-9a-f]{64}", value):
+            if (
+                keys
+                and keys[-1] == "derived_from"
+                and re.fullmatch(r"mqc:[0-9]+:[0-9a-f]{64}", value)
+            ):
                 return  # A complete provenance ID is a known content hash.
             representations = [value]
             representations.extend(
                 f"{json.dumps(key, ensure_ascii=False)}: {json.dumps(value, ensure_ascii=False)}"
-                for key in keys)
+                for key in keys
+            )
             for representation in representations:
                 # An allow-comment inside manifest data is not a source-code
                 # annotation and must not disable a credential finding.
@@ -590,10 +611,15 @@ def _scan_manifest_values(content: str, existing: list[dict]) -> list[dict]:
                     if identity in seen:
                         continue
                     seen.add(identity)
-                    safe_path = ["[redacted-key]" if _scan_text(p, "key", honor_allow=False) else p
-                                 for p in path]
-                    finding.update(line=0, field="/" + "/".join(
-                        p.replace("~", "~0").replace("/", "~1") for p in safe_path))
+                    safe_path = [
+                        "[redacted-key]" if _scan_text(p, "key", honor_allow=False) else p
+                        for p in path
+                    ]
+                    finding.update(
+                        line=0,
+                        field="/"
+                        + "/".join(p.replace("~", "~0").replace("/", "~1") for p in safe_path),
+                    )
                     findings.append(finding)
 
     visit(manifest, [], [])
@@ -636,7 +662,7 @@ class CapsuleRedactor:
         #: caller can report narrowed scope without paying for a full scan.
         self.capsuleignore_patterns = sorted(self._capsuleignore)
 
-    def scan(self, overrides: Optional[dict[str, str]] = None) -> dict[str, Any]:
+    def scan(self, overrides: dict[str, str] | None = None) -> dict[str, Any]:
         """Scan all files in capsule_dir for credentials.
 
         ``overrides`` maps a capsule-relative path to text that is scanned *in
@@ -677,14 +703,16 @@ class CapsuleRedactor:
             # one: the file is going into the capsule whether or not it is read.
             # Checked before the ignore test so .capsuleignore cannot suppress it.
             if _is_credential_file(rel):
-                all_findings.append({
-                    "file": rel,
-                    "line": 0,
-                    "match": rel,
-                    "reason": "credential_file",
-                    "blocking": True,
-                    "tier": "file",
-                })
+                all_findings.append(
+                    {
+                        "file": rel,
+                        "line": 0,
+                        "match": rel,
+                        "reason": "credential_file",
+                        "blocking": True,
+                        "tier": "file",
+                    }
+                )
                 continue
 
             if rel != "capsule.yaml" and _is_ignored(rel, self._ignores):
@@ -721,7 +749,7 @@ class CapsuleRedactor:
             "capsuleignore_patterns": sorted(self._capsuleignore),
         }
 
-    def scan_and_raise(self, overrides: Optional[dict[str, str]] = None) -> dict[str, Any]:
+    def scan_and_raise(self, overrides: dict[str, str] | None = None) -> dict[str, Any]:
         """Scan and raise RedactorError if *blocking* secrets are found.
 
         Only Tier A (distinctive shape) and credential-file findings block the
@@ -732,15 +760,11 @@ class CapsuleRedactor:
         result = self.scan(overrides=overrides)
         blocking = [f for f in result["findings"] if f.get("blocking")]
         if blocking and self.mode == "block":
-            summary = "; ".join(
-                f"{finding_location(f)} ({f['reason']})" for f in blocking[:5]
-            )
+            summary = "; ".join(f"{finding_location(f)} ({f['reason']})" for f in blocking[:5])
             # Remediation has to match the finding. `# capsule:allow` is a
             # line annotation and cannot suppress a whole-file finding, so
             # offering it for a .env would send the user down a dead end.
-            credential_files = [
-                f["file"] for f in blocking if f["reason"] == "credential_file"
-            ]
+            credential_files = [f["file"] for f in blocking if f["reason"] == "credential_file"]
             if credential_files:
                 advice = (
                     f"Credential-bearing file(s) in the capsule: "

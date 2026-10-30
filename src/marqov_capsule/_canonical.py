@@ -1,4 +1,5 @@
 """RFC 8785 canonical JSON and capsule ID computation."""
+
 from __future__ import annotations
 
 import hashlib
@@ -12,12 +13,11 @@ from yaml.composer import ComposerError
 from yaml.constructor import ConstructorError
 from yaml.scanner import ScannerError
 
-
 # The largest integer JSON/RFC-8785 (IEEE-754 double) round-trips exactly. Above
 # this, ``jcs`` serialises through float() and silently loses precision, so any
 # integer with a larger magnitude is rejected — fail closed rather than mint an
 # ID over a value that cannot be reproduced.
-_MAX_SAFE_INT = 2 ** 53 - 1  # 9007199254740991
+_MAX_SAFE_INT = 2**53 - 1  # 9007199254740991
 
 # Deepest nesting a manifest may have. A real manifest is ~5 levels deep; the
 # cap exists so a hostile document is rejected by the composer with a clean
@@ -37,6 +37,7 @@ class ManifestError(yaml.YAMLError):
 # ---------------------------------------------------------------------------
 # YAML 1.2 / JSON-aligned manifest loader
 # ---------------------------------------------------------------------------
+
 
 class _ManifestLoader(yaml.SafeLoader):
     """SafeLoader restricted to YAML 1.2 core / JSON-compatible implicit typing.
@@ -97,18 +98,22 @@ class _ManifestLoader(yaml.SafeLoader):
         # the YAML 1.2 reader does. A root flow collection has indent -1 and
         # may continue at column zero. Blank lines are consumed by the parent.
         if self.line > start_mark.line and self.indent >= 0:
-            prefix = self.buffer[self.pointer - self.column:self.pointer]
+            prefix = self.buffer[self.pointer - self.column : self.pointer]
             if not prefix.startswith(" " * (self.indent + 1)):
-                raise ScannerError("while scanning a quoted scalar", start_mark,
+                raise ScannerError(
+                    "while scanning a quoted scalar",
+                    start_mark,
                     "continuation must be indented beyond its containing block",
-                    self.get_mark())
+                    self.get_mark(),
+                )
         return chunks
 
     def compose_node(self, parent, index):
         if self.check_event(yaml.AliasEvent):
             event = self.peek_event()
             raise ComposerError(
-                None, None,
+                None,
+                None,
                 f"found alias *{event.anchor}: aliases are not permitted in a "
                 "capsule manifest (they have no JSON representation and are a "
                 "denial-of-service vector)",
@@ -119,7 +124,8 @@ class _ManifestLoader(yaml.SafeLoader):
             if self._depth > _MAX_NESTING_DEPTH:
                 event = self.peek_event()
                 raise ComposerError(
-                    None, None,
+                    None,
+                    None,
                     f"nesting depth exceeds {_MAX_NESTING_DEPTH}",
                     event.start_mark,
                 )
@@ -142,8 +148,10 @@ class _ManifestLoader(yaml.SafeLoader):
         """
         if not isinstance(node, yaml.MappingNode):
             raise ConstructorError(
-                None, None,
-                f"expected a mapping node, but found {node.id}", node.start_mark,
+                None,
+                None,
+                f"expected a mapping node, but found {node.id}",
+                node.start_mark,
             )
         mapping: dict[Any, Any] = {}
         for key_node, value_node in node.value:
@@ -152,19 +160,25 @@ class _ManifestLoader(yaml.SafeLoader):
                 hash(key)
             except TypeError as exc:
                 raise ConstructorError(
-                    "while constructing a mapping", node.start_mark,
-                    f"found unhashable key ({exc})", key_node.start_mark,
-                )
+                    "while constructing a mapping",
+                    node.start_mark,
+                    f"found unhashable key ({exc})",
+                    key_node.start_mark,
+                ) from exc
             if not isinstance(key, str):
                 raise ConstructorError(
-                    "while constructing a mapping", node.start_mark,
+                    "while constructing a mapping",
+                    node.start_mark,
                     f"found non-string key ({key!r}): mapping keys must be strings "
-                    "in a capsule manifest; quote the key", key_node.start_mark,
+                    "in a capsule manifest; quote the key",
+                    key_node.start_mark,
                 )
             if key in mapping:
                 raise ConstructorError(
-                    "while constructing a mapping", node.start_mark,
-                    f"found duplicate key ({key!r})", key_node.start_mark,
+                    "while constructing a mapping",
+                    node.start_mark,
+                    f"found duplicate key ({key!r})",
+                    key_node.start_mark,
                 )
             mapping[key] = self.construct_object(value_node, deep=deep)
         return mapping
@@ -186,16 +200,19 @@ _FLOAT_RE = re.compile(
 _MAX_INT_LITERAL_LEN = len(str(_MAX_SAFE_INT)) + 1  # sign + 16 digits
 
 
-def _construct_manifest_string(loader: _ManifestLoader, node: yaml.Node) -> str:
+def _construct_manifest_string(loader: _ManifestLoader, node: yaml.ScalarNode) -> str:
     value = loader.construct_scalar(node)
     if re.search(r"[\ud800-\udfff]", value):
-        raise ConstructorError(None, None,
+        raise ConstructorError(
+            None,
+            None,
             "surrogate escapes are not Unicode scalars; use a literal or full scalar escape",
-            node.start_mark)
+            node.start_mark,
+        )
     return value
 
 
-def _construct_int_base10(loader: _ManifestLoader, node: yaml.Node) -> int:
+def _construct_int_base10(loader: _ManifestLoader, node: yaml.ScalarNode) -> int:
     """Construct integers as base-10 with a magnitude guard.
 
     The implicit resolver only tags ``^[-+]?[0-9]+$`` scalars as ints, so an
@@ -210,13 +227,15 @@ def _construct_int_base10(loader: _ManifestLoader, node: yaml.Node) -> int:
     value = loader.construct_scalar(node)
     if not _INT_RE.fullmatch(value):
         raise ConstructorError(
-            None, None,
+            None,
+            None,
             f"found {value!r}: not a decimal integer in the YAML 1.2 / JSON profile",
             node.start_mark,
         )
     if len(value) > _MAX_INT_LITERAL_LEN or abs(result := int(value, 10)) > _MAX_SAFE_INT:
         raise ConstructorError(
-            None, None,
+            None,
+            None,
             f"integer {value[:20]}{'…' if len(value) > 20 else ''} exceeds the "
             f"RFC 8785 safe range (|n| <= {_MAX_SAFE_INT}); it cannot be "
             "canonicalised without precision loss",
@@ -225,36 +244,41 @@ def _construct_int_base10(loader: _ManifestLoader, node: yaml.Node) -> int:
     return result
 
 
-def _construct_float_strict(loader: _ManifestLoader, node: yaml.Node) -> float:
+def _construct_float_strict(loader: _ManifestLoader, node: yaml.ScalarNode) -> float:
     """``!!float`` held to the JSON-shaped grammar: no ``.inf``/``.nan``, no
     sexagesimal, no underscores — and never a bare ``ValueError`` from
     ``float()`` (#122)."""
     value = loader.construct_scalar(node)
     if not _FLOAT_RE.fullmatch(value) and not _INT_RE.fullmatch(value):
         raise ConstructorError(
-            None, None,
+            None,
+            None,
             f"found {value!r}: not a finite decimal float in the YAML 1.2 / JSON profile",
             node.start_mark,
         )
     return float(value)
 
 
-def _construct_null_strict(loader: _ManifestLoader, node: yaml.Node) -> None:
+def _construct_null_strict(loader: _ManifestLoader, node: yaml.ScalarNode) -> None:
     value = loader.construct_scalar(node)
     if not _NULL_RE.fullmatch(value):
-        raise ConstructorError(None, None,
+        raise ConstructorError(
+            None,
+            None,
             "explicit null must use a null spelling in the manifest profile",
-            node.start_mark)
+            node.start_mark,
+        )
     return None
 
 
-def _construct_bool_strict(loader: _ManifestLoader, node: yaml.Node) -> bool:
+def _construct_bool_strict(loader: _ManifestLoader, node: yaml.ScalarNode) -> bool:
     """``!!bool`` held to the YAML 1.2 core set: ``true``/``false`` and their
     capitalised forms only — never ``yes``/``no``, never a ``KeyError``."""
     value = loader.construct_scalar(node)
     if not _BOOL_RE.fullmatch(value):
         raise ConstructorError(
-            None, None,
+            None,
+            None,
             f"found {value!r}: not a boolean in the YAML 1.2 / JSON profile",
             node.start_mark,
         )
@@ -264,11 +288,13 @@ def _construct_bool_strict(loader: _ManifestLoader, node: yaml.Node) -> bool:
 def _reject_tag(tag: str):
     def construct(loader: _ManifestLoader, node: yaml.Node):
         raise ConstructorError(
-            None, None,
+            None,
+            None,
             f"found tag {tag}: only the YAML core tags (str, int, float, bool, "
             "null, seq, map) are permitted in a capsule manifest",
             node.start_mark,
         )
+
     return construct
 
 
@@ -326,8 +352,7 @@ def load_manifest_yaml(text: str) -> Any:
         return yaml.load(text, Loader=_ManifestLoader)  # noqa: S506
     except yaml.YAMLError:
         raise
-    except (ValueError, TypeError, KeyError, AttributeError, OverflowError,
-            RecursionError) as exc:
+    except (ValueError, TypeError, KeyError, AttributeError, OverflowError, RecursionError) as exc:
         # Belt and braces: the strict constructors above should leave nothing
         # for this clause, but the loader is a trust boundary and a bare
         # Python exception must never escape it (#122).
@@ -339,6 +364,7 @@ def load_manifest_yaml(text: str) -> Any:
 # ---------------------------------------------------------------------------
 # Manifest writer
 # ---------------------------------------------------------------------------
+
 
 class _ManifestDumper(yaml.SafeDumper):
     """SafeDumper whose quoting decisions match ``_ManifestLoader``.
@@ -400,6 +426,7 @@ def dump_manifest_yaml(obj: Any) -> str:
 # Canonical JSON helpers
 # ---------------------------------------------------------------------------
 
+
 def _nfc(text: str) -> str:
     """Unicode NFC normalisation — the spec's canonical string form (§2.2/§5).
 
@@ -420,8 +447,7 @@ def _canonical_number_str(number: int | float) -> str:
     """
     if isinstance(number, int) and not isinstance(number, bool) and abs(number) > _MAX_SAFE_INT:
         raise ValueError(
-            f"integer {number} exceeds the RFC 8785 safe range "
-            f"(|n| <= {_MAX_SAFE_INT})"
+            f"integer {number} exceeds the RFC 8785 safe range (|n| <= {_MAX_SAFE_INT})"
         )
     return jcs.canonicalize(number).decode("utf-8")
 
@@ -522,8 +548,7 @@ def compute_capsule_id(capsule_dict: dict) -> str:
     capsule ID (spec §5).
     """
     if not isinstance(capsule_dict, dict):
-        raise ValueError("a capsule manifest must be a mapping; "
-                         f"got {type(capsule_dict).__name__}")
+        raise ValueError(f"a capsule manifest must be a mapping; got {type(capsule_dict).__name__}")
     digest = hashlib.sha256(canonical_bytes(capsule_dict)).hexdigest()
     return f"{CAPSULE_ID_SCHEME}:{CAPSULE_ID_VERSION}:{digest}"
 

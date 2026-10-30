@@ -38,6 +38,14 @@ dev = [
     "numpy>=1.24",
     "scipy>=1.10",
     "hypothesis>=6.0",
+    # Quality gates (see CONTRIBUTING.md "Quality gates"). ruff and mypy are
+    # pinned so local runs, pre-commit and CI agree on the findings.
+    "ruff==0.14.0",
+    "mypy==1.18.2",
+    "pytest-cov>=5.0",
+    "diff-cover>=9.0",
+    "types-PyYAML>=6.0",
+    "types-jsonschema>=4.0",
 ]
 
 [project.scripts]
@@ -69,3 +77,50 @@ only-include = [
 # of serving the cached version after a bump.
 [tool.uv]
 cache-keys = [{ file = "pyproject.toml" }, { file = "src/marqov_capsule/__init__.py" }]
+
+# Line length 100 matches Qiskit, Cirq, PennyLane and the Braket SDK.
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, isort, bugbear, pyupgrade. No complexity cap and no
+# bandit (S) rules by decision (2026-10-15 review).
+select = ["E", "F", "W", "I", "B", "UP"]
+# The formatter owns line length; E501 would only flag the long strings,
+# URLs and comments it cannot wrap (28 lines at the time of adoption).
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+check_untyped_defs = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = "marqov_capsule.cli.*"
+disallow_untyped_defs = true
+
+# jcs ships no stubs or py.typed marker; scipy-stubs is a separate project not
+# worth a dev dependency for one lazily imported function.
+[[tool.mypy.overrides]]
+module = ["jcs", "scipy.*"]
+ignore_missing_imports = true
+
+# numpy >= 2.3 stubs use PEP 695 `type` statements, which mypy refuses to parse
+# when checking as Python 3.10 ("errors prevented further checking"). numpy is
+# only ever imported lazily inside verifier.py, so skip its stubs (mypy follows
+# .pyi files regardless of follow_imports unless follow_imports_for_stubs is
+# set) rather than raise python_version above the package's floor.
+[[tool.mypy.overrides]]
+module = "numpy.*"
+follow_imports = "skip"
+follow_imports_for_stubs = true
+
+[tool.coverage.run]
+branch = true
+source = ["marqov_capsule"]
+
+[tool.coverage.report]
+# No global floor by decision: CI requires lines changed in a PR to be
+# covered (diff-cover), not a repo-wide percentage.
+show_missing = true
