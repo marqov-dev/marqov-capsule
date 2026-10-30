@@ -14,7 +14,7 @@ The 1358-test suite covers these three modules at ~93% branch coverage but **kil
 | (c2) output contract | 184 | a result-dict key, list (`mismatched`, `missing`, `symlinks`) or finding field (`tier`, `reason`, `match`) that no test reads. Consumers (CLI JSON, marqov-platform) do read some of these. |
 | (c3) diagnostic value | 29 | chi-squared p-value and energy distance: computed, reported, never pinned. By design they never change the verdict. |
 | (c4) boundary / default / edge | 81 | `<` vs `<=`, default arguments, `continue`→`break` on a secondary path, redaction prefix length. |
-| (c5) platform-masked | 16 | `.CHECKSUMS` is found on case-insensitive APFS; NFC/NFD collisions cannot exist on APFS; `encoding=None` is UTF-8 on this Mac. These would be kills on Linux CI. |
+| (c5) platform-masked | 16 | `.CHECKSUMS` is found on case-insensitive APFS; NFC/NFD collisions cannot exist on APFS; `encoding=None` is UTF-8 on this Mac. Re-run on Linux (ext4, 2026-10-30): 9 of the 16 are killed there; the 7 `encoding=None` / `"UTF-8"` mutants survive on any UTF-8 locale. |
 | (c6) unused helper | 20 | `_shannon_entropy` and `_looks_like_digest_line` have no caller in the package (only a research note imports the first). |
 | (c7) detection completeness | 55 | a warn-only or secondary detection path that no test exercises positively: **the whole Tier B entropy tier**, notebook `execute_result`/`display_data`/`error` outputs, two findings on one line. |
 
@@ -41,7 +41,7 @@ The hotspots the review flagged line up with the data. `_canonical.load_manifest
   3. `.github/` added to `also_copy` (a packaging test reads the CI workflow).
 - **What mutmut does not mutate.** Only function bodies. Module-level constants are untouched: the redactor's `_SHAPE_RULES` / `_KNOWN_NAME_RE` / `_DIGEST_LINE_RE` tables, the entropy thresholds, `_MAX_NESTING_DEPTH`, the implicit-resolver registrations in `_canonical`. A wrong regex in `_SHAPE_RULES` is therefore outside this measurement.
 - **Verification of the (b) list.** Each proposed killing test was written to a scratch file, run against the original (19 tests, all pass), then each targeted mutant was applied with `mutmut apply`, the test re-run, and `src` restored with `git checkout`. 60 mutant/test pairs were checked; every mutant classified (b) below fails its named test. Pairs that did *not* fail were reclassified from the evidence (e.g. every `all_match = None` is (a); `_finding_allowed` `rfind` is (c4)).
-- **Caveats.** (i) Platform: run on macOS/APFS, so the 16 (c5) survivors and the two NFC findings in B2/B3 behave differently on Linux. (ii) One pre-existing intermittent failure in the suite, `test_manifest_hostile.py::test_cli_commands_exit_1_without_traceback[deep-flow-sequence-*]` (a `< 1.0 s` wall-clock assert), failed once in three plain runs; it is unrelated to mutation but is a follow-up. The CI-gates session (gallant-jepsen) hit the same five budgets under `--cov` and on 3.10 in its hand-over note and recommends raising them to about 5 s, which still catches the quadratic blow-ups they guard. (iii) Line numbers below are computed from each mutant's diff against the function source and were cross-checked against the file text (0 mismatches of 700).
+- **Caveats.** (i) Platform: run on macOS/APFS. A Linux re-run of the 16 (c5) survivors and the B2/B3 mutants on 2026-10-30 is reported under the (c5) bullet below; it needed the `pytest==9.1.1` pin (mutmut 3.8.0 reads a private pytest attribute that newer pytest removed) and a native-arch image (emulated x86_64 trips the wall-clock asserts). (ii) One pre-existing intermittent failure in the suite, `test_manifest_hostile.py::test_cli_commands_exit_1_without_traceback[deep-flow-sequence-*]` (a `< 1.0 s` wall-clock assert), failed once in three plain runs; it is unrelated to mutation but is a follow-up. The CI-gates session (gallant-jepsen) hit the same five budgets under `--cov` and on 3.10 in its hand-over note and recommends raising them to about 5 s, which still catches the quadratic blow-ups they guard. (iii) Line numbers below are computed from each mutant's diff against the function source and were cross-checked against the file text (0 mismatches of 700).
 
 ## (b) findings — guards removable with the suite green
 
@@ -73,7 +73,7 @@ Two things the (b) list is **not** saying: none of these is a vulnerability in s
 - **(c4) `_redact_value` leaks one more character** under seven survivors (prefix 3 or 5 instead of 2 or 4, boundary 6/7). Redaction exists so a report never contains the secret; the exact mask format is not asserted anywhere.
 - **(c4) `verify_statistical` defaults.** `min_shots` default 100 and `epsilon` default 0.02 are never exercised; a settings dict without `epsilon` would raise `TypeError` (`tvd_ucb <= None`). Fine if `policy.resolve` is the only caller, which is the current contract.
 - **(c4) `_iter_private_key_blocks` with two PEM blocks** raises `TypeError` under mutant 20 (`resume = None`); no test has two blocks in one file.
-- **(c5) run this on Linux once.** 16 survivors are masked by APFS case/normalisation insensitivity or a UTF-8 locale; CI on ubuntu would kill them for free and would also exercise B2/B3 differently.
+- **(c5) measured on Linux (2026-10-30, python:3.12 arm64 container, ext4, non-root).** The plain suite passes (1359 passed, 2 skipped). Of the 16 platform-masked survivors, the 9 that depend on the filesystem are killed there: `.CHECKSUMS`/`.CAPSULEIGNORE` case (`verify_checksums` 6, `verify_integrity` 65, `_load_capsuleignore` 4), the NFC on-disk mapping (`_check_entry` 22, 33) and collision detection (`verify_checksums` 100, 110, 112, 113). The 7 that depend on the locale (`encoding=None`: `verify_integrity` 48, `load_capsule` 3, `_load_capsuleignore` 7, 9, `scan` 63, 65; and `verify_checksums` 115) survive on Linux too, because Python 3.12 defaults to UTF-8 there as well. The B2/B3 mutants survive on Linux with the original suite, as expected (closed since by #140).
 - **(c6) dead code.** `_shannon_entropy` (18 mutants, no test) and `_looks_like_digest_line` (2, no test) have no caller in the package. Keep for the research note or delete; either way they inflate the module's survivor count by 20.
 - **(c1) message text, 195 survivors.** Deliberately not recommended as tests: asserting exact error strings makes refactors expensive and finds few bugs. The exception is B6, where the mutation turns a message into a traceback.
 
@@ -93,7 +93,7 @@ Ordered by what they protect, then by how many survivors one test kills. None of
 10. **B13** unsafe int key rejected — 1 survivor, spec §5 fail-closed.
 11. **C\*** one positive Tier B entropy test — ~20 (c7) survivors; cheap and pins the research thresholds.
 12. **Golden-output tests** for `verify_checksums` (one per kind: mismatch, missing, symlink, extra, invalid) asserting the whole result dict — ≈50 (c2) survivors.
-13. Run the suite (or this mutation run) once on Linux — 16 (c5) survivors.
+13. Keep one Linux leg in CI — it kills 9 of the 16 (c5) survivors for free (measured; see the (c5) bullet).
 
 ## Reproducing
 
