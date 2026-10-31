@@ -166,6 +166,30 @@ capsules separately. Counts must be non-negative integers with string outcome
 labels; booleans and fractional counts are rejected. Sampling assumptions and
 the decision procedure are in spec §6.
 
+### How many shots does `VERIFIED` need?
+
+The bound is deliberately conservative, so a comparison at a low shot count
+returns `INCONCLUSIVE` even when both samples came from the same distribution.
+`INCONCLUSIVE` means "not enough evidence", never "did not reproduce". As a
+guide, measured with `marqov-capsule compare` on two independent samples of a
+balanced two-outcome distribution (40 trials per row):
+
+| Shots per sample | `VERIFIED` at the default tolerance (ε = 0.02) | `VERIFIED` at ε = 0.05 |
+|---|---|---|
+| 1,024 | 0 of 40 | 0 of 40 |
+| 5,000 | 0 of 40 | 40 of 40 |
+| 10,000 | 15 of 40 | 40 of 40 |
+| 20,000 | 34 of 40 | 40 of 40 |
+| 30,000 and above | 40 of 40 | 40 of 40 |
+
+Plan for roughly 30,000 shots per sample at the default tolerance, or about
+5,000 at ε = 0.05. Distributions with more outcomes need more shots. These
+figures are a guide for planning runs, not a guarantee; spec §6 defines the
+decision procedure and `spec/v1/conformance/golden/statistical-cases.json`
+pins exact values. The verifier owns the tolerance: `VerificationPolicy.resolve`
+clamps a capsule-declared ε down to the verifier's ceiling, and records
+`epsilon_clamped` when it does.
+
 The API accepts integral scalar types such as NumPy integers and normalizes them
 before arithmetic. Each sample's total must be at most 2^53−1 shots.
 The root manifest is always credential-scanned, including parsed value/key
@@ -199,6 +223,9 @@ Both license texts are included in the wheel and source distribution.
 
 ## Contributing
 
-Contributions should include tests for changed behavior and a conformance
-fixture for format changes. Specification changes follow an RFC review process.
-Contact the project at `hello@marqov.ai` for contribution access and support.
+Contributions are welcome. See [CONTRIBUTING.md](https://github.com/marqov-dev/marqov-capsule/blob/main/CONTRIBUTING.md) for the
+development setup and quality gates. Contributions should include tests for
+changed behavior and a conformance fixture for format changes. Specification
+changes follow an RFC review process. Report security issues as described in
+[SECURITY.md](https://github.com/marqov-dev/marqov-capsule/blob/main/SECURITY.md); for anything else, open an issue or write to
+`hello@marqov.ai`.

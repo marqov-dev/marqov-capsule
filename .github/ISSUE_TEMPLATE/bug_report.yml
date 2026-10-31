@@ -1,0 +1,33 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: A minimal command sequence or capsule that reproduces the problem. Do not attach real credentials or private data.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: marqov-capsule version
+      placeholder: "output of: marqov-capsule --version"
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Python version and operating system
+      placeholder: "Python 3.12, macOS 15"
+    validations:
+      required: true
