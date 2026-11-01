@@ -361,6 +361,19 @@ def load_manifest_yaml(text: str) -> Any:
         ) from exc
 
 
+def describe_manifest_error(exc: yaml.YAMLError) -> str:
+    """One line locating a manifest load failure, without quoting the manifest.
+
+    PyYAML's own message embeds the offending source line and the rejected
+    key or tag, and an unmarked ``ManifestError`` can quote a directive name;
+    any of these may be the credential the redactor exists to catch.
+    """
+    mark = getattr(exc, "problem_mark", None)
+    if mark is not None:
+        return f"line {mark.line + 1}, column {mark.column + 1}"
+    return exc.__class__.__name__
+
+
 # ---------------------------------------------------------------------------
 # Manifest writer
 # ---------------------------------------------------------------------------

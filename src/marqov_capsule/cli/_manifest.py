@@ -6,6 +6,9 @@ let a YAML syntax error, an empty file or a non-mapping document surface as a
 Python traceback (#95). Every command now goes through this one helper so the
 error contract is identical: exit 1, a one-line message on stderr, or a
 ``{"status": "error"}`` document when ``--json`` was asked for.
+
+``seal --dry-run`` is a report, not a gate: it asks ``manifest_problem`` for the
+same message and prints it beside its findings, at exit 0.
 """
 
 import json
@@ -16,7 +19,11 @@ from typing import Any, NoReturn
 import click
 import yaml
 
-from marqov_capsule._canonical import load_manifest_yaml, parse_capsule_id
+from marqov_capsule._canonical import (
+    describe_manifest_error,
+    load_manifest_yaml,
+    parse_capsule_id,
+)
 
 
 def fail(message: str, as_json: bool, **extra: Any) -> NoReturn:
@@ -42,27 +49,48 @@ def check_expected_id(ctx: click.Context, param: click.Parameter, value: str | N
     return value
 
 
-def load_manifest_or_exit(manifest_path: Path, as_json: bool) -> dict[str, Any]:
-    """Load ``capsule.yaml`` as a mapping, or exit 1 with a clean message."""
+class ManifestUnusable(Exception):
+    """``capsule.yaml`` is not something a command can use; the message says why."""
+
+
+def _read_manifest(manifest_path: Path) -> dict[str, Any]:
+    """Load ``capsule.yaml`` as a mapping, or raise ``ManifestUnusable``."""
     if manifest_path.is_symlink() or not manifest_path.is_file():
-        fail(f"capsule.yaml not found in {manifest_path.parent}", as_json)
+        raise ManifestUnusable(f"capsule.yaml not found in {manifest_path.parent}")
     try:
         text = manifest_path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
-        fail(f"{manifest_path} is not UTF-8 text", as_json)
+        raise ManifestUnusable(f"{manifest_path} is not UTF-8 text") from None
     except OSError as exc:
-        fail(f"{manifest_path} could not be read: {exc.__class__.__name__}", as_json)
+        raise ManifestUnusable(
+            f"{manifest_path} could not be read: {exc.__class__.__name__}"
+        ) from None
     try:
         manifest = load_manifest_yaml(text)
     except yaml.YAMLError as exc:
-        # PyYAML's own message carries the line/column mark; keep it on one
-        # line so JSON consumers and shell scripts see a single error string.
-        detail = " ".join(str(exc).split())
-        fail(f"{manifest_path} could not be parsed: {detail}", as_json)
+        raise ManifestUnusable(
+            f"{manifest_path} could not be parsed: {describe_manifest_error(exc)}"
+        ) from None
     if not isinstance(manifest, dict):
-        fail(
+        raise ManifestUnusable(
             f"{manifest_path} must be a YAML mapping, got "
-            f"{'an empty document' if manifest is None else type(manifest).__name__}",
-            as_json,
+            f"{'an empty document' if manifest is None else type(manifest).__name__}"
         )
     return manifest
+
+
+def load_manifest_or_exit(manifest_path: Path, as_json: bool) -> dict[str, Any]:
+    """Load ``capsule.yaml`` as a mapping, or exit 1 with a clean message."""
+    try:
+        return _read_manifest(manifest_path)
+    except ManifestUnusable as exc:
+        fail(str(exc), as_json)
+
+
+def manifest_problem(manifest_path: Path) -> str | None:
+    """Why ``load_manifest_or_exit`` would refuse this manifest, if it would."""
+    try:
+        _read_manifest(manifest_path)
+    except ManifestUnusable as exc:
+        return str(exc)
+    return None

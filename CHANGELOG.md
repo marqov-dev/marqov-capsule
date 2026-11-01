@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `seal --dry-run` and `CapsuleRedactor.scan()` no longer raise on a
+  `capsule.yaml` that does not parse. The scan keeps its findings from the
+  literal text, and `--dry-run` stays at exit 0 but names the problem instead of
+  saying "no issues found", for an empty, non-mapping or non-UTF-8 manifest too;
+  `--json` gains `manifest_error` and reports `status: warnings`.
+- Manifest parse errors from `seal`, `inspect`, `pack` and `validate` give the
+  line and column, or only the error type, rather than quoting the source, which
+  could print a credential whole. Schema errors from `validate`, and from `seal`
+  on the same path, replace the rejected value with `<value>`.
+
 ## [0.2.2] — 2026-10-21
 
 ### Added

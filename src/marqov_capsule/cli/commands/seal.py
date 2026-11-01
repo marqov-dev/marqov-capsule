@@ -5,7 +5,7 @@ from pathlib import Path
 import click
 
 from marqov_capsule.builder import CapsuleBuilder, CapsuleStateError, CapsuleValidationError
-from marqov_capsule.cli._manifest import load_manifest_or_exit
+from marqov_capsule.cli._manifest import load_manifest_or_exit, manifest_problem
 from marqov_capsule.redactor import CapsuleRedactor, RedactorError, finding_location
 
 
@@ -91,16 +91,20 @@ def seal(
         )
         sys.exit(1)
 
-    # --dry-run: scan only, always exits 0 (report flag, not a gate)
+    # --dry-run: scan only, always exits 0 (report flag, not a gate). A manifest
+    # the real seal would refuse is reported with the findings, not raised: the
+    # scan still ran over its literal text and over every other file.
     if dry_run:
         redactor = CapsuleRedactor(capsule_dir)
         scan_result = redactor.scan()
-        status = "clean" if not scan_result["has_secrets"] else "warnings"
+        manifest_error = manifest_problem(manifest_path)
+        status = "clean" if not (scan_result["has_secrets"] or manifest_error) else "warnings"
         if as_json:
             click.echo(
                 json.dumps(
                     {
                         "status": status,
+                        "manifest_error": manifest_error,
                         "findings": scan_result["findings"],
                         "skipped": scan_result["skipped"],
                         "skipped_binary": scan_result["skipped_binary"],
@@ -114,8 +118,10 @@ def seal(
                 click.echo(f"Dry run: {len(scan_result['findings'])} credential pattern(s) found")
                 for f in scan_result["findings"]:
                     click.echo(f"  {finding_location(f)} — {f['reason']}: {f['match']}")
-            else:
+            elif not manifest_error:
                 click.echo("Dry run: no issues found")
+            if manifest_error:
+                click.echo(f"Dry run: a real seal would refuse this capsule: {manifest_error}")
             _report_scope(scan_result)
             _report_binary(scan_result)
         sys.exit(0)

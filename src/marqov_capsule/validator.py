@@ -13,6 +13,8 @@ import jsonschema
 import yaml
 from jsonschema import Draft202012Validator
 
+from marqov_capsule.redactor import _scan_text
+
 _schema_cache: dict | None = None
 
 
@@ -39,7 +41,8 @@ def _json_domain_errors(value, path="", ancestors=frozenset()):
                     yield error("manifest keys collide after Unicode normalization")
                     continue
                 normalized_keys.add(normalized)
-            yield from _json_domain_errors(child, f"{path}/{key}".lstrip("/"), ancestors)
+            segment = _scrub_key(key) if isinstance(key, str) else key
+            yield from _json_domain_errors(child, f"{path}/{segment}".lstrip("/"), ancestors)
     elif isinstance(value, float) and not math.isfinite(value):
         yield error("manifest numbers must be finite")
     elif isinstance(value, int) and not isinstance(value, bool) and abs(value) > 2**53 - 1:
@@ -61,6 +64,22 @@ def _load_schema() -> dict:
         ref = _pkg_resources.files("marqov_capsule.schemas").joinpath("capsule-schema.json")
         _schema_cache = json.loads(ref.read_text(encoding="utf-8"))
     return _schema_cache
+
+
+def _scrub_key(key: str) -> str:
+    """A path segment, unless the credential scan would flag it."""
+    return "[redacted-key]" if _scan_text(key, "key", honor_allow=False) else key
+
+
+def _scrub_message(err: jsonschema.ValidationError) -> str:
+    """A schema error without the rejected value, which may be a credential.
+
+    jsonschema quotes the instance, and names unexpected keys, in its messages.
+    """
+    message = err.message.replace(repr(err.instance), "<value>")
+    if _scan_text(message, "message", honor_allow=False):
+        return f"failed the {err.validator} check"
+    return message
 
 
 class CapsuleValidator:
@@ -97,8 +116,8 @@ class CapsuleValidator:
                 m = re.search(r"'([^']+)'", err.message)
                 if m:
                     parts.append(m.group(1))
-            path = "/".join(parts) or "/"
-            errors.append({"path": path, "message": err.message})
+            path = "/".join(_scrub_key(p) for p in parts) or "/"
+            errors.append({"path": path, "message": _scrub_message(err)})
 
         return {"valid": len(errors) == 0, "errors": errors}
 
@@ -109,7 +128,7 @@ class CapsuleValidator:
         Returns:
             {"valid": bool, "errors": [{"path": str, "message": str}]}
         """
-        from marqov_capsule._canonical import load_manifest_yaml
+        from marqov_capsule._canonical import describe_manifest_error, load_manifest_yaml
 
         try:
             capsule = load_manifest_yaml(Path(filepath).read_text(encoding="utf-8"))
@@ -141,7 +160,8 @@ class CapsuleValidator:
                 ],
             }
         except yaml.YAMLError as e:
-            return {"valid": False, "errors": [{"path": "/", "message": f"YAML parse error: {e}"}]}
+            message = f"YAML parse error: {describe_manifest_error(e)}"
+            return {"valid": False, "errors": [{"path": "/", "message": message}]}
 
         if not isinstance(capsule, dict):
             return {
