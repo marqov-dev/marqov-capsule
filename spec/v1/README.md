@@ -126,6 +126,19 @@ the `mqc:1:` digest-procedure version.
 | `checksums_digest` | string | `sha256:<hex>` — SHA-256 of the `.checksums` file bytes |
 | `digests` | object | Arbitrary named digests, e.g. `results: sha256:<hex>` |
 
+### Extensions and unknown keys
+
+`extensions` is an object for implementation-specific data. Its contents are not
+interpreted by this specification.
+
+A key this specification does not declare is not an error in v1, at the manifest
+root or in a task execution, `backend` or `verification_settings`. Such a key is
+part of the manifest, so it is covered by the capsule ID, but it carries no
+defined meaning and verifiers ignore it. New data SHOULD go under `extensions`.
+Writers SHOULD warn about undeclared keys before sealing, because a misspelled
+optional field such as `derived_From` validates and records nothing under the
+name readers look for.
+
 ---
 
 ## 4. Lifecycle states

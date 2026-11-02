@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- `seal` and `seal --dry-run` name manifest keys the v1 schema does not declare,
+  on stderr and as `unknown_keys` in `--json` output. They stay legal, so sealing
+  still succeeds; `CapsuleValidator.unknown_keys()` exposes the check (#112).
+
+### Changed
+
+- `init` records `created_at` in the draft manifest (#112).
+
 ### Fixed
 
 - `seal --dry-run` and `CapsuleRedactor.scan()` no longer raise on a

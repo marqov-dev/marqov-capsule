@@ -3,10 +3,13 @@ import sys
 from pathlib import Path
 
 import click
+import yaml
 
+from marqov_capsule._canonical import load_manifest_yaml
 from marqov_capsule.builder import CapsuleBuilder, CapsuleStateError, CapsuleValidationError
 from marqov_capsule.cli._manifest import load_manifest_or_exit, manifest_problem
 from marqov_capsule.redactor import CapsuleRedactor, RedactorError, finding_location
+from marqov_capsule.validator import CapsuleValidator
 
 
 def _report_findings(findings: list[dict]) -> None:
@@ -61,6 +64,31 @@ def _report_scope(scan_result: dict) -> None:
         click.echo(f"    ... and {len(skipped) - 10} more")
 
 
+def _dry_run_unknown_keys(manifest_path: Path) -> list[str]:
+    """Unknown keys in a draft; a dry run reports, so an unreadable one is none."""
+    try:
+        manifest = load_manifest_yaml(manifest_path.read_text(encoding="utf-8"))
+    except (yaml.YAMLError, ValueError, OSError):
+        return []
+    return CapsuleValidator.unknown_keys(manifest)
+
+
+def _report_unknown_keys(unknown: list[str], sealed: bool) -> None:
+    """Name keys the schema does not declare: legal in v1, but maybe typos (#112)."""
+    if not unknown:
+        return
+    state = "were sealed" if sealed else "would be sealed"
+    click.echo(
+        f"Warning: {len(unknown)} key(s) the v1 schema does not declare {state}: "
+        f"{', '.join(unknown)}",
+        err=True,
+    )
+    advice = "Check for typos; custom data belongs under `extensions`."
+    if sealed:
+        advice += " `seal --dry-run` reports these before sealing."
+    click.echo(f"  {advice}", err=True)
+
+
 @click.command()
 @click.argument("directory", type=click.Path(exists=True, file_okay=False))
 @click.option("--warn-only", is_flag=True, help="Warn on credentials instead of blocking")
@@ -99,6 +127,7 @@ def seal(
         scan_result = redactor.scan()
         manifest_error = manifest_problem(manifest_path)
         status = "clean" if not (scan_result["has_secrets"] or manifest_error) else "warnings"
+        unknown = _dry_run_unknown_keys(manifest_path)
         if as_json:
             click.echo(
                 json.dumps(
@@ -106,6 +135,7 @@ def seal(
                         "status": status,
                         "manifest_error": manifest_error,
                         "findings": scan_result["findings"],
+                        "unknown_keys": unknown,
                         "skipped": scan_result["skipped"],
                         "skipped_binary": scan_result["skipped_binary"],
                         "capsuleignore_patterns": scan_result["capsuleignore_patterns"],
@@ -118,10 +148,11 @@ def seal(
                 click.echo(f"Dry run: {len(scan_result['findings'])} credential pattern(s) found")
                 for f in scan_result["findings"]:
                     click.echo(f"  {finding_location(f)} — {f['reason']}: {f['match']}")
-            elif not manifest_error:
+            elif not (manifest_error or unknown):
                 click.echo("Dry run: no issues found")
             if manifest_error:
                 click.echo(f"Dry run: a real seal would refuse this capsule: {manifest_error}")
+            _report_unknown_keys(unknown, sealed=False)
             _report_scope(scan_result)
             _report_binary(scan_result)
         sys.exit(0)
@@ -129,6 +160,7 @@ def seal(
     # Load the draft through the profile-aware loader; a hand-edited draft that
     # does not parse, or is not a mapping, is a clean exit 1 (#95).
     manifest = load_manifest_or_exit(manifest_path, as_json)
+    unknown = CapsuleValidator.unknown_keys(manifest)
 
     try:
         builder = CapsuleBuilder.from_manifest(manifest)
@@ -194,6 +226,7 @@ def seal(
                     "capsule_id": capsule_id,
                     "directory": str(directory),
                     "findings": findings,
+                    "unknown_keys": unknown,
                     "skipped_binary": scan_result.get("skipped_binary", []),
                     "capsuleignore_patterns": narrowed,
                 },
@@ -203,6 +236,7 @@ def seal(
     else:
         click.echo(f"Sealed: {capsule_id}")
         click.echo(f"  Directory: {directory}")
+        _report_unknown_keys(unknown, sealed=True)
         _report_findings(findings)
         _report_binary(scan_result)
         if narrowed:
