@@ -11,6 +11,7 @@ from click.testing import CliRunner
 from marqov_capsule.builder import CapsuleBuilder
 from marqov_capsule.cli.main import cli
 from marqov_capsule.redactor import CapsuleRedactor, _scan_notebook, _scan_text
+from marqov_capsule.validator import CapsuleValidator
 
 REQUIREMENTS = {"paradigm": ["gate-based"], "max_qubit_count": 2}
 GITHUB_TOKEN = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -236,3 +237,166 @@ def test_pem_block_allow_annotation_on_a_later_line_is_not_honoured():
 # Mutation B9: a known credential name assigned from os.environ is not an embedded value
 def test_known_name_assigned_from_environ_is_not_embedded():
     assert _scan_text('IBM_QUANTUM_TOKEN = os.environ["IBM_QUANTUM_TOKEN"]\n', "x.py") == []
+
+
+# --- seal --dry-run on a manifest a real seal would refuse --------------------
+
+UNSEALABLE_MANIFESTS = {
+    "syntax-error": b"a: [\n",
+    "forbidden-tag": b"a: !!python/object:os.system {}\n",
+    "raw-control-char": b"a: \x01\n",
+    "duplicate-key": b"a: 1\na: 2\n",
+    "too-deep": b"a: " + b"[" * 5000 + b"\n",
+    "empty": b"",
+    "not-a-mapping": b"- a\n- b\n",
+    "not-utf8": b"a: \xff\xfe\n",
+}
+LOADER_REJECTED = ["syntax-error", "forbidden-tag", "raw-control-char", "duplicate-key", "too-deep"]
+
+
+@pytest.mark.parametrize("name", LOADER_REJECTED)
+def test_scan_tolerates_a_manifest_that_does_not_parse(name, tmp_path):
+    (tmp_path / "capsule.yaml").write_bytes(UNSEALABLE_MANIFESTS[name])
+    assert CapsuleRedactor(tmp_path).scan()["findings"] == []
+
+
+def test_scan_still_finds_a_literal_token_in_an_unparsable_manifest(tmp_path):
+    (tmp_path / "capsule.yaml").write_text(f"note: {GITHUB_TOKEN}\na: [\n")
+    result = CapsuleRedactor(tmp_path).scan()
+    assert [f["file"] for f in result["findings"]] == ["capsule.yaml"]
+    assert result["findings"][0]["blocking"]
+
+
+@pytest.mark.parametrize("name", UNSEALABLE_MANIFESTS)
+def test_cli_dry_run_reports_an_unsealable_manifest_at_exit_0(name, tmp_path):
+    (tmp_path / "capsule.yaml").write_bytes(UNSEALABLE_MANIFESTS[name])
+    result = CliRunner().invoke(cli, ["seal", "--dry-run", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert "no issues found" not in result.output
+    assert len(result.output.strip().splitlines()) == 1
+    assert "real seal would refuse" in result.output
+
+
+@pytest.mark.parametrize("name", UNSEALABLE_MANIFESTS)
+def test_cli_dry_run_json_reports_an_unsealable_manifest_at_exit_0(name, tmp_path):
+    (tmp_path / "capsule.yaml").write_bytes(UNSEALABLE_MANIFESTS[name])
+    result = CliRunner().invoke(cli, ["seal", "--dry-run", "--json", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    report = json.loads(result.output)
+    assert report["status"] == "warnings"
+    assert "capsule.yaml" in report["manifest_error"]
+    assert "\n" not in report["manifest_error"]
+    assert report["findings"] == []
+
+
+def test_cli_dry_run_json_clean_capsule_has_no_manifest_error(tmp_path):
+    CapsuleBuilder().start_capsule(name="c", requirements=REQUIREMENTS).save_capsule(tmp_path)
+    report = json.loads(
+        CliRunner().invoke(cli, ["seal", "--dry-run", "--json", str(tmp_path)]).output
+    )
+    assert report["status"] == "clean"
+    assert report["manifest_error"] is None
+
+
+def test_cli_dry_run_keeps_findings_beside_a_manifest_error(tmp_path):
+    (tmp_path / "capsule.yaml").write_text("a: [\n")
+    (tmp_path / "run.py").write_text(f"token = '{GITHUB_TOKEN}'\n")
+    result = CliRunner().invoke(cli, ["seal", "--dry-run", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "1 credential pattern(s) found" in result.output
+    assert "run.py" in result.output
+    assert "real seal would refuse" in result.output
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        f"token: [{GITHUB_TOKEN}\nb: }}\n",
+        f"x: 1\n{GITHUB_TOKEN}: 2\n{GITHUB_TOKEN}: 3\n",
+        f"name: !!foo {GITHUB_TOKEN}\n",
+        f"%{GITHUB_TOKEN} foo\n---\na: 1\n",
+    ],
+    ids=["snippet", "duplicate-key", "tag", "directive"],
+)
+@pytest.mark.parametrize("flags", [["--dry-run"], ["--dry-run", "--json"], [], ["--json"]])
+def test_manifest_parse_errors_do_not_echo_credentials(flags, manifest, tmp_path):
+    # PyYAML quotes the offending source line; findings are redacted, so the
+    # message beside them must not print the token whole.
+    (tmp_path / "capsule.yaml").write_text(manifest)
+    result = CliRunner().invoke(cli, ["seal", *flags, str(tmp_path)])
+    assert GITHUB_TOKEN not in result.output
+    assert GITHUB_TOKEN[:20] not in result.output
+
+
+def test_real_seal_still_refuses_an_unparsable_manifest(tmp_path):
+    (tmp_path / "capsule.yaml").write_text("a: [\n")
+    result = CliRunner().invoke(cli, ["seal", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "could not be parsed" in result.output
+
+
+# --- validate must not print what the credential scan redacts -----------------
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        f"token: [{GITHUB_TOKEN}\nb: }}\n",
+        f"x: 1\n{GITHUB_TOKEN}: 2\n{GITHUB_TOKEN}: 3\n",
+        f"name: !!foo {GITHUB_TOKEN}\n",
+        f"%{GITHUB_TOKEN} foo\n---\na: 1\n",
+        f"name: t\nlifecycle_state: {GITHUB_TOKEN}\n",
+        f"name: {{token: {GITHUB_TOKEN}}}\n",
+        f"name: t\nrequirements:\n  paradigm: [{GITHUB_TOKEN}]\n",
+        f"name: t\nrequirements:\n  {GITHUB_TOKEN}: 1\n",
+    ],
+    ids=[
+        "snippet",
+        "duplicate-key",
+        "tag",
+        "directive",
+        "enum-value",
+        "object-value",
+        "array-item",
+        "unexpected-key",
+    ],
+)
+@pytest.mark.parametrize("flags", [[], ["--json"]], ids=["text", "json"])
+def test_validate_does_not_echo_credentials(flags, manifest, tmp_path):
+    (tmp_path / "capsule.yaml").write_text(manifest)
+    result = CliRunner().invoke(cli, ["validate", *flags, str(tmp_path)])
+    assert result.exit_code == 1
+    assert GITHUB_TOKEN[:20] not in result.output
+
+
+def test_validate_api_does_not_echo_a_credential_key_in_a_domain_error():
+    # The YAML loader rejects these numbers first, so only the Python API gets here.
+    result = CapsuleValidator.validate({GITHUB_TOKEN: {"a": float("inf")}, "b": [float("nan")]})
+    assert sorted(e["path"] for e in result["errors"]) == ["[redacted-key]/a", "b/0"]
+
+
+def test_warn_only_seal_does_not_echo_credentials_in_schema_errors(tmp_path):
+    (tmp_path / "capsule.yaml").write_text(
+        f"version: '1.0.0'\nname: t\nlifecycle_state: draft\nrequirements: {REQUIREMENTS}\n"
+        f"description: {{a: {GITHUB_TOKEN}}}\n"
+    )
+    result = CliRunner().invoke(cli, ["seal", "--warn-only", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "does not validate" in result.output
+    assert GITHUB_TOKEN[:20] not in result.output
+
+
+def test_validate_parse_error_gives_the_location(tmp_path):
+    (tmp_path / "capsule.yaml").write_text("a: [\n")
+    result = CliRunner().invoke(cli, ["validate", "--json", str(tmp_path)])
+    message = json.loads(result.output)["errors"][0]["message"]
+    assert message == "YAML parse error: line 2, column 1"
+
+
+def test_validate_schema_error_still_explains_the_problem(tmp_path):
+    (tmp_path / "capsule.yaml").write_text("name: t\nlifecycle_state: nope\n")
+    result = CliRunner().invoke(cli, ["validate", "--json", str(tmp_path)])
+    errors = {e["path"]: e["message"] for e in json.loads(result.output)["errors"]}
+    assert errors["lifecycle_state"].startswith("<value> is not one of [")
+    assert "'draft'" in errors["lifecycle_state"]

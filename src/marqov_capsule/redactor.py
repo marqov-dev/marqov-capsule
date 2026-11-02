@@ -33,6 +33,8 @@ import string
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from marqov_capsule._canonical import load_manifest_yaml
 
 # ---------------------------------------------------------------------------
@@ -577,7 +579,7 @@ def _scan_manifest_values(content: str, existing: list[dict]) -> list[dict]:
     """Scan parsed scalar strings with their key context, independent of YAML layout."""
     try:
         manifest = load_manifest_yaml(content)
-    except (ValueError, RecursionError):
+    except yaml.YAMLError:
         # Dry-run scanning also accepts unfinished drafts; their literal text
         # has already been scanned. Sealing separately enforces valid parsing.
         return []
