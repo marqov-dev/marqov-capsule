@@ -1,0 +1,29 @@
+name: Specification change (RFC)
+description: Propose a change to the capsule format in spec/v1
+labels: [spec, rfc]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Breaking changes to `spec/v1/` follow the process in CONTRIBUTING.md,
+        including a public comment period of at least two weeks.
+  - type: textarea
+    id: change
+    attributes:
+      label: Proposed change
+    validations:
+      required: true
+  - type: textarea
+    id: reproducibility
+    attributes:
+      label: Reproducibility impact
+      description: Does this change what can be verified, or how? Consider §4 (lifecycle), §5 (digest scheme), §6 (verification) and §8 (conformance, including the credential check).
+    validations:
+      required: true
+  - type: textarea
+    id: portability
+    attributes:
+      label: Portability impact
+      description: Does this change what a third party needs to re-target and re-execute a capsule? Does it add a platform-specific element, a non-machine-readable field, or a dependency on the originating implementation?
+    validations:
+      required: true

@@ -53,6 +53,9 @@ marqov-capsule = "marqov_capsule.cli.main:cli"
 
 [project.urls]
 Homepage = "https://marqov.ai"
+Source = "https://github.com/marqov-dev/marqov-capsule"
+Issues = "https://github.com/marqov-dev/marqov-capsule/issues"
+Changelog = "https://github.com/marqov-dev/marqov-capsule/blob/main/CHANGELOG.md"
 
 [tool.hatch.version]
 path = "src/marqov_capsule/__init__.py"

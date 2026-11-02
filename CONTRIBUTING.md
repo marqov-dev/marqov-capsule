@@ -2,13 +2,19 @@
 
 ## Development setup
 
-From an authorized repository checkout, install the development dependencies.
-Contact `hello@marqov.ai` for contribution access.
+Contributions are welcome. Clone the repository, create a virtual environment
+(Python 3.10 or newer), and install the development dependencies:
 
 ```bash
+git clone https://github.com/marqov-dev/marqov-capsule
+cd marqov-capsule
 pip install -e ".[dev]"
 pytest tests/
 ```
+
+Open an issue before starting large changes. Report security problems privately
+as described in [SECURITY.md](SECURITY.md). Participation is governed by the
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 The `[dev]` extra includes numpy and scipy (needed for statistical verification tests) plus pytest.
 

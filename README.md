@@ -4,7 +4,7 @@ Open standard and tooling for reproducible quantum experiments.
 
 ## What is a capsule?
 
-A capsule is a sealed, tamper-evident record of a quantum computation. It contains a `capsule.yaml` manifest, a `.checksums` file listing SHA-256 digests of every payload file, and the payload files themselves (results, circuits, environment specs, etc.). Once sealed, the manifest embeds a `checksums_digest` and a capsule ID (SHA-256 of canonical JSON of the manifest). The capsule ID is derived from the content, so it names those exact bytes and nothing else — altering a capsule does not change it, it produces a different capsule. Capsules carry no signatures, so this makes them **tamper-evident**, not authenticated: the digest chain detects modification, not forgery.
+A capsule is a sealed, tamper-evident record of a quantum computation. It contains a `capsule.yaml` manifest, a `.checksums` file listing SHA-256 digests of every payload file, and the payload files themselves (results, circuits, environment specs, etc.). Once sealed, the manifest embeds a `checksums_digest`. The capsule ID (SHA-256 of canonical JSON of the manifest) is computed from the manifest and is not stored in the capsule: `seal` returns it, and you keep it. The capsule ID is derived from the content, so it names those exact bytes and nothing else — altering a capsule does not change it, it produces a different capsule. Capsules carry no signatures, so this makes them **tamper-evident**, not authenticated: the digest chain detects modification, not forgery.
 
 The format is an open standard (`spec/v1/`, CC-BY-4.0). The Python tooling is Apache 2.0. Both can be used independently.
 
@@ -166,6 +166,30 @@ capsules separately. Counts must be non-negative integers with string outcome
 labels; booleans and fractional counts are rejected. Sampling assumptions and
 the decision procedure are in spec §6.
 
+### How many shots does `VERIFIED` need?
+
+The bound is deliberately conservative, so a comparison at a low shot count
+returns `INCONCLUSIVE` even when both samples came from the same distribution.
+`INCONCLUSIVE` means "not enough evidence", never "did not reproduce". As a
+guide, measured with `marqov-capsule compare` on two independent samples of a
+balanced two-outcome distribution (40 trials per row):
+
+| Shots per sample | `VERIFIED` at the default tolerance (ε = 0.02) | `VERIFIED` at ε = 0.05 |
+|---|---|---|
+| 1,024 | 0 of 40 | 0 of 40 |
+| 5,000 | 0 of 40 | 40 of 40 |
+| 10,000 | 15 of 40 | 40 of 40 |
+| 20,000 | 34 of 40 | 40 of 40 |
+| 30,000 and above | 40 of 40 | 40 of 40 |
+
+Plan for roughly 30,000 shots per sample at the default tolerance, or about
+5,000 at ε = 0.05. Distributions with more outcomes need more shots. These
+figures are a guide for planning runs, not a guarantee; spec §6 defines the
+decision procedure and `spec/v1/conformance/golden/statistical-cases.json`
+pins exact values. The verifier owns the tolerance: `VerificationPolicy.resolve`
+clamps a capsule-declared ε down to the verifier's ceiling, and records
+`epsilon_clamped` when it does.
+
 The API accepts integral scalar types such as NumPy integers and normalizes them
 before arithmetic. Each sample's total must be at most 2^53−1 shots.
 The root manifest is always credential-scanned, including parsed value/key
@@ -199,6 +223,9 @@ Both license texts are included in the wheel and source distribution.
 
 ## Contributing
 
-Contributions should include tests for changed behavior and a conformance
-fixture for format changes. Specification changes follow an RFC review process.
-Contact the project at `hello@marqov.ai` for contribution access and support.
+Contributions are welcome. See [CONTRIBUTING.md](https://github.com/marqov-dev/marqov-capsule/blob/main/CONTRIBUTING.md) for the
+development setup and quality gates. Contributions should include tests for
+changed behavior and a conformance fixture for format changes. Specification
+changes follow an RFC review process. Report security issues as described in
+[SECURITY.md](https://github.com/marqov-dev/marqov-capsule/blob/main/SECURITY.md); for anything else, open an issue or write to
+`hello@marqov.ai`.
