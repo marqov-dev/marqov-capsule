@@ -18,6 +18,7 @@ def check_sdist(path):
         "src",
         "spec",
         "examples",
+        "LICENSE",
         "LICENSE-CODE",
         "LICENSE-SPEC",
         "README.md",
