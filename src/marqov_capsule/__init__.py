@@ -6,7 +6,7 @@ from marqov_capsule.validator import CapsuleValidator
 from marqov_capsule.verifier import CapsuleVerifier
 
 # The one place the version is declared; pyproject.toml reads it from here.
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 __all__ = [
     "CapsuleBuilder",
     "CapsuleValidator",

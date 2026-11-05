@@ -11,7 +11,7 @@ the SDK and dependency wheels using Python 3.12+ with pip installed:
 
 ```bash
 uv build
-python3.12 tools/prepare_conference_kit.py dist/marqov_capsule-0.2.2-py3-none-any.whl dist/conference-kit
+python3.12 tools/prepare_conference_kit.py dist/marqov_capsule-0.2.3-py3-none-any.whl dist/conference-kit
 ```
 
 Use a new kit directory each time. The kit contains the two scripts below,
@@ -31,7 +31,7 @@ From a repository checkout or the extracted source distribution, using Python 3.
 
 ```bash
 python3.12 -m venv /tmp/marqov-capsule-demo-env
-/tmp/marqov-capsule-demo-env/bin/python -m pip install marqov-capsule==0.2.2 marqov==0.5.1
+/tmp/marqov-capsule-demo-env/bin/python -m pip install marqov-capsule==0.2.3 marqov==0.5.1
 /tmp/marqov-capsule-demo-env/bin/python examples/run_bell.py /tmp/bell-export
 /tmp/marqov-capsule-demo-env/bin/python examples/seal_bell.py /tmp/bell-export /tmp/bell-demo
 ```

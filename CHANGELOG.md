@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.3] — 2026-11-05
 
 ### Added
 
@@ -23,6 +23,14 @@
   line and column, or only the error type, rather than quoting the source, which
   could print a credential whole. Schema errors from `validate`, and from `seal`
   on the same path, replace the rejected value with `<value>`.
+
+### Documentation
+
+- The repository is prepared for public release: open contribution guidance,
+  `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue templates, a root `LICENSE`, and
+  Source, Issues and Changelog project URLs (#148).
+- The README lists known limitations (#151) and how many shots a `VERIFIED`
+  verdict needs (#85).
 
 ## [0.2.2] — 2026-10-21
 
