@@ -203,6 +203,37 @@ Use `verify_integrity(directory, expected_id=trusted_id)` for artifact integrity
 compare explicit result payloads separately. No calibration-verdict replacement
 is provided.
 
+## Known limitations
+
+This is an early release. These are the gaps we know about, so you can judge
+what a capsule does and does not promise.
+
+- **No signatures.** A capsule is tamper-evident, not authenticated. Anyone can
+  build a self-consistent capsule with a different ID, so a capsule ID is only
+  as trustworthy as the channel you received it over.
+- **No re-running from the file alone.** A capsule records what was run and
+  what came back. It does not recreate the execution environment, replay
+  random seeds, or re-execute and compare automatically. Environment details
+  are supplied by the author.
+- **Unknown manifest keys are accepted.** Keys the v1 schema does not declare
+  are legal, so a misspelled optional field such as `derived_From` validates
+  and records nothing under the name readers look for. From 0.2.3, run
+  `seal --dry-run` before sealing to see a warning; a plain `seal` warns only
+  afterwards, when the typo is already sealed. Stricter validation is being
+  considered for a later release
+  ([#152](https://github.com/marqov-dev/marqov-capsule/issues/152)).
+- **Credential scanning is best-effort.** `seal` refuses known credential
+  shapes, such as AWS keys, GitHub tokens and private-key blocks, but a clean
+  scan does not prove a capsule holds no secrets. The spec currently defines
+  the pattern list by reference to this implementation
+  ([#109](https://github.com/marqov-dev/marqov-capsule/issues/109)).
+- **Small samples are `INCONCLUSIVE`.** Statistical comparison never says
+  `REJECTED`, and it needs enough shots to say `VERIFIED`; see
+  [How many shots does `VERIFIED` need?](#how-many-shots-does-verified-need).
+- **Older capsules stay legacy.** Capsules with the earlier YAML-mapping
+  `.checksums` can still be read, but they cannot pass full integrity
+  verification. Re-sealing one produces a new capsule, not an upgraded one.
+
 ## Spec
 
 The normative capsule format specification lives in `spec/v1/`:
