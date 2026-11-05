@@ -8,6 +8,10 @@ Version history for the Marqov Capsule format specification.
 
 Unreleased clarifications and interoperability corrections to manifest parsing and the digest scheme.
 
+### Unknown keys
+
+- §3 now states the existing v1 behaviour: undeclared keys are legal and covered by the capsule ID, `extensions` is the place for implementation-specific data, and writers should warn about undeclared keys and offer that warning before sealing (#112). The schema is unchanged.
+
 ### Independent pre-0.2.2 review follow-up
 
 - Explicit `!!null` uses the null grammar instead of discarding arbitrary text.

@@ -122,6 +122,35 @@ class CapsuleValidator:
         return {"valid": len(errors) == 0, "errors": errors}
 
     @classmethod
+    def unknown_keys(cls, capsule: Any) -> list[str]:
+        """List keys the v1 schema does not declare, as ``/``-joined paths.
+
+        Unknown keys are legal in v1 (spec §3), so this is advisory: a typo such
+        as ``derived_From`` validates and silently loses what it meant to record
+        (#112). Only the objects with a fixed vocabulary are checked. Free-form
+        ones (``parameters``, ``extensions``, ``digests``, ``metrics``,
+        ``signatures``) are not, and neither are non-mapping values, which are
+        schema errors rather than unknown keys.
+        """
+        if not isinstance(capsule, dict):
+            return []
+        root = _load_schema()["properties"]
+        task = root["task_executions"]["items"]["properties"]
+        unknown = [str(key) for key in capsule if key not in root]
+        tasks = capsule.get("task_executions")
+        for index, entry in enumerate(tasks if isinstance(tasks, list) else []):
+            if not isinstance(entry, dict):
+                continue
+            prefix = f"task_executions/{index}"
+            unknown += [f"{prefix}/{key}" for key in entry if key not in task]
+            for name in ("backend", "verification_settings"):
+                nested = entry.get(name)
+                if isinstance(nested, dict):
+                    declared = task[name]["properties"]
+                    unknown += [f"{prefix}/{name}/{key}" for key in nested if key not in declared]
+        return unknown
+
+    @classmethod
     def validate_file(cls, filepath: str | Path) -> dict[str, Any]:
         """Validate a capsule.yaml file.
 

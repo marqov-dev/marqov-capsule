@@ -1,4 +1,5 @@
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +52,7 @@ def init(
 
     manifest = copy.deepcopy(_DRAFT_MANIFEST)
     manifest["name"] = name or capsule_dir.name
+    manifest["created_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     if paradigms:
         manifest["requirements"]["paradigm"] = list(paradigms)
     if qubits is not None:
