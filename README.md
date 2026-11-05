@@ -220,8 +220,8 @@ what a capsule does and does not promise.
   and records nothing under the name readers look for. From 0.2.3, run
   `seal --dry-run` before sealing to see a warning; a plain `seal` warns only
   afterwards, when the typo is already sealed. Stricter validation is being
-  considered for a future spec version
-  ([#112](https://github.com/marqov-dev/marqov-capsule/issues/112)).
+  considered for a later release
+  ([#152](https://github.com/marqov-dev/marqov-capsule/issues/152)).
 - **Credential scanning is best-effort.** `seal` refuses known credential
   shapes, such as AWS keys, GitHub tokens and private-key blocks, but a clean
   scan does not prove a capsule holds no secrets. The spec currently defines
