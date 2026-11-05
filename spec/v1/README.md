@@ -135,9 +135,10 @@ A key this specification does not declare is not an error in v1, at the manifest
 root or in a task execution, `backend` or `verification_settings`. Such a key is
 part of the manifest, so it is covered by the capsule ID, but it carries no
 defined meaning and verifiers ignore it. New data SHOULD go under `extensions`.
-Writers SHOULD warn about undeclared keys before sealing, because a misspelled
-optional field such as `derived_From` validates and records nothing under the
-name readers look for.
+Writers SHOULD warn about undeclared keys, and SHOULD offer a way to see the
+warning before sealing, because a misspelled optional field such as
+`derived_From` validates and records nothing under the name readers look for.
+The reference implementation warns in `seal --dry-run` and again after `seal`.
 
 ---
 

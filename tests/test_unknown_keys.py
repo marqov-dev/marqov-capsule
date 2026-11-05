@@ -79,14 +79,14 @@ def test_seal_warns_and_still_seals(tmp_path):
     result = CliRunner().invoke(cli, ["seal", str(_draft(tmp_path, derived_From="x"))])
     assert result.exit_code == 0, result.output
     assert "Sealed: mqc:1:" in result.output
-    assert "derived_From" in result.stderr
-    assert "were sealed" in result.stderr
+    assert "derived_From" in result.output
+    assert "were sealed" in result.output
 
 
 def test_seal_is_silent_without_unknown_keys(tmp_path):
     result = CliRunner().invoke(cli, ["seal", str(_draft(tmp_path))])
     assert result.exit_code == 0, result.output
-    assert "Warning" not in result.stderr
+    assert "Warning" not in result.output
 
 
 def test_seal_json_names_unknown_keys(tmp_path):
@@ -98,7 +98,7 @@ def test_dry_run_warns_before_anything_is_sealed(tmp_path):
     capsule = _draft(tmp_path, derived_From="x")
     result = CliRunner().invoke(cli, ["seal", "--dry-run", str(capsule)])
     assert result.exit_code == 0, result.output
-    assert "would be sealed" in result.stderr
+    assert "would be sealed" in result.output
     assert "no issues found" not in result.output
     assert not (capsule / ".checksums").exists()
 
