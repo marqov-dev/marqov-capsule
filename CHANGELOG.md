@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- On Python 3.14, `verify_checksums` reported a `.checksums` entry whose name
+  the OS refuses (a component past NAME_MAX) as `missing` instead of `invalid`.
+  The verdict was already `fail`; the entry is now classified as on 3.10–3.13.
+
+### Changed
+
+- CI and the package classifiers now cover Python 3.13 and 3.14.
+
 ## [0.2.3] — 2026-11-05
 
 ### Added

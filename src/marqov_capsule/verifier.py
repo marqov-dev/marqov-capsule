@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import unicodedata
 import warnings
 from numbers import Integral
@@ -329,9 +330,16 @@ def _check_entry(
         resolved = None
     if resolved is None or not resolved.is_relative_to(resolved_root):
         return "invalid", record("path escapes capsule root")
-    if not file_path.exists():
+    # lstat directly rather than exists()/is_file(): from Python 3.14 those
+    # return False instead of raising for a name the OS refuses (a component
+    # past NAME_MAX), which would report a hostile entry as merely missing.
+    # Only "no such file" means missing; any other OSError propagates and the
+    # caller records the entry as invalid (#123).
+    try:
+        mode = file_path.lstat().st_mode
+    except (FileNotFoundError, NotADirectoryError):
         return "missing", record()
-    if not file_path.is_file():
+    if not stat.S_ISREG(mode):
         return "invalid", record("not a regular file")
     try:
         actual = "sha256:" + hashlib.sha256(file_path.read_bytes()).hexdigest()
