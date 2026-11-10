@@ -80,7 +80,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         # macOS exercises a case-insensitive, NFD-normalising filesystem and
         # un-skips the Unicode collision test (#113, #115).
         include:

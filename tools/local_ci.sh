@@ -137,6 +137,8 @@ run_job "lint"                 job_lint
 run_job "test (3.10)"          job_test 3.10 nocov
 run_job "test (3.11)"          job_test 3.11 nocov
 run_job "test (3.12 + cov)"    job_test 3.12 cov
+run_job "test (3.13)"          job_test 3.13 nocov
+run_job "test (3.14)"          job_test 3.14 nocov
 run_job "wheel-smoke"          job_wheel_smoke
 run_job "base-install"         job_base_install
 run_job "minimum-versions"     job_minimum_versions
