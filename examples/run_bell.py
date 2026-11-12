@@ -35,4 +35,7 @@ async def run(output: Path) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="New export directory")
-    asyncio.run(run(parser.parse_args().output))
+    args = parser.parse_args()
+    if args.output.exists():
+        parser.error(f"{args.output} already exists; use a new directory")
+    asyncio.run(run(args.output))

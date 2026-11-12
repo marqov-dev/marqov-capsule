@@ -256,7 +256,7 @@ first user-facing access to count-equivalence testing.
 
 - `marqov-capsule compare REF NEW` tests whether two count samples are
   equivalent within a tolerance, using the one-sided upper confidence bound.
-  Exits 0 for `VERIFIED`, 3 for `INCONCLUSIVE`, 1 on error. `INCONCLUSIVE`
+  Exits 0 for `VERIFIED`, 3 for `INCONCLUSIVE`, 1 on a data error, 2 on a usage error. `INCONCLUSIVE`
   reports which condition produced it, distinguishing a sample-size limit from
   evidence of a difference. Requires NumPy and SciPy; a base install reports
   that rather than failing obscurely.

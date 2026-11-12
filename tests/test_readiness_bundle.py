@@ -103,7 +103,7 @@ def test_unicode_collisions_are_rejected(tmp_path):
     first, second = tmp_path / "é", tmp_path / "e\u0301"
     first.write_text("first")
     if second.exists():
-        pytest.skip("filesystem aliases NFC and NFD names")
+        pytest.skip("filesystem aliases NFC and NFD names; the Linux CI legs exercise this path")
     second.write_text("second")
     with pytest.raises(ValueError, match="collide"):
         CapsuleBuilder().save_checksums(tmp_path)
