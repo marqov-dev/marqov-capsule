@@ -1,0 +1,15 @@
+# Keeps the SHA-pinned actions in .github/workflows current (#115).
+# Monthly and grouped into one PR to keep CI minutes down. Python dependencies
+# are deliberately not managed here: pyproject.toml declares floors, which the
+# minimum-versions job tests, not pins to bump.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci

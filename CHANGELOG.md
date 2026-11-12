@@ -11,6 +11,10 @@
 ### Changed
 
 - CI and the package classifiers now cover Python 3.13 and 3.14.
+- Every GitHub Action in the workflows is pinned to a commit SHA, and
+  Dependabot proposes monthly updates. The CI step that re-validated the
+  conformance fixtures with a bare schema validator is removed; the test suite
+  covers those fixtures with `CapsuleValidator` (#115).
 
 ## [0.2.3] — 2026-11-05
 

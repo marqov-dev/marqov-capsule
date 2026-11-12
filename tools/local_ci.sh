@@ -65,20 +65,6 @@ job_test() {
   else
     "$py" -m pytest tests/ -q --tb=short -p no:cacheprovider || return 1
   fi
-  "$py" - <<'EOF' || return 1
-import json, jsonschema
-from marqov_capsule._canonical import load_manifest_yaml
-schema = json.load(open("spec/v1/capsule-schema.json"))
-v = jsonschema.Draft202012Validator(schema)
-for name in ["valid_capsule", "multi_task_capsule"]:
-    errs = list(v.iter_errors(load_manifest_yaml(open(f"spec/v1/conformance/{name}/capsule.yaml").read())))
-    assert errs == [], f"{name} should be valid: {errs}"
-    print(f"  {name}: PASS")
-for name in ["invalid_capsule"]:
-    errs = list(v.iter_errors(load_manifest_yaml(open(f"spec/v1/conformance/{name}/capsule.yaml").read())))
-    assert errs, f"{name} should be invalid"
-    print(f"  {name}: correctly invalid ({len(errs)} errors)")
-EOF
   local cli; cli="$(dirname "$py")/marqov-capsule"
   "$cli" --version && "$cli" validate spec/v1/conformance/valid_capsule/capsule.yaml \
     && "$cli" inspect spec/v1/conformance/valid_capsule >/dev/null \

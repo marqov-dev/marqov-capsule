@@ -94,3 +94,17 @@ def test_ci_success_includes_every_job():
 
     jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
     assert set(jobs["ci-success"]["needs"]) == set(jobs) - {"ci-success"}
+
+
+def test_workflow_actions_are_pinned_to_commit_shas():
+    """A moving tag such as ``@v4`` lets an upstream re-tag change what runs in
+    the release workflow. Pin every action to a full commit SHA; Dependabot
+    keeps the pins current (#115)."""
+    unpinned = []
+    for workflow in sorted((ROOT / ".github/workflows").glob("*.yml")):
+        for lineno, line in enumerate(workflow.read_text().splitlines(), 1):
+            match = re.match(r"\s*(?:-\s+)?uses:\s*(\S+)", line)
+            if match and not match.group(1).startswith("./"):
+                if not re.fullmatch(r"[^@\s]+@[0-9a-f]{40}", match.group(1)):
+                    unpinned.append(f"{workflow.name}:{lineno}: {match.group(1)}")
+    assert unpinned == []
