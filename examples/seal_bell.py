@@ -69,4 +69,6 @@ if __name__ == "__main__":
     parser.add_argument("export", type=Path)
     parser.add_argument("output", type=Path, help="New demonstration directory")
     args = parser.parse_args()
+    if args.output.exists():
+        parser.error(f"{args.output} already exists; use a new directory")
     demo(args.export, args.output)

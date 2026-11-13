@@ -8,7 +8,6 @@ Layers 2 and 3 are what make the capsule tamper-*evident*: layer 1 alone is
 defeated by any attacker who re-runs `save_checksums` after editing a payload.
 """
 
-import hashlib
 import json
 from pathlib import Path
 
@@ -45,15 +44,9 @@ def _seal(capsule_dir: Path, counts=None) -> str:
 
 
 def _rewrite_checksums(capsule_dir: Path) -> None:
-    """Recompute .checksums over the current tree — what a tamperer would do."""
-    checksums = {}
-    for fp in sorted(capsule_dir.rglob("*")):
-        if fp.is_file() and fp.name not in {".checksums", "capsule.yaml"}:
-            rel = fp.relative_to(capsule_dir).as_posix()
-            checksums[rel] = "sha256:" + hashlib.sha256(fp.read_bytes()).hexdigest()
-    (capsule_dir / ".checksums").write_text(
-        yaml.dump(checksums, default_flow_style=False, sort_keys=True)
-    )
+    """Recompute .checksums over the current tree, in the normative format the
+    writer emits, which is what a tamperer with the reference tool would do (#118)."""
+    CapsuleBuilder().save_checksums(capsule_dir)
 
 
 # --- Layer 3 precondition: the ID printed at seal must be recomputable ------

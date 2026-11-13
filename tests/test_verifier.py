@@ -367,9 +367,22 @@ def test_energy_distance_uses_hamming_metric():
     assert far["metrics"]["energy_distance"] > near["metrics"]["energy_distance"]
 
 
-def test_verify_checksums_pass(tmp_path):
-    import yaml
+def _write_checksums(capsule_dir, entries, fmt="normative"):
+    """Write ``.checksums`` in the normative line grammar (spec §2.2) — the
+    format the writer produces — or, for ``legacy-yaml``, the YAML mapping
+    older capsules still use. The path-safety tests run on both, because the
+    legacy parser stays for those capsules (#118)."""
+    if fmt == "legacy-yaml":
+        (capsule_dir / ".checksums").write_text(yaml.safe_dump(entries, sort_keys=True))
+        return
+    lines = sorted(f"{digest}  {path}\n".encode() for path, digest in entries.items())
+    (capsule_dir / ".checksums").write_bytes(b"".join(lines))
 
+
+_BOTH_FORMATS = pytest.mark.parametrize("fmt", ["normative", "legacy-yaml"])
+
+
+def test_verify_checksums_pass(tmp_path):
     capsule_dir = tmp_path / "test.capsule"
     capsule_dir.mkdir()
     payload = capsule_dir / "payload"
@@ -378,15 +391,14 @@ def test_verify_checksums_pass(tmp_path):
     f.write_text('{"counts": {"00": 500}}')
     digest = "sha256:" + hashlib.sha256(f.read_bytes()).hexdigest()
     checksums = {"payload/results.json": digest}
-    (capsule_dir / ".checksums").write_text(yaml.dump(checksums, sort_keys=True))
+    _write_checksums(capsule_dir, checksums)
 
     result = CapsuleVerifier.verify_checksums(capsule_dir)
+    assert result["format"] == "normative"
     assert result["status"] == "pass"
 
 
 def test_verify_checksums_fail_on_tampered_file(tmp_path):
-    import yaml
-
     capsule_dir = tmp_path / "test.capsule"
     capsule_dir.mkdir()
     payload = capsule_dir / "payload"
@@ -395,9 +407,10 @@ def test_verify_checksums_fail_on_tampered_file(tmp_path):
     f.write_text('{"counts": {"00": 500}}')
     digest = "sha256:" + hashlib.sha256(b"original content").hexdigest()
     checksums = {"payload/results.json": digest}
-    (capsule_dir / ".checksums").write_text(yaml.dump(checksums, sort_keys=True))
+    _write_checksums(capsule_dir, checksums)
 
     result = CapsuleVerifier.verify_checksums(capsule_dir)
+    assert result["format"] == "normative"
     assert result["status"] == "fail"
 
 
@@ -435,10 +448,9 @@ def test_deterministic_verification_mismatch():
 # --- Path-traversal hardening (#31) ---
 
 
-def test_verify_checksums_rejects_parent_traversal_key(tmp_path):
+@_BOTH_FORMATS
+def test_verify_checksums_rejects_parent_traversal_key(tmp_path, fmt):
     """A .checksums key that escapes the capsule root must fail without reading the outside file."""
-    import yaml
-
     secret = tmp_path / "secret.txt"
     secret.write_text("outside-the-capsule")
     secret_digest = "sha256:" + hashlib.sha256(secret.read_bytes()).hexdigest()
@@ -447,26 +459,23 @@ def test_verify_checksums_rejects_parent_traversal_key(tmp_path):
     capsule_dir.mkdir()
     # Key escapes the root; digest is the *real* hash of the outside file, so a
     # naive implementation would report match=True and status=pass.
-    (capsule_dir / ".checksums").write_text(
-        yaml.dump({"../secret.txt": secret_digest}, sort_keys=True)
-    )
+    _write_checksums(capsule_dir, {"../secret.txt": secret_digest}, fmt)
 
     result = CapsuleVerifier.verify_checksums(capsule_dir)
+    assert result["format"] == fmt
     assert result["status"] == "fail"
     assert "../secret.txt" in result.get("invalid", [])
 
 
-def test_verify_checksums_rejects_absolute_path_key(tmp_path):
+@_BOTH_FORMATS
+def test_verify_checksums_rejects_absolute_path_key(tmp_path, fmt):
     """A .checksums key with an absolute path must fail (path traversal)."""
-    import yaml
-
     capsule_dir = tmp_path / "test.capsule"
     capsule_dir.mkdir()
-    (capsule_dir / ".checksums").write_text(
-        yaml.dump({"/etc/hosts": "sha256:" + "0" * 64}, sort_keys=True)
-    )
+    _write_checksums(capsule_dir, {"/etc/hosts": "sha256:" + "0" * 64}, fmt)
 
     result = CapsuleVerifier.verify_checksums(capsule_dir)
+    assert result["format"] == fmt
     assert result["status"] == "fail"
     assert "/etc/hosts" in result.get("invalid", [])
 
@@ -474,10 +483,9 @@ def test_verify_checksums_rejects_absolute_path_key(tmp_path):
 # --- Symlink hardening (#32) ---
 
 
-def test_verify_checksums_does_not_follow_symlink_entry(tmp_path):
+@_BOTH_FORMATS
+def test_verify_checksums_does_not_follow_symlink_entry(tmp_path, fmt):
     """A .checksums entry that is a symlink must not be dereferenced."""
-    import yaml
-
     secret = tmp_path / "id_rsa"
     secret.write_text("PRIVATE KEY CONTENT")
     secret_digest = "sha256:" + hashlib.sha256(secret.read_bytes()).hexdigest()
@@ -487,19 +495,17 @@ def test_verify_checksums_does_not_follow_symlink_entry(tmp_path):
     payload = capsule_dir / "payload"
     payload.mkdir()
     (payload / "link.txt").symlink_to(secret)
-    (capsule_dir / ".checksums").write_text(
-        yaml.dump({"payload/link.txt": secret_digest}, sort_keys=True)
-    )
+    _write_checksums(capsule_dir, {"payload/link.txt": secret_digest}, fmt)
 
     result = CapsuleVerifier.verify_checksums(capsule_dir)
+    assert result["format"] == fmt
     assert result["status"] == "fail"
     assert "payload/link.txt" in result.get("symlinks", [])
 
 
-def test_verify_checksums_flags_unlisted_symlink(tmp_path):
+@_BOTH_FORMATS
+def test_verify_checksums_flags_unlisted_symlink(tmp_path, fmt):
     """A symlink present in the tree but absent from .checksums must still fail verification."""
-    import yaml
-
     secret = tmp_path / "id_rsa"
     secret.write_text("PRIVATE KEY CONTENT")
 
@@ -511,11 +517,10 @@ def test_verify_checksums_flags_unlisted_symlink(tmp_path):
     real.write_text('{"counts": {"00": 1}}')
     digest = "sha256:" + hashlib.sha256(real.read_bytes()).hexdigest()
     (payload / "link.txt").symlink_to(secret)  # not listed in .checksums
-    (capsule_dir / ".checksums").write_text(
-        yaml.dump({"payload/results.json": digest}, sort_keys=True)
-    )
+    _write_checksums(capsule_dir, {"payload/results.json": digest}, fmt)
 
     result = CapsuleVerifier.verify_checksums(capsule_dir)
+    assert result["format"] == fmt
     assert result["status"] == "fail"
     assert "payload/link.txt" in result.get("symlinks", [])
 

@@ -173,6 +173,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="New evidence directory")
     args = parser.parse_args()
+    if args.output.exists():
+        parser.error(f"{args.output} already exists; use a new directory")
     result = rehearsal(args.output)
     print(f"PASS: {len(result['cases'])} round-trips; 24 altered/incomplete records rejected")
     print(args.output / "report.json")
