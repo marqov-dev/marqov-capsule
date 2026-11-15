@@ -44,7 +44,7 @@ Failures raise an error and preserve partial evidence; no success report is writ
 The harness tests payload closure after sealing. An exporter omitting a required
 Report *before* sealing can still produce a valid capsule; independent expected
 inventory checks remain the exporter's responsibility. Including the synthetic
-Report demonstrates byte preservation, not platform Report export readiness.
+Report demonstrates byte preservation, not that an exporter includes the Report.
 
 ## Measurement protocol
 

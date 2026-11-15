@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-17
 **Status:** **Accepted — implemented** (branch `feat/versioned-capsule-id` / #69), landed in the `0.1.0` release-candidate window before the format freezes. Chosen form: `mqc:1:<hex>`.
-**Related:** [#20](https://github.com/marqov-dev/marqov-capsule/issues/20) (format), [#12](https://github.com/marqov-dev/marqov-capsule/issues/12) (first publish), `docs/research/2026-08-14-checksums-canonicalization.md`, `docs/platform-unvendor-plan.md` (§0 `CapsuleId`, §5 discriminator).
+**Related:** [#20](https://github.com/marqov-dev/marqov-capsule/issues/20) (format), [#12](https://github.com/marqov-dev/marqov-capsule/issues/12) (first publish), `docs/research/2026-08-14-checksums-canonicalization.md`.
 
 ---
 
@@ -43,7 +43,7 @@ Precedent (every mature content-addressed system does this):
 | `capsule-schema.json` (both copies) | `derived_from` pattern `^[0-9a-f]{64}$` → `^mqc:[0-9]+:[0-9a-f]{64}$` so a versioned parent ID validates. Keep the two copies byte-identical (`test_bundled_schema_is_byte_identical_to_the_spec`). |
 | `src/marqov_capsule/verifier.py` | `verify_integrity(expected_id=…)` parses the `mqc:<v>:` prefix and routes to the matching derivation; a version it doesn't recognise is a clean FAIL, not a crash. |
 | Conformance fixtures + tests | The four fixtures' recorded IDs (and any hardcoded test IDs) gain the `mqc:1:` prefix. Same regeneration as the `.checksums` rebase; do it in the same RC window. |
-| **Platform (downstream)** | The DB `capsule_id` column and S3 keys store `mqc:1:<hex>`. This **subsumes most of the platform plan's §5 discriminator-column need** — the version is now intrinsic to the ID, so a stored ID is self-describing (a separate column stays useful only for indexing/queries, not for disambiguation). |
+| **Integrations (downstream)** | Applications that store capsule IDs store `mqc:1:<hex>`. A stored ID is then self-describing, so no separate format-version column is needed to tell derivations apart (one may still help indexing). |
 
 ### Migration policy to state in the v1 spec now
 Declaring the policy in v1 is what makes a future v2 orderly (the same lesson as Go's `go.sum` writing its `h1 → h2` policy up front):
@@ -55,7 +55,7 @@ Declaring the policy in v1 is what makes a future v2 orderly (the same lesson as
 
 ## The four mechanisms of an eventual v2 transition (enabled by the above)
 
-1. **Dual derivation.** v2 tools keep the v1 ID-computation + v1 verifier as a permanent read-only path — a v2 tool can recompute and verify any v1 capsule. Never delete the old derivation. (Generalises the platform plan's "don't delete the legacy derivation" note.)
+1. **Dual derivation.** v2 tools keep the v1 ID-computation + v1 verifier as a permanent read-only path — a v2 tool can recompute and verify any v1 capsule. Never delete the old derivation.
 2. **Version-tagged IDs** (this proposal) so v1 and v2 never collide and every tool routes by prefix.
 3. **An equivalence record at migration.** When a v1 capsule is re-sealed under v2, the v2 capsule records "supersedes `mqc:1:<hex>`" in a **dedicated field — not `derived_from`** (which means experimental lineage). That gives a v1↔v2 alias map, so anything holding a v1 ID can find its v2 form.
 4. **Additive, never replacing.** v2 ships alongside v1; publishing v2 breaks/invalidates no v1 capsule.
@@ -73,5 +73,4 @@ Declaring the policy in v1 is what makes a future v2 orderly (the same lesson as
 
 1. Scheme spelling: `mqc:1:<hex>` vs `capsule:1:<hex>` vs a SWHID-style `mqc:1:cap:<hex>` (leaving room for sub-part identifiers, e.g. a task execution within a capsule — cf. SWHID qualifiers). Recommend the simplest, `mqc:1:<hex>`, unless sub-part addressing is wanted at v1.
 2. Should `checksums_digest` and the per-file `.checksums` digests also gain a format-version, or is their existing `sha256:` algorithm tag enough? (Likely enough — they are internal to a single capsule whose ID already carries the version.)
-3. Does the platform want the intrinsic ID version to *replace* the plan's `checksums_format_version` column, or keep both (column for indexing)?
-4. Decide during the RC: this note is a prerequisite input to whether `0.1.0` ships bare-hex or `mqc:1:` IDs.
+3. Decide during the RC: this note is a prerequisite input to whether `0.1.0` ships bare-hex or `mqc:1:` IDs.
