@@ -27,7 +27,7 @@ The source distribution includes
 ```python
 import tempfile
 from pathlib import Path
-from marqov_capsule import CapsuleBuilder
+from marqov_capsule import CapsuleBuilder, CapsuleVerifier
 
 with tempfile.TemporaryDirectory() as tmp:
     capsule_dir = Path(tmp)
@@ -46,9 +46,18 @@ with tempfile.TemporaryDirectory() as tmp:
     capsule_id = builder.seal(capsule_dir, sealed_by="alice@example.com")
     print(f"Capsule ID: {capsule_id}")
     # → Capsule ID: mqc:1:<64 lowercase hex chars>, derived from the manifest contents
+
+    # Later, or on another machine: check the capsule against the ID you kept
+    result = CapsuleVerifier.verify_integrity(capsule_dir, expected_id=capsule_id)
+    print(result["status"])  # → pass
+
+    # Change one result and the same check fails
+    (capsule_dir / "results.json").write_text('{"00": 1000, "11": 0}')
+    result = CapsuleVerifier.verify_integrity(capsule_dir, expected_id=capsule_id)
+    print(result["status"])  # → fail
 ```
 
-`seal()` runs the full sealing sequence: credential scan, `.checksums` generation, lifecycle transition to `sealed`, and `capsule.yaml` write. It returns a versioned capsule ID: `mqc:1:<64 lowercase hex chars>`.
+`seal()` runs the full sealing sequence: credential scan, `.checksums` generation, lifecycle transition to `sealed`, and `capsule.yaml` write. It returns a versioned capsule ID: `mqc:1:<64 lowercase hex chars>`. Keep that ID somewhere other than the capsule: it is what makes a later check meaningful (see [Integrity verification](https://github.com/marqov-dev/marqov-capsule#integrity-verification)).
 
 ## Runnable SDK demonstration
 
@@ -81,6 +90,15 @@ marqov-capsule seal ./bell-state
 marqov-capsule validate ./bell-state
 marqov-capsule inspect ./bell-state
 marqov-capsule verify ./bell-state
+```
+
+`seal` prints the capsule ID. Pass it to `verify` to check the manifest too, and
+to see a change caught:
+
+```bash
+marqov-capsule verify ./bell-state --id mqc:1:<the ID seal printed>   # PASS
+echo '{"00": 1000, "11": 0}' > ./bell-state/results.json
+marqov-capsule verify ./bell-state --id mqc:1:<the ID seal printed>   # FAIL, exit 1
 ```
 
 Payload files can be laid out however you like — the spec treats any file that

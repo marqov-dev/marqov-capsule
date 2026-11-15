@@ -371,7 +371,7 @@ class TestExtractFilterFallback:
             unpack_capsule(bad, output_dir=dest)
         assert not (tmp_path / "escaped.txt").exists()
 
-    def test_fallback_blocks_symlink_escaping_destination(self, tmp_path, monkeypatch):
+    def test_fallback_blocks_symlink_escaping_destination(self, tmp_path):
         bad = tmp_path / "evil2.capsule"
         with tarfile.open(str(bad), "w:gz") as tf:
             good = b"version: 1.0.0\n"
@@ -383,11 +383,13 @@ class TestExtractFilterFallback:
             link.linkname = "/etc/passwd"  # absolute, outside destination
             tf.addfile(link)
 
-        monkeypatch.setattr(archive_mod, "_extractall_filter_supported", lambda: False)
+        # unpack_capsule now refuses link members before extracting, so call
+        # the fallback extractor directly to keep its own guard covered.
         dest = tmp_path / "dest"
         dest.mkdir()
-        with pytest.raises(ValueError, match="link target escapes"):
-            unpack_capsule(bad, output_dir=dest)
+        with tarfile.open(str(bad), "r:gz") as tf:
+            with pytest.raises(ValueError, match="link target escapes"):
+                archive_mod._safe_extractall(tf, dest)
 
 
 class TestArchiveReproducibility:

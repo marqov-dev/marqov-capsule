@@ -191,6 +191,16 @@ def unpack_capsule(
         # represents one capsule; duplicate names would otherwise overwrite
         # earlier members, and multiple roots leave the return value ambiguous.
         capsule_dir_name, members_by_name = _single_root_layout(tf)
+        # A capsule holds only regular files and directories: verify fails any
+        # symlink, and seal never records one. Refuse every other member type
+        # before extraction rather than rely on ``filter="data"``, which
+        # CPython releases before the June 2025 tarfile fixes let a crafted
+        # link chain bypass (CVE-2025-4517 and related).
+        for name, member in members_by_name.items():
+            if not (member.isreg() or member.isdir()):
+                raise ValueError(
+                    f"Refusing archive member that is not a regular file or directory: {name!r}"
+                )
         manifest_name = f"{capsule_dir_name}/capsule.yaml"
         if manifest_name not in members_by_name or not members_by_name[manifest_name].isfile():
             raise ValueError(

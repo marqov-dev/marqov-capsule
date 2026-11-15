@@ -234,3 +234,59 @@ def test_payload_digest_rejects_archive_without_root_checksums(tmp_path):
     )
     with pytest.raises(FileNotFoundError):
         payload_digest(archive)
+
+
+# A capsule holds only regular files and directories. unpack refuses every other
+# member type before extraction, so neither extractor ever sees a link: older
+# CPython releases let a crafted link chain bypass filter="data"
+# (CVE-2025-4517 and related).
+_NON_REGULAR_PAYLOAD = [
+    pytest.param(_info("cap/link", tarfile.SYMTYPE, "payload.txt"), id="symlink-inside"),
+    pytest.param(_info("cap/link", tarfile.SYMTYPE, "../../outside"), id="symlink-outside"),
+    pytest.param(_info("cap/link", tarfile.LNKTYPE, "cap/capsule.yaml"), id="hardlink"),
+    pytest.param(_info("cap/fifo", tarfile.FIFOTYPE), id="fifo"),
+    pytest.param(_info("cap/dev", tarfile.CHRTYPE), id="char-device"),
+]
+
+
+def _archive_with_payload_member(info) -> bytes:
+    return _tar_gz(
+        [
+            (_info("cap", tarfile.DIRTYPE), None),
+            (_info("cap/capsule.yaml"), MANIFEST),
+            (info, None),
+        ]
+    )
+
+
+@pytest.mark.parametrize("data_filter", [True, False], ids=["filter-data", "fallback"])
+@pytest.mark.parametrize("member", _NON_REGULAR_PAYLOAD)
+def test_unpack_refuses_non_regular_members_before_extracting(
+    member, data_filter, tmp_path, monkeypatch
+):
+    import marqov_capsule.archive as archive_mod
+
+    monkeypatch.setattr(archive_mod, "_extractall_filter_supported", lambda: data_filter)
+    archive = tmp_path / "bad.capsule"
+    archive.write_bytes(_archive_with_payload_member(member))
+    out = tmp_path / "out"
+    out.mkdir()
+    with pytest.raises(ValueError, match="not a regular file or directory"):
+        unpack_capsule(archive, output_dir=out)
+    assert list(out.iterdir()) == []
+
+
+@pytest.mark.parametrize("member", _NON_REGULAR_PAYLOAD)
+@pytest.mark.parametrize("command", ["verify", "unpack"])
+def test_cli_exits_1_cleanly_on_non_regular_member(command, member, tmp_path):
+    archive = tmp_path / "bad.capsule"
+    archive.write_bytes(_archive_with_payload_member(member))
+    args = [command, str(archive)]
+    if command == "unpack":
+        args += ["-o", str(tmp_path / "out")]
+    result = CliRunner().invoke(cli, args)
+    assert result.exit_code == 1, result.output
+    assert "not a regular file or directory" in result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit), repr(
+        result.exception
+    )
