@@ -1,0 +1,48 @@
+{
+  "capsule_id": "mqc:1:78cc5e6c3776dee74bc439b1faf41b4090c028a71e50b28a4e7342c6263b3169",
+  "classification": "synthetic deliberate negative control",
+  "integrity": {
+    "capsule_id": "mqc:1:78cc5e6c3776dee74bc439b1faf41b4090c028a71e50b28a4e7342c6263b3169",
+    "capsule_id_match": true,
+    "checksums": {
+      "extra": [],
+      "files": {
+        "circuit.json": {
+          "actual": "sha256:4e5a0c1943f86c3430acb3add523e4b7dee151f1c9449a6c04cb759a2fdafe7d",
+          "expected": "sha256:4e5a0c1943f86c3430acb3add523e4b7dee151f1c9449a6c04cb759a2fdafe7d",
+          "match": true
+        },
+        "environment.json": {
+          "actual": "sha256:1fb5aa7c62f332a44ad7c3c3a4bb4f6030636481cace06533ff3d5d8e1b2751f",
+          "expected": "sha256:1fb5aa7c62f332a44ad7c3c3a4bb4f6030636481cace06533ff3d5d8e1b2751f",
+          "match": true
+        },
+        "results.json": {
+          "actual": "sha256:96025e529f2505ab59ca77ee41ec30e7d5d43880a84882aa162400f0340f474e",
+          "expected": "sha256:96025e529f2505ab59ca77ee41ec30e7d5d43880a84882aa162400f0340f474e",
+          "match": true
+        },
+        "run_bell.py": {
+          "actual": "sha256:87773b0b381169087c9d9c8ecaf2d018e285dd3ca8bc906cfbac49738e1c0be3",
+          "expected": "sha256:87773b0b381169087c9d9c8ecaf2d018e285dd3ca8bc906cfbac49738e1c0be3",
+          "match": true
+        }
+      },
+      "format": "normative",
+      "invalid": [],
+      "mismatched": [],
+      "missing": [],
+      "passed": true,
+      "status": "pass",
+      "symlinks": []
+    },
+    "checksums_digest_match": true,
+    "errors": [],
+    "manifest_authenticated": true,
+    "status": "pass",
+    "warning": null
+  },
+  "oracle_error": "ANALYTIC_MISMATCH",
+  "oracle_status": "fail",
+  "status": "pass"
+}

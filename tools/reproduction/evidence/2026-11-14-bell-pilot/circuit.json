@@ -1,0 +1,19 @@
+{
+  "gates": [
+    {
+      "gate": "H",
+      "qubits": [
+        0
+      ],
+      "params": []
+    },
+    {
+      "gate": "CNot",
+      "qubits": [
+        0,
+        1
+      ],
+      "params": []
+    }
+  ]
+}

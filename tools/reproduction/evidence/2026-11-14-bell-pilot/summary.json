@@ -1,0 +1,48 @@
+{
+  "actual_simulator_calls_including_november_13": 4,
+  "actual_simulator_calls_this_review": 2,
+  "counts_per_run": {
+    "00": 503,
+    "11": 497
+  },
+  "date": "2026-11-14",
+  "dependency_wheels": 78,
+  "executed_local_source_ref": "3ad464c",
+  "freeze_sha256": "efdbbee517834a4d60da175209266b05aa0144de2f5f74b1e9e8a48e83e34b21",
+  "hardware": {
+    "architecture": "arm64",
+    "chip": "Apple M5 Max",
+    "cpu_cores": 18,
+    "gpu_cores": 40,
+    "memory_gib": 64,
+    "model": "Mac Studio",
+    "os": "macOS 27.2.1 (26B131)",
+    "python": "CPython 3.12.16"
+  },
+  "historical_evidence": "November 13 results unchanged; separate dated summary retained",
+  "maximum_measured_run_tree_bytes": 1251747599,
+  "maximum_sampled_group_rss_bytes": 248086528,
+  "os_reported_maximum_rss_bytes": 249102336,
+  "review_fixes": [
+    "Require externally retained freeze SHA-256; consume it from trusted checkout",
+    "Check final disk/time usage for short-lived stages",
+    "Reject nested unlisted freeze.json and symlinks; refuse overlapping kit/evidence roots",
+    "Reject boolean/float circuit/reference type confusion",
+    "Add reproducible offline freeze helper and watchdog/CLI regressions"
+  ],
+  "reviewed_against_main": "d74aadcaf1f20992c446764f45fd38b09df7427d",
+  "runtime_source_hashes": "source-hashes.json",
+  "scope": "Local computational-basis distribution and frozen seeded replay only. No tomography, independent statistical replication, Linux/hosted acceptance, freeze lift or paid/provider execution.",
+  "seed": 42,
+  "shots": 1000,
+  "status": "pass",
+  "validation": {
+    "full_suite_passed": 1541,
+    "mypy": "22 source files pass",
+    "reproduction_line_coverage": "199/209 statements executed; 93% including branches",
+    "reproduction_tests_passed": 48,
+    "ruff": "pass",
+    "skipped": 3
+  },
+  "wall_seconds": 57.76773974997923
+}

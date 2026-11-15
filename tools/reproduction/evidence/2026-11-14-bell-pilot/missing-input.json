@@ -1,0 +1,8 @@
+{
+  "error": "MISSING_REQUIRED_INPUT:reference.json",
+  "error_type": "ValueError",
+  "simulator_invocations": 0,
+  "stage": "preflight",
+  "status": "fail",
+  "wall_seconds": 1.8833030480891466e-05
+}
