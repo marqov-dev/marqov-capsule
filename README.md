@@ -267,7 +267,8 @@ The schema is bundled into the Python package and used for validation at runtime
 The Python package is licensed under
 [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0).
 The specification is licensed under
-[CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/).
+[CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/); its notice is in
+`spec/v1/LICENSE`.
 Both license texts are included in the wheel and source distribution.
 
 ## Contributing

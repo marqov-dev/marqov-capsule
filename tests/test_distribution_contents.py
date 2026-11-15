@@ -17,7 +17,7 @@ REQUIRED = [
     "pyproject.toml",
     "README.md",
     "LICENSE-CODE",
-    "LICENSE-SPEC",
+    "spec/v1/LICENSE",
     "src/marqov_capsule/__init__.py",
     "spec/v1/capsule-schema.json",
     "examples/run_bell.py",

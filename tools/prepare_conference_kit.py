@@ -62,8 +62,9 @@ def prepare(wheel: Path, output: Path):
     root = Path(__file__).resolve().parents[1]
     for name in ("run_bell.py", "seal_bell.py"):
         shutil.copyfile(root / "examples" / name, output / name)
-    for name in ("LICENSE-CODE", "LICENSE-SPEC"):
-        shutil.copyfile(root / name, output / name)
+    # Kit file names stay LICENSE-CODE / LICENSE-SPEC; the spec notice lives in spec/v1/.
+    shutil.copyfile(root / "LICENSE-CODE", output / "LICENSE-CODE")
+    shutil.copyfile(root / "spec" / "v1" / "LICENSE", output / "LICENSE-SPEC")
     metadata = {
         "python": platform.python_version(),
         "system": platform.system(),

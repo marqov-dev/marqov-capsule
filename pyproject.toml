@@ -72,7 +72,6 @@ only-include = [
     "spec/",
     "examples/",
     "LICENSE-CODE",
-    "LICENSE-SPEC",
     "README.md",
     "pyproject.toml",
 ]
