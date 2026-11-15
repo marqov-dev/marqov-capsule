@@ -348,7 +348,7 @@ A conformant capsule implementation must:
 
 ## 9. License
 
-This specification is licensed under [CC-BY-4.0](../../LICENSE-SPEC).
+This specification is licensed under [CC-BY-4.0](LICENSE).
 
 Cite as: **Marqov Capsule Specification v1**, Marqov, 2026. Distributed in
 the `marqov-capsule` source archive under `spec/v1/`; record the package version

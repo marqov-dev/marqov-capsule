@@ -13,3 +13,15 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: ci
+
+  # tools/reproduction/evidence/ is a frozen, hash-pinned record of a past run
+  # (its SHA256SUMS covers requirements.txt). Bumping a pin there would falsify
+  # the record, so no version or security update PRs for it. Its alerts are
+  # dismissed as evidence-only; the package itself does not depend on it.
+  - package-ecosystem: pip
+    directory: /tools/reproduction/evidence/2026-11-14-bell-pilot
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
