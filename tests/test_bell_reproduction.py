@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,16 @@ def load(name):
 
 oracle = load("oracle")
 runner = load("run_bell_reproduction")
+
+
+def symlink_or_skip(link, target):
+    """Windows runners may lack symlink privilege; do not hide other errors."""
+    try:
+        link.symlink_to(target)
+    except OSError as error:
+        if getattr(error, "winerror", None) == 1314:
+            pytest.skip("Windows runner lacks symlink creation privilege")
+        raise
 
 
 def result(counts):
@@ -133,7 +144,7 @@ def test_preflight_rejects_drift(frozen_kit, action):
         (kit / "nested").mkdir()
         (kit / "nested/freeze.json").write_text("unlisted")
     elif action == "symlink":
-        (kit / "link").symlink_to(kit / "reference.json")
+        symlink_or_skip(kit / "link", kit / "reference.json")
     else:
         data = json.loads((kit / "freeze.json").read_text())
         data["interpreter_sha256"] = "0" * 64
@@ -187,6 +198,9 @@ def test_network_probe_requires_explicit_policy_denial(monkeypatch, code, stdout
 
 @pytest.mark.parametrize(
     "failure", [None, "NONZERO_EXIT", "DISK_CAP", "EVIDENCE_CAP", "TIME_CAP", "MEMORY_CAP"]
+)
+@pytest.mark.skipif(
+    not hasattr(os, "killpg"), reason="POSIX process-group watchdog; macOS pilot only"
 )
 def test_watchdog_records_and_cleans_up(monkeypatch, tmp_path, failure):
     """Exercise short-lived exits and running-process caps without real large allocations."""
@@ -289,7 +303,7 @@ def test_freeze_refuses_incompatible_or_linked_input(frozen_kit, kind):
     if kind == "package":
         (kit / "environment.json").write_text(json.dumps({"packages": {"marqov": "0.5.2"}}))
     else:
-        (kit / "linked").symlink_to(kit / "run_bell.py")
+        symlink_or_skip(kit / "linked", kit / "run_bell.py")
     with pytest.raises(ValueError):
         freezer.freeze(kit, "synthetic")
 
@@ -297,7 +311,7 @@ def test_freeze_refuses_incompatible_or_linked_input(frozen_kit, kind):
 def test_disk_measurement_does_not_follow_links(tmp_path):
     data = tmp_path / "data"
     data.write_bytes(b"123")
-    (tmp_path / "link").symlink_to(data)
+    symlink_or_skip(tmp_path / "link", data)
     assert runner.disk_bytes(tmp_path) == 3
 
 
