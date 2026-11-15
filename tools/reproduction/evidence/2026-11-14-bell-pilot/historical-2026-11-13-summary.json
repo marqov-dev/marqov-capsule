@@ -1,0 +1,37 @@
+{
+  "status": "pass",
+  "date": "2026-11-13",
+  "actual_simulator_calls": 2,
+  "counts_each": {
+    "00": 503,
+    "11": 497
+  },
+  "seed": 42,
+  "shots": 1000,
+  "dependency_wheels": 78,
+  "replay_wall_seconds": 52.91674804201466,
+  "sampled_peak_process_group_rss_bytes": 248430592,
+  "os_reported_maximum_rss_bytes": 251871232,
+  "maximum_run_disk_bytes": 1251467572,
+  "kit_bytes": 143323303,
+  "tests_passed": 52,
+  "lint": "pass",
+  "run_source_commit": "a97365468a72175d1b503bec9781e828d19f4779",
+  "final_source_commit": "6500273395f8d82ad5ba8571911dad23260a99b2",
+  "freeze_sha256": "3184e52ad6c9716d43deb622e2555aa421e8cec52534225b2822f3db4b263a4a",
+  "negative_controls": [
+    "missing reference stopped at preflight with zero simulator calls",
+    "consistently sealed all-00 result failed independent analytic oracle",
+    "payload tampering rejected in both runs",
+    "manifest tampering rejected in both runs"
+  ],
+  "retained_failure": "attempt-01: resource monitor ps denied inside sandbox; zero simulator calls",
+  "limits": [
+    "Computational-basis Bell distribution only; no phase/tomography claim",
+    "Same-seed replay is not independent statistical replication",
+    "RSS/disk watchdog caps are sampled; CPU thread settings are advisory",
+    "Supervisor outside sandbox; execution stages network-denied",
+    "Same-SSD backup is not disaster recovery",
+    "Hosted acceptance and existing freezes unchanged"
+  ]
+}

@@ -1,0 +1,119 @@
+{
+  "a-check.receipt.json": {
+    "cap_failure": null,
+    "disk_bytes": 625826661,
+    "exit_code": 0,
+    "network_policy": "sandbox deny network*",
+    "rss_sampling_seconds": 0.2,
+    "sampled_peak_group_rss_bytes": 4014080,
+    "wall_seconds": 0.6870413330034353
+  },
+  "a-environment.receipt.json": {
+    "cap_failure": null,
+    "disk_bytes": 625843515,
+    "exit_code": 0,
+    "network_policy": "sandbox deny network*",
+    "rss_sampling_seconds": 0.2,
+    "sampled_peak_group_rss_bytes": 4128768,
+    "wall_seconds": 0.7042491249740124
+  },
+  "a-install.receipt.json": {
+    "cap_failure": null,
+    "disk_bytes": 625825723,
+    "exit_code": 0,
+    "network_policy": "sandbox deny network*",
+    "rss_sampling_seconds": 0.2,
+    "sampled_peak_group_rss_bytes": 177799168,
+    "wall_seconds": 12.844884958991315
+  },
+  "a-seal.receipt.json": {
+    "cap_failure": null,
+    "disk_bytes": 625869516,
+    "exit_code": 0,
+    "network_policy": "sandbox deny network*",
+    "rss_sampling_seconds": 0.2,
+    "sampled_peak_group_rss_bytes": 4014080,
+    "wall_seconds": 0.7142969160340726
+  },
+  "a-simulate.receipt.json": {
+    "cap_failure": null,
+    "disk_bytes": 625846457,
+    "exit_code": 0,
+    "network_policy": "sandbox deny network*",
+    "rss_sampling_seconds": 0.2,
+    "sampled_peak_group_rss_bytes": 247300096,
+    "wall_seconds": 8.07829670899082
+  },
+  "a-venv.receipt.json": {
+    "cap_failure": null,
+    "disk_bytes": 10753323,
+    "exit_code": 0,
+    "network_policy": "sandbox deny network*",
+    "rss_sampling_seconds": 0.2,
+    "sampled_peak_group_rss_bytes": 114032640,
+    "wall_seconds": 1.1764761669910513
+  },
+  "b-check.receipt.json": {
+    "cap_failure": null,
+    "disk_bytes": 1251696961,
+    "exit_code": 0,
+    "network_policy": "sandbox deny network*",
+    "rss_sampling_seconds": 0.2,
+    "sampled_peak_group_rss_bytes": 4014080,
+    "wall_seconds": 1.2499229999957606
+  },
+  "b-environment.receipt.json": {
+    "cap_failure": null,
+    "disk_bytes": 1251713816,
+    "exit_code": 0,
+    "network_policy": "sandbox deny network*",
+    "rss_sampling_seconds": 0.2,
+    "sampled_peak_group_rss_bytes": 4014080,
+    "wall_seconds": 1.1886717909947038
+  },
+  "b-install.receipt.json": {
+    "cap_failure": null,
+    "disk_bytes": 1251696022,
+    "exit_code": 0,
+    "network_policy": "sandbox deny network*",
+    "rss_sampling_seconds": 0.2,
+    "sampled_peak_group_rss_bytes": 193150976,
+    "wall_seconds": 15.163392207992729
+  },
+  "b-seal.receipt.json": {
+    "cap_failure": null,
+    "disk_bytes": 1251739826,
+    "exit_code": 0,
+    "network_policy": "sandbox deny network*",
+    "rss_sampling_seconds": 0.2,
+    "sampled_peak_group_rss_bytes": 4063232,
+    "wall_seconds": 1.2763918340206146
+  },
+  "b-simulate.receipt.json": {
+    "cap_failure": null,
+    "disk_bytes": 1251716759,
+    "exit_code": 0,
+    "network_policy": "sandbox deny network*",
+    "rss_sampling_seconds": 0.2,
+    "sampled_peak_group_rss_bytes": 248086528,
+    "wall_seconds": 9.418454541999381
+  },
+  "b-venv.receipt.json": {
+    "cap_failure": null,
+    "disk_bytes": 636623622,
+    "exit_code": 0,
+    "network_policy": "sandbox deny network*",
+    "rss_sampling_seconds": 0.2,
+    "sampled_peak_group_rss_bytes": 98729984,
+    "wall_seconds": 1.3020996249979362
+  },
+  "wrong-result-control.receipt.json": {
+    "cap_failure": null,
+    "disk_bytes": 1251747599,
+    "exit_code": 0,
+    "network_policy": "sandbox deny network*",
+    "rss_sampling_seconds": 0.2,
+    "sampled_peak_group_rss_bytes": 4063232,
+    "wall_seconds": 1.21238291595364
+  }
+}

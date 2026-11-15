@@ -67,3 +67,10 @@ QPU provenance, automatic environment recreation, or statistical replication.
 The fixed sampling seed makes the example convenient to repeat; each new seal
 has fresh timestamps and therefore a new ID. Only repeated packing of the same
 sealed directory is promised to produce identical archive bytes.
+
+## Fresh-environment replay pilot
+
+For two isolated, network-denied replays with a separately trusted dependency
+freeze, an independent analytic oracle and resource receipts, see
+[`tools/reproduction/README.md`](../tools/reproduction/README.md) in the checkout.
+This macOS pilot is separate from hosted Capsule acceptance.

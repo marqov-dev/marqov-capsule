@@ -1,0 +1,44 @@
+{
+  "exact_counts_equal": true,
+  "freeze_sha256": "efdbbee517834a4d60da175209266b05aa0144de2f5f74b1e9e8a48e83e34b21",
+  "network": {
+    "errno": 1,
+    "policy": "sandbox deny network* per stage",
+    "status": "pass"
+  },
+  "oracles": [
+    {
+      "count_00_interval": [
+        420,
+        580
+      ],
+      "counts": {
+        "00": 503,
+        "01": 0,
+        "10": 0,
+        "11": 497
+      },
+      "scope": "computational-basis distribution only",
+      "status": "pass"
+    },
+    {
+      "count_00_interval": [
+        420,
+        580
+      ],
+      "counts": {
+        "00": 503,
+        "01": 0,
+        "10": 0,
+        "11": 497
+      },
+      "scope": "computational-basis distribution only",
+      "status": "pass"
+    }
+  ],
+  "package_count": 78,
+  "simulator_invocations": 2,
+  "stage": "complete",
+  "status": "pass",
+  "wall_seconds": 57.76773974997923
+}
