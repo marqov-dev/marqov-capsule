@@ -3,7 +3,7 @@
 A valid capsule can omit an authored Report or contain an editable source
 replacement if that was what the exporter sealed. Integrity verifies the sealed
 bytes. This repository-only tool additionally checks a separately reviewed
-expected payload inventory. It does not change Capsule 0.2.1 or the platform.
+expected payload inventory. It does not change the capsule format.
 
 ## Establish expectations before export
 
@@ -11,7 +11,7 @@ The experiment owner or reviewer supplies a UTF-8 JSON inventory independently
 of the exporter. Review it against the intended experiment record, including
 submitted source snapshots, all result samples, configuration, authored Report,
 figures, analysis, environment and historical references where required.
-For the Bell handover, list four distinct submitted sources and four distinct
+For example, for a Bell experiment with four runs, list four distinct submitted sources and four distinct
 result files; assigning the `result` role to one aggregate does not prove that
 four samples were preserved. File roles are reviewer declarations, not semantic
 validation or evidence of execution. Linked figures and Report assets must each
@@ -22,7 +22,7 @@ would bless its omissions. Retain the reviewed inventory and its SHA-256 through
 a trusted channel, separately from the delivered export, together with the
 expected `mqc:1:` ID. The tool records the inventory file's SHA-256 but does not
 authenticate its author or compare it against an independently trusted hash;
-that check belongs to the recipient's handover process.
+that check belongs to the recipient's acceptance process.
 
 ## Inventory format
 
@@ -99,12 +99,12 @@ rejects it despite its internally valid seal.
 
 Acceptance does not prove that source was executed, counts came from a backend,
 a rendered Report is equivalent to authored content, figures follow from data,
-billing is correct, or a rerun is independent. It does not execute restored code,
-fetch links, upload data, re-seal records, or map platform identities. A deficient
+or a rerun is independent. It does not execute restored code,
+fetch links, upload data, re-seal records, or map application identities. A deficient
 external inventory can still produce a deficient acceptance result. Keep the
 record stable during checking; concurrent writers are not locked or snapshotted.
 
-A platform exporter still needs to associate each source with its actual job and
+An exporter still needs to associate each source with its actual job and
 preserve the separate authored Report. This tool supplies consumer acceptance,
-not a workaround for those platform changes. Successful rerun and receiving-team
-billing remain separate downstream gates.
+not a substitute for a complete exporter. Successful reruns remain a separate
+downstream check.
