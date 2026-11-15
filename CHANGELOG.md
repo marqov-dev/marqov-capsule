@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Security
+
+- `unpack_capsule`, and so `unpack` and `verify` on an archive, now refuse any
+  archive member that is not a regular file or directory (symlinks, hardlinks,
+  FIFOs, devices) before extracting anything. A capsule cannot legitimately
+  contain them: `verify` fails any symlink. Previously such members reached
+  `tarfile`'s `filter="data"`, which CPython releases before the June 2025
+  tarfile fixes let a crafted link chain bypass (CVE-2025-4517 and related).
+
 ### Fixed
 
 - On Python 3.14, `verify_checksums` reported a `.checksums` entry whose name

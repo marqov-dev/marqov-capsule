@@ -11,7 +11,6 @@ import pytest
 
 from marqov_capsule import archive as archive_mod
 from marqov_capsule._canonical import _stringify_key, compute_capsule_id
-from marqov_capsule.archive import unpack_capsule
 from marqov_capsule.builder import CapsuleBuilder
 from marqov_capsule.policy import VerificationPolicy
 from marqov_capsule.verifier import CapsuleVerifier
@@ -55,32 +54,33 @@ def _archive_with(tmp_path, extra_member):
 
 # M19 — archive.py fallback extractor refuses device members.
 @pytest.mark.parametrize("typeflag", [tarfile.CHRTYPE, tarfile.BLKTYPE, tarfile.FIFOTYPE])
-def test_fallback_extractor_refuses_device_members(typeflag, tmp_path, monkeypatch):
+def test_fallback_extractor_refuses_device_members(typeflag, tmp_path):
     dev = tarfile.TarInfo("bad.capsule/dev")
     dev.type = typeflag
     dev.devmajor, dev.devminor = 1, 3
     bad = _archive_with(tmp_path, dev)
-    monkeypatch.setattr(archive_mod, "_extractall_filter_supported", lambda: False)
     dest = tmp_path / "dest"
     dest.mkdir()
-    with pytest.raises(ValueError, match="device"):
-        unpack_capsule(bad, output_dir=dest)
+    # unpack_capsule refuses these up front; the fallback keeps its own guard.
+    with tarfile.open(str(bad), "r:gz") as tf:
+        with pytest.raises(ValueError, match="device"):
+            archive_mod._safe_extractall(tf, dest)
     assert not (dest / "bad.capsule" / "dev").exists()
 
 
 # M20 — archive.py fallback extractor checks HARDLINK targets, not just symlinks.
-def test_fallback_extractor_refuses_hardlink_escaping_destination(tmp_path, monkeypatch):
+def test_fallback_extractor_refuses_hardlink_escaping_destination(tmp_path):
     outside = tmp_path / "secret.txt"
     outside.write_text("outside\n")
     link = tarfile.TarInfo("bad.capsule/link")
     link.type = tarfile.LNKTYPE
     link.linkname = "../secret.txt"  # relative to the archive root -> escapes
     bad = _archive_with(tmp_path, link)
-    monkeypatch.setattr(archive_mod, "_extractall_filter_supported", lambda: False)
     dest = tmp_path / "dest"
     dest.mkdir()
-    with pytest.raises(ValueError, match="link target escapes"):
-        unpack_capsule(bad, output_dir=dest)
+    with tarfile.open(str(bad), "r:gz") as tf:
+        with pytest.raises(ValueError, match="link target escapes"):
+            archive_mod._safe_extractall(tf, dest)
 
 
 # M24 — verifier.py: the shot floor applies to the SMALLER arm.
