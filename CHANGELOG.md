@@ -13,6 +13,13 @@
 
 ### Fixed
 
+- `LICENSE` and `LICENSE-CODE` now contain the official Apache License 2.0
+  text. Since the first commit they had held a reworded version that departed
+  from it in several clauses, including the definitions of "Work" and
+  "Contribution", the redistribution notice conditions and the limitation of
+  liability. The package has always been offered under Apache 2.0; the files
+  now say so verbatim. Releases up to 0.2.3 shipped the reworded text.
+
 - On Python 3.14, `verify_checksums` reported a `.checksums` entry whose name
   the OS refuses (a component past NAME_MAX) as `missing` instead of `invalid`.
   The verdict was already `fail`; the entry is now classified as on 3.10–3.13.
