@@ -556,8 +556,8 @@ class CapsuleVerifier:
         # to its grammar byte for byte, and a violation is reported as a
         # grammar error naming the line — not as a payload mismatch, which
         # sends the reader looking at the wrong file (#108). The pre-1.0 YAML
-        # mapping of literal paths to digests stays readable because
-        # marqov-platform's vendored builder still writes it.
+        # mapping of literal paths to digests stays readable because capsules
+        # written by earlier tooling still use it.
         checksums_format = "normative"
         expected: Any = None
         if raw != "" and not _NORMATIVE_ATTEMPT_RE.match(raw):
