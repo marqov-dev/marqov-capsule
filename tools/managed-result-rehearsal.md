@@ -1,7 +1,7 @@
 # Offline managed-result rehearsal
 
 Run from a checkout with Capsule installed (use a clean environment with
-the current release, `marqov-capsule==0.2.3`, to check the published distribution):
+the current release, `marqov-capsule==0.2.4`, to check the published distribution):
 
 ```sh
 python -I tools/rehearse_managed_result.py /tmp/managed-result-evidence

@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.4] — 2026-11-15
 
 ### Security
 
@@ -31,6 +31,22 @@
   Dependabot proposes monthly updates. The CI step that re-validated the
   conformance fixtures with a bare schema validator is removed; the test suite
   covers those fixtures with `CapsuleValidator` (#115).
+- The CC BY 4.0 notice for the specification moved from the repository root
+  (`LICENSE-SPEC`) to `spec/v1/LICENSE`, beside the files it covers. The source
+  distribution still includes it; the wheel, which ships none of those files,
+  now carries only the Apache 2.0 texts (#162).
+- Re-running `examples/run_bell.py`, `examples/seal_bell.py` or
+  `tools/rehearse_managed_result.py` into an existing directory prints a usage
+  error instead of a `FileExistsError` traceback (#157).
+
+### Documentation
+
+- The README quick start now verifies the sealed capsule against its ID and
+  shows a changed result failing; the CLI section shows `verify --id` catching
+  a change (#158).
+- `tools/reproduction/` adds a bounded Bell reproduction pilot for repository
+  checkouts, with an independent result oracle and recorded evidence. It is not
+  part of the installed package (#159).
 
 ## [0.2.3] — 2026-11-05
 
