@@ -251,8 +251,9 @@ A conformant verifier must:
 1. Recompute SHA-256 of each payload file and compare against `.checksums`.
 2. Recompute SHA-256 of `.checksums` file bytes and compare against `checksums_digest` in the manifest.
 3. Recompute the capsule ID from canonical JSON of the manifest and confirm it matches any stored or provided ID.
+4. Confirm that `lifecycle_state` is `sealed` or `archived`. A manifest rewritten to an earlier state keeps a valid digest chain and changes only the capsule ID, so without a trusted ID this is the only check that catches it.
 
-Any mismatch must be reported as a verification failure.
+Any mismatch, or a state other than `sealed` or `archived`, must be reported as a verification failure.
 
 ### Statistical equivalence (probabilistic results)
 
@@ -339,7 +340,7 @@ A conformant capsule implementation must:
 
 - Produce `capsule.yaml` that validates against `capsule-schema.json`.
 - Compute `.checksums` and `checksums_digest` using the scheme in §5, and serialise `.checksums` using the byte-exact grammar in §5, Layer 1 (two-space separator, lowercase hex, NFC and percent-encoded paths, byte-wise sort, LF framing).
-- Refuse to seal a capsule that contains credentials (API keys, tokens, high-entropy secrets). See the reference implementation's `CapsuleRedactor` for the normative pattern list.
+- Scan payload files and the manifest for credentials (API keys, tokens, private keys) before sealing, and refuse to seal when one is found. Which patterns to detect is left to the implementation: the check is best-effort, a clean scan does not prove a capsule holds no secrets, and conformance does not depend on matching any particular pattern list. The reference implementation's `CapsuleRedactor` is one example, not a normative list.
 - Compute capsule IDs using JCS canonical JSON (RFC 8785), enforcing the parse-time canonicalisation constraints in §5, Layer 3 (JSON-aligned YAML typing, the 2⁵³ integer bound, NFC, unique string keys) before hashing.
 - If statistical equivalence is implemented, use the policy boundary and decision procedure in §6, and match the published [section 6 vectors](conformance/golden/statistical-cases.json). Those vectors carry an absolute tolerance for float comparison; exact bit equality is not required, since `ln` and `sqrt` differ in their last bits across languages and platforms.
 - Match the published [golden vectors](conformance/README.md). These are fixed expected outputs, not outputs regenerated during tests.

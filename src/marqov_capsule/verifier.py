@@ -54,6 +54,7 @@ _PATH_ESCAPES = {"%25": "%", "%5C": "\\", "%0A": "\n", "%0D": "\r"}
 
 # The capsule ID format version this implementation computes and can compare.
 _SUPPORTED_ID_VERSION = 1
+_FINAL_LIFECYCLE_STATES = frozenset({"sealed", "archived"})
 _MAX_SAMPLE_SHOTS = 2**53 - 1
 
 
@@ -783,6 +784,17 @@ class CapsuleVerifier:
                     errors.append("capsule.yaml is not a YAML mapping")
 
         if manifest is not None:
+            # Spec §4: only a sealed or archived capsule is a finished record. A
+            # manifest rewritten to an earlier state keeps a valid digest chain
+            # (the edit only changes the capsule ID), so without --id nothing
+            # else would catch it (#118).
+            state = manifest.get("lifecycle_state")
+            if state not in _FINAL_LIFECYCLE_STATES:
+                errors.append(
+                    f"lifecycle_state is {state!r}; a verifiable capsule must be "
+                    "'sealed' or 'archived' (spec §4)"
+                )
+
             # Layer 2 — manifest → .checksums binding
             declared = manifest.get("checksums_digest")
             checksums_file = capsule_path / ".checksums"

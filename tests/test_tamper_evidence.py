@@ -11,6 +11,7 @@ defeated by any attacker who re-runs `save_checksums` after editing a payload.
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 
 from marqov_capsule._canonical import compute_capsule_id, load_manifest_yaml
@@ -415,3 +416,63 @@ def test_cli_open_id_mismatch_refuses(tmp_path):
     )
     assert result.exit_code == 1, result.output
     assert not (dest / "bell.capsule").exists()
+
+
+# --- #118: a sealed manifest rewritten to an earlier lifecycle state ----------
+#
+# Editing only `lifecycle_state` leaves the payload, .checksums and
+# checksums_digest untouched, so layers 1 and 2 pass; only the capsule ID
+# changes. Without --id the verifier must still refuse a capsule that is no
+# longer sealed (spec §4).
+
+
+def _rewrite_lifecycle(capsule_dir: Path, state) -> None:
+    manifest_path = capsule_dir / "capsule.yaml"
+    manifest = load_manifest_yaml(manifest_path.read_text())
+    if state is None:
+        del manifest["lifecycle_state"]
+    else:
+        manifest["lifecycle_state"] = state
+    manifest_path.write_text(yaml.dump(manifest, default_flow_style=False, sort_keys=False))
+
+
+@pytest.mark.parametrize("state", ["draft", "runnable", None, "unknown"])
+def test_verify_rejects_sealed_capsule_rewritten_to_non_final_state(tmp_path, state):
+    capsule_dir = tmp_path / "bell.capsule"
+    _seal(capsule_dir)
+    _rewrite_lifecycle(capsule_dir, state)
+
+    result = CapsuleVerifier.verify_integrity(capsule_dir)
+
+    assert result["checksums"]["status"] == "pass"
+    assert result["checksums_digest_match"] is True
+    assert result["status"] == "fail"
+    assert any("lifecycle_state" in e for e in result["errors"]), result["errors"]
+
+
+def test_verify_accepts_archived_capsule(tmp_path):
+    # sealed → archived is a permitted transition (spec §4); without --id the
+    # archived record still verifies, and --id with the archived ID passes too.
+    capsule_dir = tmp_path / "bell.capsule"
+    _seal(capsule_dir)
+    _rewrite_lifecycle(capsule_dir, "archived")
+    archived_id = compute_capsule_id(load_manifest_yaml((capsule_dir / "capsule.yaml").read_text()))
+
+    assert CapsuleVerifier.verify_integrity(capsule_dir)["status"] == "pass"
+    assert (
+        CapsuleVerifier.verify_integrity(capsule_dir, expected_id=archived_id)["status"] == "pass"
+    )
+
+
+def test_cli_verify_exits_1_on_rewritten_lifecycle_state(tmp_path):
+    from click.testing import CliRunner
+
+    from marqov_capsule.cli.main import cli
+
+    capsule_dir = tmp_path / "bell.capsule"
+    _seal(capsule_dir)
+    _rewrite_lifecycle(capsule_dir, "draft")
+
+    result = CliRunner().invoke(cli, ["verify", str(capsule_dir)])
+    assert result.exit_code == 1, result.output
+    assert "lifecycle_state" in result.output

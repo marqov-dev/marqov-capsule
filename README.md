@@ -242,9 +242,8 @@ what a capsule does and does not promise.
   ([#152](https://github.com/marqov-dev/marqov-capsule/issues/152)).
 - **Credential scanning is best-effort.** `seal` refuses known credential
   shapes, such as AWS keys, GitHub tokens and private-key blocks, but a clean
-  scan does not prove a capsule holds no secrets. The spec currently defines
-  the pattern list by reference to this implementation
-  ([#109](https://github.com/marqov-dev/marqov-capsule/issues/109)).
+  scan does not prove a capsule holds no secrets. The spec leaves the pattern
+  list to each implementation and does not make it part of conformance.
 - **Small samples are `INCONCLUSIVE`.** Statistical comparison never says
   `REJECTED`, and it needs enough shots to say `VERIFIED`; see
   [How many shots does `VERIFIED` need?](#how-many-shots-does-verified-need).
