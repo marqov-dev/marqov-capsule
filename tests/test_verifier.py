@@ -528,7 +528,7 @@ def test_verify_checksums_flags_unlisted_symlink(tmp_path, fmt):
 # --- Golden output contract for verify_checksums ------------------------------
 #
 # The whole result dict is the contract, not just ``status``: the CLI's JSON
-# output and marqov-platform's vendored builder read ``passed``, ``mismatched``
+# output and downstream integrations read ``passed``, ``mismatched``
 # and the per-file records. docs/MUTATION-REPORT-2026-10-15.md (c2) found the
 # lists and record fields could be emptied or renamed with the suite green, so
 # each verdict kind below pins its complete dict with ``==``.

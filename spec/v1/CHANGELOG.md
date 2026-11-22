@@ -8,6 +8,14 @@ Version history for the Marqov Capsule format specification.
 
 Unreleased clarifications and interoperability corrections to manifest parsing and the digest scheme.
 
+### Verification of lifecycle state
+
+- §6 adds a fourth integrity step: a verifier must reject a capsule whose `lifecycle_state` is not `sealed` or `archived`. A sealed manifest rewritten to `draft` kept a valid digest chain and, without a trusted ID, passed verification (#118).
+
+### Credential scanning
+
+- §8 no longer defines the credential pattern list by reference to the reference implementation. Implementations must scan before sealing and refuse on a finding, but the check is best-effort and the pattern list is not normative (#109).
+
 ### Unknown keys
 
 - §3 now states the existing v1 behaviour: undeclared keys are legal and covered by the capsule ID, `extensions` is the place for implementation-specific data, and writers should warn about undeclared keys and offer that warning before sealing (#112). The schema is unchanged.

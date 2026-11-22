@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- `verify` (and `verify_integrity`, `open`, and `verify` on an archive) now
+  fail a capsule whose `lifecycle_state` is not `sealed` or `archived`. A
+  sealed manifest rewritten to `draft` keeps a valid digest chain, so without
+  `--id` it previously passed. Spec §6 gains the matching step (#118).
+
+### Documentation
+
+- Spec §8: the credential check is best-effort, and its pattern list is left to
+  each implementation rather than defined by reference to `CapsuleRedactor`
+  (#109).
+
 ## [0.2.4] — 2026-11-15
 
 ### Security

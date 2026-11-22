@@ -1,6 +1,6 @@
 """Offline byte-preservation rehearsal, not a managed-result importer or validator.
 
-Synthetic contract pinned to marqov-platform 0bf3db22. No execution, network,
+Synthetic managed-result contract. No execution, network,
 receipt authentication or Python deserialization is performed.
 """
 

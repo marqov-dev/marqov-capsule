@@ -3,8 +3,8 @@ and a reader reports a grammar violation as such, not as a payload mismatch
 (#108). Layer 3: ``expected_id`` is parsed and dispatched on, never string
 compared (#114).
 
-The legacy YAML-mapping form stays readable: marqov-platform's vendored
-builder still writes it (D5 precondition checked 2026-10-03).
+The legacy YAML-mapping form stays readable, because capsules written by
+earlier tooling still use it.
 """
 
 import pytest
