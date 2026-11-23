@@ -1,0 +1,301 @@
+<title>Marqov Capsule</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a single reading column; figures break out wider. The hash chain is the visual thread. */
+:root {
+  --bg: #f5f8fa; --surface: #ffffff; --fg: #14222b; --muted: #526672; --line: #c5d3db;
+  --accent: #0b6f7d; --accent-soft: #dcf0f2;
+  --plan: #9a5a08; --plan-soft: #fbeed8;
+  --part: #4f5bb0; --part-soft: #e6e8f8;
+  --code-bg: #10212b; --code-fg: #dbe8ee; --code-dim: #8ea6b2;
+  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1a21; --surface: #16262f; --fg: #e4eef2; --muted: #9db2bd; --line: #33495550;
+  --accent: #5cc7d4; --accent-soft: #143a42;
+  --plan: #eeb15f; --plan-soft: #3d2c13;
+  --part: #a9b2f2; --part-soft: #262c52;
+  --code-bg: #0a141a; --code-fg: #dbe8ee; --code-dim: #8ea6b2;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0e1a21; --surface: #16262f; --fg: #e4eef2; --muted: #9db2bd; --line: #33495550;
+  --accent: #5cc7d4; --accent-soft: #143a42;
+  --plan: #eeb15f; --plan-soft: #3d2c13;
+  --part: #a9b2f2; --part-soft: #262c52;
+  --code-bg: #0a141a; --code-fg: #dbe8ee; --code-dim: #8ea6b2;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font: 400 17px/1.6 var(--body); }
+.page {
+  max-width: 880px; margin: 0 auto; padding-block: 56px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 56px;
+}
+section, header, footer { display: grid; gap: 16px; min-width: 0; }
+.prose { max-width: 66ch; }
+h1, h2 { font-family: var(--display); line-height: 1.12; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2.5rem, 7vw, 4rem); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: 1.65rem; font-weight: 600; }
+p { margin: 0; }
+.lede { font-size: 1.28rem; line-height: 1.45; max-width: 34em; }
+.id-line { font: 500 clamp(0.72rem, 2.1vw, 0.95rem)/1.5 var(--mono); color: var(--accent); overflow-wrap: anywhere; }
+.muted { color: var(--muted); }
+code { font: 0.9em var(--mono); }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
+figcaption { color: var(--muted); font-size: 0.92rem; max-width: 66ch; }
+.fig-scroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.fig-scroll svg { display: block; width: 100%; min-width: 640px; height: auto; }
+svg text { font-family: var(--body); fill: var(--fg); }
+svg .h { font-weight: 600; font-size: 15px; }
+svg .s { font-size: 12.5px; fill: var(--muted); }
+svg .m { font-family: var(--mono); font-size: 12.5px; }
+svg .lab { font-size: 12px; fill: var(--accent); font-weight: 500; }
+svg .box { fill: var(--bg); stroke: var(--line); stroke-width: 1; }
+svg .key { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1; }
+svg .wrap { fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 6 4; }
+svg .band { fill: var(--bg); stroke: var(--line); stroke-width: 1; }
+svg .arr { stroke: var(--accent); stroke-width: 1.5; fill: none; }
+svg .head { fill: var(--accent); }
+.life { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; }
+.life li { background: var(--surface); border: 1px solid var(--line); padding: 12px 14px; display: grid; gap: 4px; align-content: start; min-width: 0; font-size: 0.93rem; line-height: 1.4; }
+.life b { font: 500 0.95rem var(--mono); }
+.life .now { background: var(--accent-soft); border-color: var(--accent); }
+@media (max-width: 640px) { .life { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+pre { margin: 0; background: var(--code-bg); color: var(--code-fg); padding: 16px 18px; border-radius: 6px; overflow-x: auto; font: 400 0.86rem/1.65 var(--mono); }
+pre .c { color: var(--code-dim); }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+.table-scroll { overflow-x: auto; }
+th { text-align: left; font-weight: 600; color: var(--muted); font-size: 0.82rem; letter-spacing: 0.04em; text-transform: uppercase; }
+th, td { padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+td:first-child { font-weight: 500; min-width: 9.5em; }
+.pill { display: inline-block; white-space: nowrap; font-size: 0.8rem; font-weight: 600; padding: 1px 8px; border-radius: 3px; }
+.ships { background: var(--accent-soft); color: var(--accent); }
+.partial { background: var(--part-soft); color: var(--part); }
+.planned { background: var(--plan-soft); color: var(--plan); }
+ul.links { margin: 0; padding-left: 1.1em; display: grid; gap: 6px; }
+footer { border-top: 1px solid var(--line); padding-top: 20px; font-size: 0.92rem; color: var(--muted); }
+</style>
+
+<div class="page">
+<header>
+  <h1>Marqov Capsule</h1>
+  <p class="lede">A capsule is a sealed, portable record of a quantum experiment. It holds what ran, where it ran and what came back, and it is named by a hash of its contents.</p>
+  <p class="id-line">mqc:1:65c5c776ab13f3385f6ea8c00b08d5921b75c9253d3d4cd2a354f6d73a0b0228</p>
+  <p class="prose muted">Quantum results are hard to check after the fact: files drift, notebooks change and the run details get lost. A capsule fixes the record at one moment, so anyone holding its ID can tell whether they have those exact bytes. The format is an open specification (CC-BY-4.0), and the Python tooling is open source under Apache 2.0 on <a href="https://github.com/marqov-dev/marqov-capsule">GitHub</a>.</p>
+</header>
+
+<section>
+  <h2>What is inside</h2>
+  <p class="prose">A capsule is a directory of ordinary files. <code>pack</code> turns it into one <code>.capsule</code> file, a gzipped tar that comes out byte-identical every time.</p>
+  <figure>
+    <div class="fig-scroll">
+    <svg viewBox="0 0 760 330" role="img" aria-labelledby="f1t f1d">
+      <title id="f1t">Anatomy of a capsule</title>
+      <desc id="f1d">A .capsule file contains capsule.yaml, .checksums and payload files. The capsule ID is computed from the manifest and kept outside the file.</desc>
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0 0L10 5L0 10z"/></marker></defs>
+      <rect class="wrap" x="20" y="18" width="720" height="208" rx="6"/>
+      <text class="h" x="40" y="46">bell.capsule</text>
+      <text class="s" x="134" y="46">deterministic gzipped tar</text>
+      <rect class="key" x="40" y="62" width="216" height="146" rx="4"/>
+      <text class="m" x="56" y="88" font-weight="500">capsule.yaml</text>
+      <text class="s" x="56" y="110">The manifest</text>
+      <text class="s" x="56" y="132">name, lifecycle state</text>
+      <text class="s" x="56" y="150">hardware requirements</text>
+      <text class="s" x="56" y="168">backend, shots, status</text>
+      <text class="s" x="56" y="186">checksums_digest</text>
+      <rect class="box" x="272" y="62" width="216" height="146" rx="4"/>
+      <text class="m" x="288" y="88" font-weight="500">.checksums</text>
+      <text class="s" x="288" y="110">Written at sealing</text>
+      <text class="s" x="288" y="132">one SHA-256 per payload file</text>
+      <text class="s" x="288" y="150">a closed list: an extra file</text>
+      <text class="s" x="288" y="168">on disk fails verification</text>
+      <rect class="box" x="504" y="62" width="216" height="146" rx="4"/>
+      <text class="m" x="520" y="88" font-weight="500">payload files</text>
+      <text class="s" x="520" y="110">Whatever the author includes</text>
+      <text class="s" x="520" y="132">results and shot counts</text>
+      <text class="s" x="520" y="150">circuits and scripts</text>
+      <text class="s" x="520" y="168">environment snapshots</text>
+      <text class="s" x="520" y="186">calibration data</text>
+      <line class="arr" x1="148" y1="210" x2="148" y2="262" marker-end="url(#ah)"/>
+      <text class="lab" x="158" y="244">hash of the manifest</text>
+      <rect class="box" x="40" y="264" width="680" height="50" rx="4"/>
+      <text class="h" x="56" y="286">Capsule ID</text>
+      <text class="m" x="146" y="286">mqc:1:65c5c776…0228</text>
+      <text class="s" x="56" y="304">Computed, not stored in the archive. Keep it somewhere you trust and share it separately.</text>
+    </svg>
+    </div>
+    <figcaption>Figure 1. The directory names under the payload are a convention. The spec treats any file other than <code>capsule.yaml</code> and <code>.checksums</code> as payload.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>How tampering shows up</h2>
+  <p class="prose">Each layer pins the one before it. Change a payload byte and layer 1 fails. Regenerate <code>.checksums</code> to hide that and layer 2 fails. Rewrite the manifest too and you get a valid capsule with a different ID, which layer 3 catches against the ID you trust.</p>
+  <figure>
+    <div class="fig-scroll">
+    <svg viewBox="0 0 760 214" role="img" aria-labelledby="f2t f2d">
+      <title id="f2t">The digest chain</title>
+      <desc id="f2d">Payload files are hashed into .checksums, .checksums is hashed into the manifest, the manifest is hashed into the capsule ID, and that ID is compared against a trusted copy.</desc>
+      <rect class="box" x="20" y="44" width="120" height="74" rx="4"/>
+      <text class="h" x="80" y="76" text-anchor="middle">Payload</text>
+      <text class="s" x="80" y="96" text-anchor="middle">every file</text>
+      <rect class="box" x="176" y="44" width="120" height="74" rx="4"/>
+      <text class="m" x="236" y="76" text-anchor="middle" font-weight="500">.checksums</text>
+      <text class="s" x="236" y="96" text-anchor="middle">sorted list</text>
+      <rect class="box" x="332" y="44" width="120" height="74" rx="4"/>
+      <text class="m" x="392" y="76" text-anchor="middle" font-weight="500">capsule.yaml</text>
+      <text class="s" x="392" y="96" text-anchor="middle">pins the list</text>
+      <rect class="key" x="488" y="44" width="120" height="74" rx="4"/>
+      <text class="h" x="548" y="76" text-anchor="middle">Capsule ID</text>
+      <text class="m" x="548" y="96" text-anchor="middle">mqc:1:…</text>
+      <rect class="box" x="644" y="44" width="96" height="74" rx="4" stroke-dasharray="5 3"/>
+      <text class="h" x="692" y="76" text-anchor="middle">Trusted</text>
+      <text class="s" x="692" y="96" text-anchor="middle">ID you hold</text>
+      <line class="arr" x1="140" y1="81" x2="175" y2="81" marker-end="url(#ah)"/>
+      <line class="arr" x1="296" y1="81" x2="331" y2="81" marker-end="url(#ah)"/>
+      <line class="arr" x1="452" y1="81" x2="487" y2="81" marker-end="url(#ah)"/>
+      <line class="arr" x1="608" y1="74" x2="643" y2="74" marker-end="url(#ah)"/>
+      <line class="arr" x1="643" y1="88" x2="609" y2="88" marker-end="url(#ah)"/>
+      <text class="lab" x="158" y="30" text-anchor="middle">SHA-256</text>
+      <text class="lab" x="314" y="30" text-anchor="middle">SHA-256</text>
+      <text class="lab" x="470" y="30" text-anchor="middle">SHA-256 of canonical JSON</text>
+      <text class="lab" x="626" y="30" text-anchor="middle">compare</text>
+      <path class="arr" d="M80 130v12h156v-12" stroke-opacity="0.55"/>
+      <text class="s" x="158" y="162" text-anchor="middle">Layer 1</text>
+      <text class="s" x="158" y="179" text-anchor="middle">files match the list</text>
+      <path class="arr" d="M252 130v12h140v-12" stroke-opacity="0.55"/>
+      <text class="s" x="322" y="162" text-anchor="middle">Layer 2</text>
+      <text class="s" x="322" y="179" text-anchor="middle">list matches manifest</text>
+      <path class="arr" d="M548 130v12h144v-12" stroke-opacity="0.55"/>
+      <text class="s" x="620" y="162" text-anchor="middle">Layer 3</text>
+      <text class="s" x="620" y="179" text-anchor="middle">manifest matches trusted ID</text>
+    </svg>
+    </div>
+    <figcaption>Figure 2. Without a trusted ID, layers 1 and 2 still run, and <code>verify</code> reports that the manifest is not authenticated.</figcaption>
+  </figure>
+  <p class="prose">So a pass means the bytes have not changed since the ID was produced. It does not prove the science is right, which QPU ran the job or who sealed it. Capsules are tamper-evident, not authenticated, and an ID is only as trustworthy as the channel you got it through.</p>
+</section>
+
+<section>
+  <h2>Lifecycle</h2>
+  <ol class="life">
+    <li><b>draft</b>Being assembled. The manifest can change.</li>
+    <li><b>runnable</b>Ready to execute. Requirements are locked.</li>
+    <li class="now"><b>sealed</b>Execution complete. Credentials scanned, digests written, immutable.</li>
+    <li><b>archived</b>Long-term storage. No further changes.</li>
+  </ol>
+  <p class="prose muted">From the next release, <code>verify</code> fails any capsule that is not <code>sealed</code> or <code>archived</code>, so a sealed manifest edited back to <code>draft</code> no longer passes without an ID. The Marqov platform adds a <code>published</code> state for capsules shared with its community. That state is a platform feature and is not in the v1 spec.</p>
+</section>
+
+<section>
+  <h2>Try it in two minutes</h2>
+  <p class="prose">Python 3.10 or later. No account or credentials. The counts are illustrative, so nothing executes on a backend.</p>
+<pre>python -m pip install marqov-capsule==0.2.4
+
+marqov-capsule init ./bell --name bell-state-v1 --paradigm gate-based --qubits 2
+echo '{"00": 512, "11": 488}' &gt; bell/results.json
+
+marqov-capsule seal ./bell                  <span class="c"># prints the capsule ID</span>
+marqov-capsule pack ./bell -o bell.capsule
+marqov-capsule verify bell.capsule --id &lt;capsule-id&gt;
+
+<span class="c"># Now change one byte and verify the directory</span>
+echo x &gt;&gt; bell/results.json
+marqov-capsule verify ./bell                <span class="c"># Integrity verification: FAIL</span></pre>
+  <p class="prose muted">Your ID will differ from the one on this page because the manifest records seal timestamps. A real capsule also lists its task executions and backend. Run <code>seal --dry-run</code> first to catch misspelled manifest keys before they are sealed in. The <a href="https://github.com/marqov-dev/marqov-capsule#readme">README</a> covers the Python builder API.</p>
+</section>
+
+<section>
+  <h2>Where it fits</h2>
+  <p class="prose">The SDK produces results. The capsule package turns them into a record. The platform runs that same package in its worker, stores the files, and can start new jobs from a capsule. The <code>.capsule</code> file can leave the platform, and anyone can check it with the open-source CLI.</p>
+  <figure>
+    <div class="fig-scroll">
+    <svg viewBox="0 0 760 340" role="img" aria-labelledby="f3t f3d">
+      <title id="f3t">Capsule, SDK and platform</title>
+      <desc id="f3d">The SDK runs a circuit and the capsule package seals the result into a .capsule file that a colleague can verify. On the platform, the worker uses the same package, stores files and the ID, exports .capsule files and can rerun as a new job.</desc>
+      <rect class="box" x="24" y="30" width="156" height="84" rx="4"/>
+      <text class="h" x="102" y="62" text-anchor="middle">Marqov SDK</text>
+      <text class="s" x="102" y="84" text-anchor="middle">Runs the circuit</text>
+      <rect class="key" x="212" y="30" width="156" height="84" rx="4"/>
+      <text class="m" x="290" y="62" text-anchor="middle" font-weight="500">marqov-capsule</text>
+      <text class="s" x="290" y="84" text-anchor="middle">Seals, packs, verifies</text>
+      <rect class="key" x="400" y="30" width="156" height="84" rx="4"/>
+      <text class="m" x="478" y="62" text-anchor="middle" font-weight="500">.capsule file</text>
+      <text class="s" x="478" y="84" text-anchor="middle">Portable sealed record</text>
+      <rect class="box" x="588" y="30" width="148" height="84" rx="4"/>
+      <text class="h" x="662" y="62" text-anchor="middle">Anyone else</text>
+      <text class="s" x="662" y="84" text-anchor="middle">Verifies with the ID</text>
+      <line class="arr" x1="180" y1="72" x2="211" y2="72" marker-end="url(#ah)"/>
+      <line class="arr" x1="368" y1="72" x2="399" y2="72" marker-end="url(#ah)"/>
+      <line class="arr" x1="556" y1="72" x2="587" y2="72" marker-end="url(#ah)"/>
+      <rect class="band" x="12" y="176" width="736" height="148" rx="6"/>
+      <text class="h" x="28" y="200">Marqov platform</text>
+      <rect class="box" x="24" y="216" width="156" height="92" rx="4" style="fill:var(--surface)"/>
+      <text class="h" x="102" y="248" text-anchor="middle">Project</text>
+      <text class="s" x="102" y="270" text-anchor="middle">Write up and seal</text>
+      <rect class="box" x="212" y="216" width="156" height="92" rx="4" style="fill:var(--surface)"/>
+      <text class="h" x="290" y="248" text-anchor="middle">Worker</text>
+      <text class="s" x="290" y="270" text-anchor="middle">Same open package</text>
+      <rect class="box" x="400" y="216" width="156" height="92" rx="4" style="fill:var(--surface)"/>
+      <text class="h" x="478" y="248" text-anchor="middle">Storage</text>
+      <text class="s" x="478" y="270" text-anchor="middle">Files in S3, index in DB</text>
+      <rect class="box" x="588" y="216" width="148" height="92" rx="4" style="fill:var(--surface)"/>
+      <text class="h" x="662" y="248" text-anchor="middle">Rerun</text>
+      <text class="s" x="662" y="270" text-anchor="middle">New job, same inputs</text>
+      <text class="s" x="662" y="287" text-anchor="middle">or new parameters</text>
+      <line class="arr" x1="180" y1="262" x2="211" y2="262" marker-end="url(#ah)"/>
+      <line class="arr" x1="368" y1="262" x2="399" y2="262" marker-end="url(#ah)"/>
+      <line class="arr" x1="556" y1="262" x2="587" y2="262" marker-end="url(#ah)"/>
+      <line class="arr" x1="290" y1="115" x2="290" y2="215" marker-end="url(#ah)"/>
+      <text class="lab" x="300" y="150">installed in</text>
+      <line class="arr" x1="478" y1="215" x2="478" y2="115" marker-end="url(#ah)"/>
+      <text class="lab" x="488" y="150">export and import</text>
+    </svg>
+    </div>
+    <figcaption>Figure 3. Verifying a file needs only the open-source package. Running one needs the platform, because a rerun takes its script from the team's stored records.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>What exists today</h2>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Capability</th><th>Status</th><th>Detail</th></tr></thead>
+    <tbody>
+      <tr><td>Content ID and digest chain</td><td><span class="pill ships">Ships</span></td><td>Specified in v1 with conformance fixtures.</td></tr>
+      <tr><td>Compression</td><td><span class="pill ships">Ships</span></td><td>Deterministic gzipped tar. Packing twice gives identical bytes.</td></tr>
+      <tr><td>Credential scan</td><td><span class="pill ships">Ships</span></td><td>Runs before sealing and refuses known credential shapes. Detection is best-effort.</td></tr>
+      <tr><td>Hardened reading</td><td><span class="pill ships">Ships</span></td><td>Extraction rejects duplicate or colliding names, ambiguous layouts, and links or special files.</td></tr>
+      <tr><td>Result comparison</td><td><span class="pill ships">Ships</span></td><td><code>compare</code> tests two count samples and returns VERIFIED or INCONCLUSIVE. Small samples stay INCONCLUSIVE. You choose what to compare.</td></tr>
+      <tr><td>Manifest typo checks</td><td><span class="pill partial">Partial</span></td><td><code>seal</code> warns about keys the schema does not declare, but still seals them. Refusing them is <a href="https://github.com/marqov-dev/marqov-capsule/issues/152">under discussion</a>.</td></tr>
+      <tr><td>Rerun</td><td><span class="pill partial">Partial</span></td><td>The platform starts a new job from its stored script. A capsule file cannot yet rerun alone, and results are not compared automatically.</td></tr>
+      <tr><td>Environment capture</td><td><span class="pill partial">Partial</span></td><td>Authors supply environment files. Sealing does not inspect or lock the host.</td></tr>
+      <tr><td>Seeds and exact replay</td><td><span class="pill partial">Pilot</span></td><td>A macOS pilot in the repository replays a seeded Bell run in two fresh offline environments and checks it against an independent calculation. The format itself has no seed field yet.</td></tr>
+      <tr><td>Signatures</td><td><span class="pill planned">Not built</span></td><td>On the roadmap. This is what would answer who sealed a capsule.</td></tr>
+      <tr><td>Encryption</td><td><span class="pill planned">Not built</span></td><td>No design yet. Capsules are readable by anyone who holds them.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>Read more</h2>
+  <ul class="links">
+    <li><a href="https://github.com/marqov-dev/marqov-capsule">marqov-capsule on GitHub</a>: source, CLI reference, Python API and the <a href="https://github.com/marqov-dev/marqov-capsule#known-limitations">known limitations</a>.</li>
+    <li><a href="https://github.com/marqov-dev/marqov-capsule/blob/main/spec/v1/README.md">Capsule specification v1</a>: the normative format, digest scheme and verification protocol.</li>
+    <li><a href="https://pypi.org/project/marqov-capsule/">marqov-capsule on PyPI</a>: release history and install.</li>
+    <li><a href="https://docs.marqov.ai/docs/platform-guide/capsules">Capsules in the platform guide</a>: projects, sealing, export and rerun modes.</li>
+  </ul>
+</section>
+
+<footer>
+  <p>Describes marqov-capsule 0.2.4, November 2026. Questions: hello@marqov.ai</p>
+</footer>
+</div>
