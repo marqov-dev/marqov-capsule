@@ -22,7 +22,7 @@ from urllib.request import Request, urlopen
 ROOT = Path(__file__).resolve().parent.parent
 URL_RE = re.compile(r"https?://[^\s\"'<>`)]+")
 TIMEOUT = 8
-MARQOV_HOSTS = {"marqov.ai", "app.marqov.ai"}
+MARQOV_HOSTS = {"marqov.ai", "app.marqov.ai", "docs.marqov.ai"}
 # A schema identifier is not a promised downloadable resource.
 IDENTIFIERS = {"https://marqov.ai/schemas/capsule/v1/capsule-schema.json"}
 
